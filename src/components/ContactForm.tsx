@@ -127,6 +127,29 @@ export default function ContactForm() {
           myself and reply to the ones I can genuinely help.
         </p>
 
+        {/* Google Form application (primary) */}
+        <div className="mt-10 border-2 border-electric/30 bg-ink/40 backdrop-blur-sm p-2 sm:p-3">
+          <iframe
+            src="https://docs.google.com/forms/d/e/1FAIpQLSesSa37tKkqtDpDku6svEpaAFoBbsrzdnRcxqyM1inuMluSjA/viewform?embedded=true"
+            title="Apply for Coaching — Tensor Strength"
+            className="w-full"
+            style={{ height: "1500px", border: 0 }}
+            loading="lazy"
+          >
+            Loading the application form…
+          </iframe>
+        </div>
+
+        <div className="mt-16 border-t border-bone/10 pt-12">
+          <p className="glow font-display uppercase tracking-[0.3em] text-bone/60 text-sm mb-2">
+            Prefer a quick intake?
+          </p>
+          <p className="text-bone/60 text-sm leading-relaxed max-w-xl">
+            You can also use the short form below — pick what you&apos;re after and
+            your coach, and I&apos;ll follow up.
+          </p>
+        </div>
+
         {status === "success" ? (
           <div className="mt-12 border-2 border-electric bg-ink/30 backdrop-blur-sm p-10 text-center">
             <p className="glow font-display uppercase text-2xl">Application received.</p>
