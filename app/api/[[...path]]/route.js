@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
+import Stripe from 'stripe'
 
 // MongoDB connection
 let client
@@ -90,6 +91,9 @@ const STRIPE_KEY = OWN_STRIPE_KEY || process.env.STRIPE_API_KEY
 const STRIPE_BASE = OWN_STRIPE_KEY
   ? 'https://api.stripe.com/v1'
   : (process.env.INTEGRATION_PROXY_URL || 'https://integrations.emergentagent.com') + '/stripe/v1'
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+// SDK instance is only used for webhook signature verification (own Stripe account).
+const stripeSdk = OWN_STRIPE_KEY ? new Stripe(OWN_STRIPE_KEY) : null
 
 // Server-side price allowlist. NEVER trust amounts from the client.
 const PACKAGES = {
@@ -132,6 +136,10 @@ async function createStripeSession(pkg, { successUrl, cancelUrl, metadata }) {
   }
   for (const [k, v] of Object.entries(metadata || {})) {
     params.set(`metadata[${k}]`, String(v))
+    // Also stamp the subscription object so cancel/renewal webhooks can find the user.
+    if (pkg.mode === 'subscription') {
+      params.set(`subscription_data[metadata][${k}]`, String(v))
+    }
   }
   const r = await fetch(`${STRIPE_BASE}/checkout/sessions`, {
     method: 'POST',
@@ -165,6 +173,7 @@ async function getStripeSession(sessionId) {
     amount_total: data.amount_total,
     currency: data.currency,
     subscription: data.subscription,
+    customer: data.customer,
     metadata: data.metadata || {},
   }
 }
@@ -411,7 +420,15 @@ async function handleRoute(request, { params }) {
       if (paid && !tx.accessGranted) {
         await db.collection('users').updateOne(
           { id: user.id },
-          { $set: { portalAccess: true, accessType: tx.accessType, portalAccessUpdatedAt: new Date() } }
+          {
+            $set: {
+              portalAccess: true,
+              accessType: tx.accessType,
+              portalAccessUpdatedAt: new Date(),
+              ...(s.subscription ? { stripeSubscriptionId: s.subscription } : {}),
+              ...(s.customer ? { stripeCustomerId: s.customer } : {}),
+            },
+          }
         )
         await db.collection('payment_transactions').updateOne(
           { id: tx.id },
@@ -424,6 +441,87 @@ async function handleRoute(request, { params }) {
         payment_status: s.payment_status,
         packageId: tx.packageId,
       }))
+    }
+
+    // ---------------- STRIPE WEBHOOK (auto revoke on cancel / failed renewal) ----------------
+    if (route === '/webhooks/stripe' && method === 'POST') {
+      if (!stripeSdk || !STRIPE_WEBHOOK_SECRET) {
+        // Not configured yet — acknowledge so Stripe doesn't hammer retries.
+        return NextResponse.json({ received: true, configured: false })
+      }
+      const sig = request.headers.get('stripe-signature')
+      const rawBody = await request.text()
+      let event
+      try {
+        event = stripeSdk.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET)
+      } catch (err) {
+        console.error('Webhook signature verification failed:', err.message)
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+      }
+
+      // Idempotency — ignore events we've already processed.
+      try {
+        await db.collection('stripe_events').insertOne({ id: event.id, type: event.type, receivedAt: new Date() })
+      } catch (e) {
+        if (e?.code === 11000) return NextResponse.json({ received: true, duplicate: true })
+      }
+
+      async function findUser(obj) {
+        const uid = obj?.metadata?.userId
+        if (uid) return await db.collection('users').findOne({ id: uid })
+        if (obj?.id) {
+          const bySub = await db.collection('users').findOne({ stripeSubscriptionId: obj.id })
+          if (bySub) return bySub
+        }
+        if (obj?.customer) {
+          return await db.collection('users').findOne({ stripeCustomerId: obj.customer })
+        }
+        return null
+      }
+
+      async function setAccess(u, granted, status) {
+        if (!u) return
+        await db.collection('users').updateOne(
+          { id: u.id },
+          { $set: { portalAccess: granted, subscriptionStatus: status || null, portalAccessUpdatedAt: new Date() } }
+        )
+      }
+
+      const obj = event.data.object
+      const REVOKE_STATES = ['canceled', 'unpaid', 'incomplete_expired']
+
+      switch (event.type) {
+        case 'customer.subscription.deleted': {
+          const u = await findUser(obj)
+          await setAccess(u, false, 'canceled')
+          break
+        }
+        case 'customer.subscription.updated': {
+          const u = await findUser(obj)
+          if (REVOKE_STATES.includes(obj.status)) await setAccess(u, false, obj.status)
+          else if (['active', 'trialing'].includes(obj.status)) await setAccess(u, true, obj.status)
+          // past_due: keep access (grace period) — do nothing.
+          break
+        }
+        case 'customer.subscription.created': {
+          const u = await findUser(obj)
+          if (['active', 'trialing'].includes(obj.status)) await setAccess(u, true, obj.status)
+          break
+        }
+        case 'invoice.payment_failed': {
+          // Conservative: revoke on a failed renewal.
+          let sub = obj.subscription
+          if (sub) {
+            const u = await db.collection('users').findOne({ stripeSubscriptionId: sub })
+            await setAccess(u, false, 'past_due')
+          }
+          break
+        }
+        default:
+          break
+      }
+
+      return NextResponse.json({ received: true })
     }
 
     // ---------------- STATUS (template) ----------------
