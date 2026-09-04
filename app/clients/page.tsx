@@ -18,7 +18,7 @@ import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
 
 type Status = "idle" | "submitting" | "success" | "error";
-type Me = { username: string; email: string; role: string; portalAccess: boolean } | null;
+type Me = { username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string } | null;
 
 const resources = [
   {
@@ -51,6 +51,20 @@ export default function ClientPortalPage() {
       setLoading(false);
     })();
   }, []);
+
+  async function openBilling() {
+    try {
+      const res = await fetch("/api/payments/portal", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || "Unable to open billing");
+      window.location.assign(data.url);
+    } catch (e: any) {
+      alert(e?.message || "Unable to open billing portal.");
+    }
+  }
 
   async function handleCheckIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -166,6 +180,15 @@ export default function ClientPortalPage() {
                 calculators, the full workout log, exercise and warmup libraries,
                 and your weekly check-in. All in one place.
               </p>
+
+              {me?.stripeCustomerId && (
+                <button
+                  onClick={openBilling}
+                  className="mt-6 inline-block border-2 border-bone/40 text-bone/80 px-6 py-3 font-display uppercase tracking-wider text-sm hover:border-electric hover:text-electric transition-colors"
+                >
+                  Manage billing &amp; subscription →
+                </button>
+              )}
 
               {/* Live chat */}
               <div className="mt-10 border-2 border-bone/15 bg-ink/30 backdrop-blur-sm p-6">

@@ -301,10 +301,14 @@ async function handleRoute(request, { params }) {
       if (!body.id) {
         return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
       }
-      await db.collection('users').updateOne(
-        { id: body.id },
-        { $set: { portalAccess: !!body.portalAccess } }
-      )
+      const target = await db.collection('users').findOne({ id: body.id })
+      const grant = !!body.portalAccess
+      const update = { portalAccess: grant, portalAccessUpdatedAt: new Date() }
+      if (grant && !target?.accessType) {
+        // Manual/in-person grant by the admin (no online payment on record).
+        update.accessType = 'in_person'
+      }
+      await db.collection('users').updateOne({ id: body.id }, { $set: update })
       const updated = await db.collection('users').findOne({ id: body.id })
       return handleCORS(NextResponse.json({ user: publicUser(updated) }))
     }
@@ -448,6 +452,60 @@ async function handleRoute(request, { params }) {
         payment_status: s.payment_status,
         packageId: tx.packageId,
       }))
+    }
+
+    // ---------------- STRIPE BILLING PORTAL (self-service) ----------------
+    if (route === '/payments/portal' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      }
+      if (!user.stripeCustomerId) {
+        return handleCORS(NextResponse.json(
+          { error: 'No billing account on file. This applies to members who paid online.' },
+          { status: 400 }
+        ))
+      }
+      const returnUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/clients`
+      async function createPortalSession() {
+        const p = new URLSearchParams()
+        p.set('customer', user.stripeCustomerId)
+        p.set('return_url', returnUrl)
+        const r = await fetch(`${STRIPE_BASE}/billing_portal/sessions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${STRIPE_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: p.toString(),
+        })
+        return { r, data: await r.json() }
+      }
+      try {
+        let { r, data } = await createPortalSession()
+        // If the account has no Customer Portal configuration yet, create a default and retry.
+        if (!r.ok && /configuration/i.test(data?.error?.message || '')) {
+          const cfg = new URLSearchParams()
+          cfg.set('business_profile[headline]', 'Tensor Strength — manage your membership')
+          cfg.set('features[invoice_history][enabled]', 'true')
+          cfg.set('features[payment_method_update][enabled]', 'true')
+          cfg.set('features[customer_update][enabled]', 'true')
+          cfg.set('features[customer_update][allowed_updates][0]', 'email')
+          cfg.set('features[customer_update][allowed_updates][1]', 'address')
+          cfg.set('features[subscription_cancel][enabled]', 'true')
+          await fetch(`${STRIPE_BASE}/billing_portal/configurations`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${STRIPE_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: cfg.toString(),
+          })
+          ;({ r, data } = await createPortalSession())
+        }
+        if (!r.ok) {
+          console.error('Billing portal error:', data?.error?.message)
+          return handleCORS(NextResponse.json({ error: 'Unable to open billing portal' }, { status: 500 }))
+        }
+        return handleCORS(NextResponse.json({ url: data.url }))
+      } catch (e) {
+        console.error('Billing portal exception:', e)
+        return handleCORS(NextResponse.json({ error: 'Unable to open billing portal' }, { status: 500 }))
+      }
     }
 
     // ---------------- STRIPE WEBHOOK (auto revoke on cancel / failed renewal) ----------------

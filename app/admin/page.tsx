@@ -10,7 +10,16 @@ type User = {
   email: string;
   role: "member" | "admin";
   portalAccess: boolean;
+  accessType?: string;
+  subscriptionStatus?: string;
   createdAt: string;
+};
+
+const ACCESS_LABELS: Record<string, string> = {
+  membership: "Membership · $9.99/mo",
+  custom_program: "Custom Program · $200",
+  remote_coaching: "Remote Coaching · $400/mo",
+  in_person: "In-person / Manual",
 };
 
 export default function AdminPage() {
@@ -114,7 +123,8 @@ export default function AdminPage() {
                     <tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15">
                       <th className="text-left p-4 font-display">Username</th>
                       <th className="text-left p-4 font-display">Email</th>
-                      <th className="text-left p-4 font-display">Joined</th>
+                      <th className="text-left p-4 font-display">Access Via</th>
+                      <th className="text-left p-4 font-display">Subscription</th>
                       <th className="text-left p-4 font-display">Portal Access</th>
                       <th className="text-right p-4 font-display">Actions</th>
                     </tr>
@@ -122,7 +132,7 @@ export default function AdminPage() {
                   <tbody>
                     {members.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-bone/50">
+                        <td colSpan={6} className="p-8 text-center text-bone/50">
                           No members yet. Share the site so people can register.
                         </td>
                       </tr>
@@ -131,8 +141,26 @@ export default function AdminPage() {
                       <tr key={u.id} className="border-t border-bone/10">
                         <td className="p-4 text-bone/90 font-display uppercase tracking-wider">{u.username}</td>
                         <td className="p-4 text-bone/70">{u.email}</td>
-                        <td className="p-4 text-bone/50 text-xs">
-                          {new Date(u.createdAt).toLocaleDateString()}
+                        <td className="p-4 text-bone/70 text-xs">
+                          {u.portalAccess
+                            ? (u.accessType && ACCESS_LABELS[u.accessType]) || "Granted"
+                            : "—"}
+                        </td>
+                        <td className="p-4 text-xs">
+                          {u.subscriptionStatus ? (
+                            <span
+                              className={
+                                "font-display uppercase tracking-wider " +
+                                (u.subscriptionStatus === "active" || u.subscriptionStatus === "trialing"
+                                  ? "text-electric"
+                                  : "text-bone/50")
+                              }
+                            >
+                              {u.subscriptionStatus}
+                            </span>
+                          ) : (
+                            <span className="text-bone/40">—</span>
+                          )}
                         </td>
                         <td className="p-4">
                           <span
