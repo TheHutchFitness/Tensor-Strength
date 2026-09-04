@@ -15,6 +15,7 @@ import HutchTouch from "@/components/HutchTouch";
 import PRSubmit from "@/components/PRSubmit";
 import TawkTo, { TAWK_CONFIGURED } from "@/components/TawkTo";
 import { clientResources } from "@/data/client-resources";
+import CheckoutButton from "@/components/CheckoutButton";
 
 type Status = "idle" | "submitting" | "success" | "error";
 type Me = { username: string; email: string; role: string; portalAccess: boolean } | null;
@@ -110,13 +111,35 @@ export default function ClientPortalPage() {
                 <p className="mt-3 text-bone/80 text-sm leading-relaxed">
                   You&apos;re signed in as{" "}
                   <span className="text-electric font-display uppercase">{me?.username}</span>.
-                  The Client Portal is for athletes actively training with Tensor Strength.
-                  Hutch reviews every account — once you&apos;re approved, your tools, programs,
-                  and weekly check-in unlock right here.
+                  Unlock the full Client Portal instantly with a membership — or once
+                  Hutch approves your coaching, it opens automatically.
                 </p>
               </div>
+
+              {/* Instant self-serve access */}
+              <div className="mt-6 grid gap-3 text-left">
+                <CheckoutButton
+                  packageId="monthly_9_99"
+                  className="w-full bg-electric text-ink px-6 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
+                >
+                  Get instant access — $9.99/mo
+                </CheckoutButton>
+                <CheckoutButton
+                  packageId="custom_program_200"
+                  className="w-full border-2 border-bone px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors"
+                >
+                  Custom Program — $200 one-time
+                </CheckoutButton>
+                <CheckoutButton
+                  packageId="remote_coaching_400"
+                  className="w-full border-2 border-bone/40 text-bone/80 px-6 py-3 font-display uppercase tracking-wider text-sm hover:border-bone hover:text-bone transition-colors"
+                >
+                  Remote Coaching — $400/mo
+                </CheckoutButton>
+              </div>
+
               <p className="mt-8 text-xs text-bone/50 leading-relaxed">
-                Ready to train?{" "}
+                Prefer in-person?{" "}
                 <a
                   href="/#contact"
                   className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors"

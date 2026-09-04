@@ -82,6 +82,93 @@ function setAuthCookie(response, token) {
   return response
 }
 
+// ---------------- STRIPE ----------------
+// Prefer the user's own Stripe account (STRIPE_SECRET_KEY -> api.stripe.com).
+// Fall back to the Emergent-managed sandbox proxy when no own key is set.
+const OWN_STRIPE_KEY = process.env.STRIPE_SECRET_KEY
+const STRIPE_KEY = OWN_STRIPE_KEY || process.env.STRIPE_API_KEY
+const STRIPE_BASE = OWN_STRIPE_KEY
+  ? 'https://api.stripe.com/v1'
+  : (process.env.INTEGRATION_PROXY_URL || 'https://integrations.emergentagent.com') + '/stripe/v1'
+
+// Server-side price allowlist. NEVER trust amounts from the client.
+const PACKAGES = {
+  monthly_9_99: {
+    label: 'Tensor Strength Membership',
+    mode: 'subscription',
+    amount: 999,
+    currency: 'usd',
+    interval: 'month',
+    accessType: 'membership',
+  },
+  custom_program_200: {
+    label: 'Custom Program',
+    mode: 'payment',
+    amount: 20000,
+    currency: 'usd',
+    accessType: 'custom_program',
+  },
+  remote_coaching_400: {
+    label: 'Remote Coaching',
+    mode: 'subscription',
+    amount: 40000,
+    currency: 'usd',
+    interval: 'month',
+    accessType: 'remote_coaching',
+  },
+}
+
+async function createStripeSession(pkg, { successUrl, cancelUrl, metadata }) {
+  const params = new URLSearchParams()
+  params.set('mode', pkg.mode)
+  params.set('success_url', successUrl)
+  params.set('cancel_url', cancelUrl)
+  params.set('line_items[0][quantity]', '1')
+  params.set('line_items[0][price_data][currency]', pkg.currency)
+  params.set('line_items[0][price_data][product_data][name]', pkg.label)
+  params.set('line_items[0][price_data][unit_amount]', String(pkg.amount))
+  if (pkg.mode === 'subscription') {
+    params.set('line_items[0][price_data][recurring][interval]', pkg.interval)
+  }
+  for (const [k, v] of Object.entries(metadata || {})) {
+    params.set(`metadata[${k}]`, String(v))
+  }
+  const r = await fetch(`${STRIPE_BASE}/checkout/sessions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${STRIPE_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  })
+  const data = await r.json()
+  if (!r.ok) throw new Error(data?.error?.message || 'Stripe session create failed')
+  return { id: data.id, url: data.url }
+}
+
+async function getStripeSession(sessionId) {
+  const r = await fetch(`${STRIPE_BASE}/checkout/sessions/${sessionId}`, {
+    headers: { Authorization: `Bearer ${STRIPE_KEY}` },
+  })
+  // Sandbox has a short propagation delay right after creation -> treat as pending.
+  if (r.status === 404) return { pending: true }
+  let data
+  try {
+    data = await r.json()
+  } catch {
+    return { pending: true }
+  }
+  if (!r.ok) return { pending: true }
+  return {
+    status: data.status,
+    payment_status: data.payment_status,
+    amount_total: data.amount_total,
+    currency: data.currency,
+    subscription: data.subscription,
+    metadata: data.metadata || {},
+  }
+}
+
 // Helper function to handle CORS
 function handleCORS(response) {
   response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
@@ -240,6 +327,103 @@ async function handleRoute(request, { params }) {
       await db.collection('checkins').insertOne(checkin)
       const { _id, ...clean } = checkin
       return handleCORS(NextResponse.json(clean))
+    }
+
+    // ---------------- PAYMENTS (Stripe via Emergent proxy) ----------------
+    // Public list of purchasable packages (display only; amounts enforced server-side).
+    if (route === '/payments/packages' && method === 'GET') {
+      const list = Object.entries(PACKAGES).map(([id, p]) => ({
+        id,
+        label: p.label,
+        amount: p.amount,
+        currency: p.currency,
+        mode: p.mode,
+        interval: p.interval || null,
+      }))
+      return handleCORS(NextResponse.json({ packages: list }))
+    }
+
+    if (route === '/payments/checkout' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      }
+      const body = await request.json()
+      const pkg = PACKAGES[body.packageId]
+      if (!pkg) {
+        return handleCORS(NextResponse.json({ error: 'Invalid package' }, { status: 400 }))
+      }
+      const base = process.env.NEXT_PUBLIC_BASE_URL
+      const txId = uuidv4()
+      const successUrl = `${base}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+      const cancelUrl = `${base}/billing/cancel`
+      try {
+        const session = await createStripeSession(pkg, {
+          successUrl,
+          cancelUrl,
+          metadata: { txId, userId: user.id, packageId: body.packageId },
+        })
+        await db.collection('payment_transactions').insertOne({
+          id: txId,
+          userId: user.id,
+          username: user.username,
+          packageId: body.packageId,
+          mode: pkg.mode,
+          amount: pkg.amount,
+          currency: pkg.currency,
+          accessType: pkg.accessType,
+          sessionId: session.id,
+          status: 'created',
+          paymentStatus: 'unpaid',
+          accessGranted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        return handleCORS(NextResponse.json({ url: session.url, sessionId: session.id }))
+      } catch (e) {
+        console.error('Checkout error:', e)
+        return handleCORS(NextResponse.json({ error: 'Unable to start checkout' }, { status: 500 }))
+      }
+    }
+
+    if (route === '/payments/status' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      }
+      const sessionId = request.nextUrl.searchParams.get('session_id')
+      if (!sessionId) {
+        return handleCORS(NextResponse.json({ error: 'session_id is required' }, { status: 400 }))
+      }
+      const tx = await db.collection('payment_transactions').findOne({ sessionId, userId: user.id })
+      if (!tx) {
+        return handleCORS(NextResponse.json({ error: 'Transaction not found' }, { status: 404 }))
+      }
+      const s = await getStripeSession(sessionId)
+      if (s.pending) {
+        return handleCORS(NextResponse.json({ paid: false, status: 'pending', payment_status: 'pending' }))
+      }
+      const paid = s.payment_status === 'paid' || s.status === 'complete'
+      await db.collection('payment_transactions').updateOne(
+        { id: tx.id },
+        { $set: { status: s.status, paymentStatus: s.payment_status, updatedAt: new Date() } }
+      )
+      if (paid && !tx.accessGranted) {
+        await db.collection('users').updateOne(
+          { id: user.id },
+          { $set: { portalAccess: true, accessType: tx.accessType, portalAccessUpdatedAt: new Date() } }
+        )
+        await db.collection('payment_transactions').updateOne(
+          { id: tx.id },
+          { $set: { accessGranted: true, completedAt: new Date() } }
+        )
+      }
+      return handleCORS(NextResponse.json({
+        paid,
+        status: s.status,
+        payment_status: s.payment_status,
+        packageId: tx.packageId,
+      }))
     }
 
     // ---------------- STATUS (template) ----------------

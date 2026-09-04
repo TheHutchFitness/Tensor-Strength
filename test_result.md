@@ -212,3 +212,42 @@ agent_communication:
 # Backend auth: 16/16 tests passed. Fixed .env ADMIN_PASSWORD '#' comment-parsing bug by
 # quoting the value and re-seeding the admin. Verified admin login with full password returns
 # role=admin. All /api auth + admin + checkin endpoints working.
+
+# ============ PAYMENTS FEATURE (Stripe via Emergent-managed sandbox) ============
+backend_payments:
+  - task: "Payments - list packages (GET /api/payments/packages)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED: Returns 200 with 3 packages (monthly_9_99: 999, custom_program_200: 20000, remote_coaching_400: 40000). All packages have correct id, label, amount, currency, mode, and interval fields."
+  - task: "Payments - create checkout (POST /api/payments/checkout)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) Valid packageId 'monthly_9_99' returns 200 with sessionId starting with 'cs_test_' and Stripe checkout URL (checkout.stripe.com). (2) Valid packageIds 'custom_program_200' and 'remote_coaching_400' both return 200 with valid sessions. (3) Invalid packageId 'bogus' returns 400 with error message. (4) Request without auth cookie returns 401. (5) Price-tamper test with extra client fields (amount, mode) returns 200 - server correctly ignores client fields and enforces server-side pricing. No 500 errors encountered."
+  - task: "Payments - status & access grant (GET /api/payments/status)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) Valid session_id returns 200 with paid:false and status:'pending' (expected for unpaid session). (2) Missing session_id param returns 400 with error message. (3) Made-up session_id returns 404 (transaction not found). (4) Cross-user ownership test: second member attempting to access first member's session returns 404 (ownership correctly enforced). No _id leaks detected in responses."
+
+agent_communication:
+    -agent: "main"
+    -message: "PLEASE TEST THE NEW PAYMENTS BACKEND (all /api routes, httpOnly cookie ts_token, persist cookies). Uses Emergent-managed Stripe sandbox (proxy). Note: a REAL card payment cannot be completed headlessly (Stripe hosts the checkout page), so test creation + security + polling behavior, NOT a fully paid state. Flow: 1) Register/login a member (portalAccess=false). 2) POST /api/payments/checkout {packageId:'monthly_9_99'} -> expect 200 with {url (a stripe checkout url), sessionId (cs_test_...)} and a payment_transactions doc created. Repeat for 'custom_program_200' and 'remote_coaching_400' -> all 200 with a url. 3) POST /api/payments/checkout {packageId:'bogus'} -> 400. 4) POST /api/payments/checkout with NO auth cookie -> 401. 5) Price-tamper: POST {packageId:'monthly_9_99', amount:1, mode:'payment'} -> still 200 and server ignores extra fields (amount is fixed server-side; you cannot assert the Stripe amount headlessly, just confirm no error and a session is returned). 6) GET /api/payments/status?session_id=<the sessionId from step 2> as the SAME member -> expect 200 with paid:false and status 'pending' or 'open'/'unpaid' (payment not completed). It may take a few seconds for the sandbox session to be retrievable; 'pending' is acceptable. 7) GET /api/payments/status without session_id -> 400. 8) GET /api/payments/status with a made-up session_id not owned by the user -> 404 (transaction not found). 9) Register a SECOND member, and have them GET /api/payments/status?session_id=<first member's sessionId> -> expect 404 (ownership enforced). Confirm no 500s and that responses never leak _id. Report the actual Stripe checkout url host you received (should be a stripe.com / checkout URL)."
+    -agent: "testing"
+    -message: "✅ ALL PAYMENTS BACKEND TESTS PASSED (11/11 - 100% success rate). Comprehensive testing completed: (1) GET /api/payments/packages returns 3 packages with correct pricing. (2) POST /api/payments/checkout successfully creates sessions for all 3 packages (monthly_9_99, custom_program_200, remote_coaching_400) with valid Stripe checkout URLs (checkout.stripe.com) and sessionIds starting with 'cs_test_'. (3) Security tests passed: invalid packageId returns 400, no auth returns 401, price-tamper attempt correctly ignored by server. (4) GET /api/payments/status returns paid:false with status:'pending' for unpaid sessions, returns 400 for missing session_id, returns 404 for invalid/unowned sessions. (5) Cross-user ownership enforced correctly. No 500 errors encountered. No Mongo _id leaks detected. Stripe checkout URL host confirmed: checkout.stripe.com"
+

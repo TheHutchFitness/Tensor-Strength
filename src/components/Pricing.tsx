@@ -1,4 +1,19 @@
-const tiers = [
+"use client";
+
+import CheckoutButton from "@/components/CheckoutButton";
+
+type Tier = {
+  name: string;
+  price: string;
+  cadence: string;
+  tagline: string;
+  features: string[];
+  featured?: boolean;
+  packageId?: string;
+  cta: { label: string; href?: string };
+};
+
+const tiers: Tier[] = [
   {
     name: "Free Tools",
     price: "$0",
@@ -11,21 +26,35 @@ const tiers = [
       "Weekly programs teaser",
     ],
     cta: { label: "Try the free tools", href: "/#programs" },
-    featured: false,
+  },
+  {
+    name: "Membership",
+    price: "$9.99",
+    cadence: "/ month",
+    tagline: "Self-guided. Full portal.",
+    features: [
+      "Full Client Portal — workout log, calculators, libraries",
+      "The Hutch Touch 8-week program + weekly programs",
+      "Exercise & warmup libraries, PR tracker",
+      "Self-directed — build and run your own training",
+    ],
+    packageId: "monthly_9_99",
+    cta: { label: "Subscribe — $9.99/mo" },
   },
   {
     name: "Custom Program",
     price: "$200",
     cadence: "one-time",
     tagline: "The most popular step up.",
+    featured: true,
     features: [
       "A program built around your lifts, gear, and goals",
       "Strength + accessory work programmed to your weak points",
       "Progressive overload + deload built in",
-      "Direct follow-up so you start aligned",
+      "Includes full Client Portal access",
     ],
-    cta: { label: "Get a Custom Program", href: "/#program" },
-    featured: true,
+    packageId: "custom_program_200",
+    cta: { label: "Get a Custom Program" },
   },
   {
     name: "Remote Coaching",
@@ -38,8 +67,8 @@ const tiers = [
       "Full Client Portal — workout log, calculators, libraries",
       "1:1 chat access to Hutch",
     ],
-    cta: { label: "Apply for Coaching", href: "/#contact" },
-    featured: false,
+    packageId: "remote_coaching_400",
+    cta: { label: "Start Remote Coaching" },
   },
   {
     name: "In-Person Training",
@@ -50,10 +79,9 @@ const tiers = [
       "1:1 coaching at The Fit Effect in Paris, Ontario",
       "Technique work, hands-on correction",
       "Programming built around your in-gym sessions",
-      "Exclusive — in-person only",
+      "Portal access included once you're set up",
     ],
     cta: { label: "Apply for In-Person", href: "/#contact" },
-    featured: false,
   },
 ];
 
@@ -72,57 +100,62 @@ export default function Pricing() {
             <span className="text-electric">level.</span>
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
-            Free tools to start, a one-off custom program when you&apos;re ready, ongoing
-            remote coaching to actually get there, or in-person at The Fit Effect. No
-            wrong door — just the one that fits where you are.
+            Free tools to start, a self-guided membership, a one-off custom program,
+            ongoing remote coaching, or in-person at The Fit Effect. Every paid option
+            unlocks the Client Portal — coaching is added on top when you want a coach.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {tiers.map((t) => (
-            <div
-              key={t.name}
-              className={
-                "border p-6 flex flex-col transition-colors " +
-                (t.featured
-                  ? "border-electric bg-electric/10"
-                  : "border-bone/15 bg-ink/30 backdrop-blur-sm hover:border-bone/30")
-              }
-            >
-              <p className="font-display uppercase tracking-wider text-bone">{t.name}</p>
-              {t.featured && (
-                <p className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5 mt-2">
-                  Most popular
-                </p>
-              )}
-              <p className="mt-4 font-display text-3xl text-electric font-700 leading-none">
-                {t.price}
-              </p>
-              <p className="text-xs text-bone/50 mt-1">{t.cadence}</p>
-              <p className="text-sm text-bone/70 mt-3 leading-relaxed">{t.tagline}</p>
-
-              <ul className="mt-5 grid gap-2 flex-1">
-                {t.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-xs text-bone/70 leading-relaxed">
-                    <span className="text-electric shrink-0">⚡</span>
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <a
-                href={t.cta.href}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {tiers.map((t) => {
+            const btnCls =
+              "mt-6 px-5 py-3 font-display uppercase tracking-wider text-sm text-center transition-colors block w-full " +
+              (t.featured
+                ? "bg-electric text-ink hover:bg-bone"
+                : "border-2 border-bone hover:bg-bone hover:text-ink");
+            return (
+              <div
+                key={t.name}
                 className={
-                  "mt-6 px-5 py-3 font-display uppercase tracking-wider text-sm text-center transition-colors " +
+                  "border p-6 flex flex-col transition-colors " +
                   (t.featured
-                    ? "bg-electric text-ink hover:bg-bone"
-                    : "border-2 border-bone hover:bg-bone hover:text-ink")
+                    ? "border-electric bg-electric/10"
+                    : "border-bone/15 bg-ink/30 backdrop-blur-sm hover:border-bone/30")
                 }
               >
-                {t.cta.label} →
-              </a>
-            </div>
-          ))}
+                <p className="font-display uppercase tracking-wider text-bone">{t.name}</p>
+                {t.featured && (
+                  <p className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5 mt-2">
+                    Most popular
+                  </p>
+                )}
+                <p className="mt-4 font-display text-3xl text-electric font-700 leading-none">
+                  {t.price}
+                </p>
+                <p className="text-xs text-bone/50 mt-1">{t.cadence}</p>
+                <p className="text-sm text-bone/70 mt-3 leading-relaxed">{t.tagline}</p>
+
+                <ul className="mt-5 grid gap-2 flex-1">
+                  {t.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-xs text-bone/70 leading-relaxed">
+                      <span className="text-electric shrink-0">⚡</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {t.packageId ? (
+                  <CheckoutButton packageId={t.packageId} className={btnCls}>
+                    {t.cta.label} →
+                  </CheckoutButton>
+                ) : (
+                  <a href={t.cta.href} className={btnCls}>
+                    {t.cta.label} →
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <p className="mt-8 text-xs text-bone/40 leading-relaxed max-w-xl">
