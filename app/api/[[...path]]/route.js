@@ -129,11 +129,18 @@ const PACKAGES = {
   },
 }
 
-async function createStripeSession(pkg, { successUrl, cancelUrl, metadata }) {
+async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email }) {
   const params = new URLSearchParams()
   params.set('mode', pkg.mode)
   params.set('success_url', successUrl)
   params.set('cancel_url', cancelUrl)
+  if (email) {
+    // Prefill + ensure Stripe has an address for automatic receipts.
+    params.set('customer_email', email)
+    if (pkg.mode === 'payment') {
+      params.set('payment_intent_data[receipt_email]', email)
+    }
+  }
   params.set('line_items[0][quantity]', '1')
   params.set('line_items[0][price_data][currency]', pkg.currency)
   params.set('line_items[0][price_data][product_data][name]', pkg.label)
@@ -382,6 +389,7 @@ async function handleRoute(request, { params }) {
           successUrl,
           cancelUrl,
           metadata: { txId, userId: user.id, packageId: body.packageId },
+          email: user.email,
         })
         await db.collection('payment_transactions').insertOne({
           id: txId,
