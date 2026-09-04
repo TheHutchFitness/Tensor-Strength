@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-navy: #1907A7;
+  --color-navy-deep: #0d0463;
+  --color-ink: #000000;
+  --color-bone: #FFFEFC;
+  --color-electric: #00A8FF;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #07021c;
+  color: var(--color-bone);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glow {
+  text-shadow:
+    0 0 6px rgba(0, 168, 255, 0.9),
+    0 0 18px rgba(0, 168, 255, 0.55),
+    0 0 38px rgba(0, 168, 255, 0.3);
+}
+
+.font-display {
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.stripe-bg {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(255, 254, 252, 0.06) 10px,
+    rgba(255, 254, 252, 0.06) 20px
+  );
+}
+
+::selection {
+  background: var(--color-navy);
+  color: var(--color-bone);
+}
+
+/* Brand color utilities (defined here so they compile in the dev preview
+   without a Tailwind config reload). Mirrors tailwind.config.ts. */
+@layer utilities {
+  /* solid text */
+  .text-bone { color: #FFFEFC; }
+  .text-ink { color: #000000; }
+  .text-electric { color: #00A8FF; }
+  /* text opacity */
+  .text-bone\/40 { color: rgb(255 254 252 / 0.4); }
+  .text-bone\/50 { color: rgb(255 254 252 / 0.5); }
+  .text-bone\/60 { color: rgb(255 254 252 / 0.6); }
+  .text-bone\/70 { color: rgb(255 254 252 / 0.7); }
+  .text-bone\/80 { color: rgb(255 254 252 / 0.8); }
+  .text-bone\/85 { color: rgb(255 254 252 / 0.85); }
+  .text-bone\/90 { color: rgb(255 254 252 / 0.9); }
+
+  /* solid bg */
+  .bg-bone { background-color: #FFFEFC; }
+  .bg-ink { background-color: #000000; }
+  .bg-electric { background-color: #00A8FF; }
+  .bg-navy { background-color: #1907A7; }
+  /* bg opacity */
+  .bg-ink\/30 { background-color: rgb(0 0 0 / 0.3); }
+  .bg-ink\/45 { background-color: rgb(0 0 0 / 0.45); }
+  .bg-ink\/60 { background-color: rgb(0 0 0 / 0.6); }
+  .bg-ink\/70 { background-color: rgb(0 0 0 / 0.7); }
+  .bg-ink\/80 { background-color: rgb(0 0 0 / 0.8); }
+  .bg-navy-deep\/40 { background-color: rgb(13 4 99 / 0.4); }
+
+  /* solid border */
+  .border-bone { border-color: #FFFEFC; }
+  .border-electric { border-color: #00A8FF; }
+  /* border opacity */
+  .border-bone\/10 { border-color: rgb(255 254 252 / 0.1); }
+  .border-bone\/15 { border-color: rgb(255 254 252 / 0.15); }
+  .border-bone\/20 { border-color: rgb(255 254 252 / 0.2); }
+  .border-bone\/40 { border-color: rgb(255 254 252 / 0.4); }
+
+  /* hover variants */
+  .hover\:bg-bone:hover { background-color: #FFFEFC; }
+  .hover\:bg-electric:hover { background-color: #00A8FF; }
+  .hover\:text-bone:hover { color: #FFFEFC; }
+  .hover\:text-electric:hover { color: #00A8FF; }
+  .hover\:text-ink:hover { color: #000000; }
+  .hover\:border-bone:hover { border-color: #FFFEFC; }
+  .hover\:border-electric:hover { border-color: #00A8FF; }
+}
