@@ -27,6 +27,46 @@ export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [codes, setCodes] = useState<any[]>([]);
+  const [form, setForm] = useState({ code: "", percentOff: "100", duration: "once", durationInMonths: "3" });
+  const [creating, setCreating] = useState(false);
+
+  async function loadCodes() {
+    const res = await fetch("/api/admin/coupons");
+    if (res.ok) {
+      const data = await res.json();
+      setCodes(data.codes || []);
+    }
+  }
+
+  async function createCode(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    const res = await fetch("/api/admin/coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: form.code,
+        percentOff: Number(form.percentOff),
+        duration: form.duration,
+        durationInMonths: Number(form.durationInMonths),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || "Could not create code");
+    else setForm({ ...form, code: "" });
+    await loadCodes();
+    setCreating(false);
+  }
+
+  async function toggleCode(id: string, active: boolean) {
+    await fetch("/api/admin/coupons", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active: !active }),
+    });
+    await loadCodes();
+  }
 
   async function loadUsers() {
     const res = await fetch("/api/admin/users");
@@ -50,6 +90,7 @@ export default function AdminPage() {
       }
       setAuthorized(true);
       await loadUsers();
+      await loadCodes();
       setLoading(false);
     })();
   }, []);
@@ -194,6 +235,132 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Promo Codes */}
+              <div className="mt-16">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
+                  Promo Codes
+                </p>
+                <h2 className="glow font-display uppercase text-3xl font-700 leading-tight">
+                  Discount &amp; <span className="text-electric">free codes.</span>
+                </h2>
+                <p className="mt-3 text-bone/70 leading-relaxed max-w-2xl text-sm">
+                  Create codes members enter at checkout. Use <span className="text-electric">100%</span> for
+                  a fully free code. Duration <span className="text-electric">once</span> = first payment only,
+                  <span className="text-electric"> forever</span> = every payment, <span className="text-electric">repeating</span> = a set number of months.
+                </p>
+
+                <form onSubmit={createCode} className="mt-6 grid sm:grid-cols-5 gap-3 items-end">
+                  <label className="block sm:col-span-2">
+                    <span className="text-[10px] uppercase tracking-wider text-bone/50">Code (optional)</span>
+                    <input
+                      value={form.code}
+                      onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                      placeholder="LAUNCH50"
+                      className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none font-display tracking-wider"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] uppercase tracking-wider text-bone/50">% Off</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={form.percentOff}
+                      onChange={(e) => setForm({ ...form, percentOff: e.target.value })}
+                      className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] uppercase tracking-wider text-bone/50">Duration</span>
+                    <select
+                      value={form.duration}
+                      onChange={(e) => setForm({ ...form, duration: e.target.value })}
+                      className="w-full bg-ink/60 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none"
+                    >
+                      <option value="once">Once</option>
+                      <option value="forever">Forever</option>
+                      <option value="repeating">Repeating</option>
+                    </select>
+                  </label>
+                  {form.duration === "repeating" ? (
+                    <label className="block">
+                      <span className="text-[10px] uppercase tracking-wider text-bone/50">Months</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={form.durationInMonths}
+                        onChange={(e) => setForm({ ...form, durationInMonths: e.target.value })}
+                        className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none"
+                      />
+                    </label>
+                  ) : (
+                    <div />
+                  )}
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 sm:col-span-5 sm:w-fit"
+                  >
+                    {creating ? "Creating…" : "Create Code"}
+                  </button>
+                </form>
+
+                <div className="mt-8 border border-bone/15 bg-ink/20 overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15">
+                        <th className="text-left p-4 font-display">Code</th>
+                        <th className="text-left p-4 font-display">Discount</th>
+                        <th className="text-left p-4 font-display">Duration</th>
+                        <th className="text-left p-4 font-display">Redeemed</th>
+                        <th className="text-left p-4 font-display">Status</th>
+                        <th className="text-right p-4 font-display">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {codes.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-bone/50">
+                            No promo codes yet. Create one above.
+                          </td>
+                        </tr>
+                      )}
+                      {codes.map((c) => (
+                        <tr key={c.id} className="border-t border-bone/10">
+                          <td className="p-4 font-display uppercase tracking-wider text-bone">{c.code}</td>
+                          <td className="p-4 text-electric font-display">{c.percentOff}% off</td>
+                          <td className="p-4 text-bone/70 text-xs">
+                            {c.duration === "repeating" ? `${c.durationInMonths} months` : c.duration}
+                          </td>
+                          <td className="p-4 text-bone/70">
+                            {c.timesRedeemed}
+                            {c.maxRedemptions ? ` / ${c.maxRedemptions}` : ""}
+                          </td>
+                          <td className="p-4">
+                            <span
+                              className={
+                                "inline-block px-3 py-1 text-[10px] font-display uppercase tracking-wider " +
+                                (c.active ? "bg-electric text-ink" : "border border-bone/30 text-bone/60")
+                              }
+                            >
+                              {c.active ? "Active" : "Off"}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => toggleCode(c.id, c.active)}
+                              className="font-display uppercase tracking-wider text-xs border border-bone/30 text-bone/70 px-4 py-2 hover:border-electric hover:text-electric transition-colors"
+                            >
+                              {c.active ? "Disable" : "Enable"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           )}

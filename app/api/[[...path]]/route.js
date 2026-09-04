@@ -134,6 +134,7 @@ async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email
   params.set('mode', pkg.mode)
   params.set('success_url', successUrl)
   params.set('cancel_url', cancelUrl)
+  params.set('allow_promotion_codes', 'true')
   if (email) {
     // Prefill + ensure Stripe has an address for automatic receipts.
     params.set('customer_email', email)
@@ -460,6 +461,124 @@ async function handleRoute(request, { params }) {
         payment_status: s.payment_status,
         packageId: tx.packageId,
       }))
+    }
+
+    // ---------------- MEMBER SUBSCRIPTION INFO (My Membership panel) ----------------
+    if (route === '/payments/subscription' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      }
+      const result = {
+        accessType: user.accessType || null,
+        portalAccess: !!user.portalAccess,
+        subscription: null,
+      }
+      if (user.stripeSubscriptionId) {
+        try {
+          const r = await fetch(`${STRIPE_BASE}/subscriptions/${user.stripeSubscriptionId}`, {
+            headers: { Authorization: `Bearer ${STRIPE_KEY}` },
+          })
+          const s = await r.json()
+          if (r.ok) {
+            const item = s.items?.data?.[0]
+            result.subscription = {
+              status: s.status,
+              cancelAtPeriodEnd: s.cancel_at_period_end,
+              currentPeriodEnd: s.current_period_end,
+              amount: item?.price?.unit_amount ?? null,
+              currency: item?.price?.currency ?? 'usd',
+              interval: item?.price?.recurring?.interval ?? null,
+            }
+          }
+        } catch (e) {
+          console.error('Subscription fetch error:', e)
+        }
+      }
+      return handleCORS(NextResponse.json(result))
+    }
+
+    // ---------------- ADMIN: PROMO CODES (Stripe coupons + promotion codes) ----------------
+    if (route === '/admin/coupons' && method === 'GET') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const r = await fetch(`${STRIPE_BASE}/promotion_codes?limit=100`, {
+        headers: { Authorization: `Bearer ${STRIPE_KEY}`, 'Stripe-Version': '2024-06-20' },
+      })
+      const data = await r.json()
+      if (!r.ok) return handleCORS(NextResponse.json({ codes: [] }))
+      const codes = (data.data || []).map((pc) => ({
+        id: pc.id,
+        code: pc.code,
+        active: pc.active,
+        percentOff: pc.coupon?.percent_off ?? null,
+        duration: pc.coupon?.duration || null,
+        durationInMonths: pc.coupon?.duration_in_months ?? null,
+        timesRedeemed: pc.times_redeemed ?? 0,
+        maxRedemptions: pc.max_redemptions ?? null,
+      }))
+      return handleCORS(NextResponse.json({ codes }))
+    }
+
+    if (route === '/admin/coupons' && method === 'POST') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const percentOff = Number(body.percentOff)
+      if (!(percentOff >= 1 && percentOff <= 100)) {
+        return handleCORS(NextResponse.json({ error: 'percentOff must be 1-100 (use 100 for a free code)' }, { status: 400 }))
+      }
+      const duration = ['once', 'repeating', 'forever'].includes(body.duration) ? body.duration : 'once'
+      const stripeHeaders = {
+        Authorization: `Bearer ${STRIPE_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Stripe-Version': '2024-06-20',
+      }
+      // 1) coupon
+      const cp = new URLSearchParams()
+      cp.set('percent_off', String(percentOff))
+      cp.set('duration', duration)
+      if (duration === 'repeating') cp.set('duration_in_months', String(body.durationInMonths || 1))
+      const cr = await fetch(`${STRIPE_BASE}/coupons`, { method: 'POST', headers: stripeHeaders, body: cp.toString() })
+      const coupon = await cr.json()
+      if (!cr.ok) {
+        return handleCORS(NextResponse.json({ error: coupon?.error?.message || 'Coupon create failed' }, { status: 400 }))
+      }
+      // 2) promotion code
+      const pp = new URLSearchParams()
+      pp.set('coupon', coupon.id)
+      if (body.code) pp.set('code', String(body.code).toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      if (body.maxRedemptions) pp.set('max_redemptions', String(body.maxRedemptions))
+      const pr = await fetch(`${STRIPE_BASE}/promotion_codes`, { method: 'POST', headers: stripeHeaders, body: pp.toString() })
+      const promo = await pr.json()
+      if (!pr.ok) {
+        return handleCORS(NextResponse.json({ error: promo?.error?.message || 'Promo code create failed' }, { status: 400 }))
+      }
+      return handleCORS(NextResponse.json({
+        code: { id: promo.id, code: promo.code, active: promo.active, percentOff, duration, durationInMonths: coupon.duration_in_months ?? null, timesRedeemed: 0, maxRedemptions: promo.max_redemptions ?? null },
+      }))
+    }
+
+    if (route === '/admin/coupons' && method === 'PUT') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      if (!body.id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      const p = new URLSearchParams()
+      p.set('active', body.active ? 'true' : 'false')
+      // Stripe uses POST for updates.
+      await fetch(`${STRIPE_BASE}/promotion_codes/${body.id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${STRIPE_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Stripe-Version': '2024-06-20' },
+        body: p.toString(),
+      })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     // ---------------- STRIPE BILLING PORTAL (self-service) ----------------

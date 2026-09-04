@@ -33,6 +33,7 @@ const resources = [
 
 export default function ClientPortalPage() {
   const [me, setMe] = useState<Me>(null);
+  const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Status>("idle");
   const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr" | "log">("log");
@@ -49,6 +50,12 @@ export default function ClientPortalPage() {
       const { user } = await res.json();
       setMe(user);
       setLoading(false);
+      if (user?.portalAccess) {
+        fetch("/api/payments/subscription")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => setSubInfo(d))
+          .catch(() => {});
+      }
     })();
   }, []);
 
@@ -189,6 +196,65 @@ export default function ClientPortalPage() {
                   Manage billing &amp; subscription →
                 </button>
               )}
+
+              {/* My Membership */}
+              {(() => {
+                const labels: Record<string, string> = {
+                  membership: "Membership · $9.99/mo",
+                  custom_program: "Custom Program · $200 (one-time)",
+                  remote_coaching: "Remote Coaching · $400/mo",
+                  in_person: "In-person / Comped",
+                };
+                const plan =
+                  (me?.accessType && labels[me.accessType]) || "Client Portal Access";
+                const sub = subInfo?.subscription;
+                const status = sub?.status || (me?.accessType === "custom_program" ? "one-time" : "active");
+                const nextDate = sub?.currentPeriodEnd
+                  ? new Date(sub.currentPeriodEnd * 1000).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : null;
+                const active = ["active", "trialing", "one-time"].includes(status);
+                return (
+                  <div className="mt-8 border-2 border-electric/40 bg-ink/30 backdrop-blur-sm p-6">
+                    <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
+                      My Membership
+                    </p>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-bone/50">Plan</p>
+                        <p className="font-display uppercase tracking-wider text-bone mt-1">{plan}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-bone/50">Status</p>
+                        <p
+                          className={
+                            "font-display uppercase tracking-wider mt-1 " +
+                            (active ? "text-electric" : "text-bone/60")
+                          }
+                        >
+                          {status}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-bone/50">
+                          {sub?.cancelAtPeriodEnd ? "Access ends" : "Next billing"}
+                        </p>
+                        <p className="font-display uppercase tracking-wider text-bone mt-1">
+                          {nextDate || (me?.accessType === "custom_program" ? "Lifetime" : "—")}
+                        </p>
+                      </div>
+                    </div>
+                    {sub?.cancelAtPeriodEnd && (
+                      <p className="mt-4 text-xs text-bone/50">
+                        Your subscription is set to cancel — access stays active until the date above.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Live chat */}
               <div className="mt-10 border-2 border-bone/15 bg-ink/30 backdrop-blur-sm p-6">
