@@ -92,6 +92,13 @@ const STRIPE_BASE = OWN_STRIPE_KEY
   ? 'https://api.stripe.com/v1'
   : (process.env.INTEGRATION_PROXY_URL || 'https://integrations.emergentagent.com') + '/stripe/v1'
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+// Support multiple endpoints (e.g. preview + production), each with its own secret.
+const WEBHOOK_SECRETS = [
+  process.env.STRIPE_WEBHOOK_SECRET,
+  ...((process.env.STRIPE_WEBHOOK_SECRETS || '').split(',')),
+]
+  .map((s) => (s || '').trim())
+  .filter(Boolean)
 // SDK instance is only used for webhook signature verification (own Stripe account).
 const stripeSdk = OWN_STRIPE_KEY ? new Stripe(OWN_STRIPE_KEY) : null
 
@@ -445,17 +452,23 @@ async function handleRoute(request, { params }) {
 
     // ---------------- STRIPE WEBHOOK (auto revoke on cancel / failed renewal) ----------------
     if (route === '/webhooks/stripe' && method === 'POST') {
-      if (!stripeSdk || !STRIPE_WEBHOOK_SECRET) {
+      if (!stripeSdk || WEBHOOK_SECRETS.length === 0) {
         // Not configured yet — acknowledge so Stripe doesn't hammer retries.
         return NextResponse.json({ received: true, configured: false })
       }
       const sig = request.headers.get('stripe-signature')
       const rawBody = await request.text()
-      let event
-      try {
-        event = stripeSdk.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET)
-      } catch (err) {
-        console.error('Webhook signature verification failed:', err.message)
+      let event = null
+      for (const secret of WEBHOOK_SECRETS) {
+        try {
+          event = stripeSdk.webhooks.constructEvent(rawBody, sig, secret)
+          break
+        } catch {
+          /* try next secret */
+        }
+      }
+      if (!event) {
+        console.error('Webhook signature verification failed for all secrets')
         return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
       }
 
