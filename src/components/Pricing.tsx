@@ -42,6 +42,20 @@ const tiers: Tier[] = [
     cta: { label: "Subscribe — $9.99/mo" },
   },
   {
+    name: "Annual Membership",
+    price: "$90",
+    cadence: "/ year",
+    tagline: "Self-guided — save ~25%.",
+    features: [
+      "Everything in the monthly Membership",
+      "Full Client Portal — workout log, calculators, libraries",
+      "The Hutch Touch 8-week program + weekly programs",
+      "One payment a year — cheaper than monthly",
+    ],
+    packageId: "yearly_90",
+    cta: { label: "Subscribe — $90/yr" },
+  },
+  {
     name: "Custom Program",
     price: "$200",
     cadence: "one-time",

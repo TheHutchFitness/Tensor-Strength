@@ -4,6 +4,7 @@ import { useState } from "react";
 import OneRepMaxCalculator from "./tools/OneRepMaxCalculator";
 import WilksDotsCalculator from "./tools/WilksDotsCalculator";
 import PRTracker from "./tools/PRTracker";
+import NearbyGyms from "./NearbyGyms";
 
 // Public free tools. The Workout Log and Macro (nutrition) tracker have been
 // moved to the Client Portal (/clients) and the Tensor Strength app — they're
@@ -81,6 +82,8 @@ export default function Tools() {
           {active === "wilks" && <WilksDotsCalculator />}
           {active === "pr" && <PRTracker />}
         </div>
+
+        <NearbyGyms />
       </div>
     </section>
   );

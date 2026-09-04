@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
-import { readFile } from 'fs/promises'
+import { readFile, writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 
 // MongoDB connection
@@ -112,6 +112,14 @@ const PACKAGES = {
     amount: 999,
     currency: 'usd',
     interval: 'month',
+    accessType: 'membership',
+  },
+  yearly_90: {
+    label: 'Tensor Strength Membership (Annual)',
+    mode: 'subscription',
+    amount: 9000,
+    currency: 'usd',
+    interval: 'year',
     accessType: 'membership',
   },
   custom_program_200: {
@@ -759,6 +767,100 @@ async function handleRoute(request, { params }) {
       }
 
       return NextResponse.json({ received: true })
+    }
+
+    // ---------------- COMMUNITY FORUM (members) ----------------
+    if (route === '/forum/upload' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      try {
+        const form = await request.formData()
+        const file = form.get('file')
+        if (!file || typeof file === 'string') {
+          return handleCORS(NextResponse.json({ error: 'No file provided' }, { status: 400 }))
+        }
+        const mime = file.type || ''
+        const isImg = mime.startsWith('image/')
+        const isVid = mime.startsWith('video/')
+        if (!isImg && !isVid) {
+          return handleCORS(NextResponse.json({ error: 'Only image or video files are allowed' }, { status: 400 }))
+        }
+        const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }
+        const ext = extMap[mime] || (isImg ? 'jpg' : 'mp4')
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const dir = process.cwd() + '/public/uploads'
+        await mkdir(dir, { recursive: true })
+        const filename = uuidv4() + '.' + ext
+        await writeFile(dir + '/' + filename, buffer)
+        return handleCORS(NextResponse.json({ url: '/uploads/' + filename, type: isImg ? 'image' : 'video' }))
+      } catch (e) {
+        console.error('Forum upload error:', e)
+        return handleCORS(NextResponse.json({ error: 'Upload failed' }, { status: 500 }))
+      }
+    }
+
+    if (route === '/forum/posts' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const posts = await db.collection('forum_posts').find({}).sort({ createdAt: -1 }).limit(200).toArray()
+      return handleCORS(NextResponse.json({ posts: posts.map(({ _id, ...p }) => p) }))
+    }
+
+    if (route === '/forum/posts' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      if (!body.title?.trim()) return handleCORS(NextResponse.json({ error: 'A title is required' }, { status: 400 }))
+      const post = {
+        id: uuidv4(),
+        userId: user.id,
+        username: user.username,
+        title: body.title.trim(),
+        body: (body.body || '').trim(),
+        mediaUrl: body.mediaUrl || null,
+        mediaType: body.mediaType || null,
+        replyCount: 0,
+        createdAt: new Date(),
+      }
+      await db.collection('forum_posts').insertOne(post)
+      const { _id, ...clean } = post
+      return handleCORS(NextResponse.json({ post: clean }))
+    }
+
+    if (route === '/forum/thread' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const id = request.nextUrl.searchParams.get('id')
+      const post = await db.collection('forum_posts').findOne({ id })
+      if (!post) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+      const replies = await db.collection('forum_replies').find({ postId: id }).sort({ createdAt: 1 }).toArray()
+      const { _id, ...cleanPost } = post
+      return handleCORS(NextResponse.json({ post: cleanPost, replies: replies.map(({ _id, ...r }) => r) }))
+    }
+
+    if (route === '/forum/replies' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      if (!body.postId || !(body.body?.trim() || body.mediaUrl)) {
+        return handleCORS(NextResponse.json({ error: 'A reply message or media is required' }, { status: 400 }))
+      }
+      const post = await db.collection('forum_posts').findOne({ id: body.postId })
+      if (!post) return handleCORS(NextResponse.json({ error: 'Post not found' }, { status: 404 }))
+      const reply = {
+        id: uuidv4(),
+        postId: body.postId,
+        userId: user.id,
+        username: user.username,
+        body: (body.body || '').trim(),
+        mediaUrl: body.mediaUrl || null,
+        mediaType: body.mediaType || null,
+        createdAt: new Date(),
+      }
+      await db.collection('forum_replies').insertOne(reply)
+      await db.collection('forum_posts').updateOne({ id: body.postId }, { $inc: { replyCount: 1 } })
+      const { _id, ...clean } = reply
+      return handleCORS(NextResponse.json({ reply: clean }))
     }
 
     // ---------------- STATUS (template) ----------------

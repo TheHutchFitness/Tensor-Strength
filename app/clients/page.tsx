@@ -146,6 +146,12 @@ export default function ClientPortalPage() {
                   Get instant access — $9.99/mo
                 </CheckoutButton>
                 <CheckoutButton
+                  packageId="yearly_90"
+                  className="w-full border-2 border-electric text-electric px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
+                >
+                  Annual — $90/yr (save ~25%)
+                </CheckoutButton>
+                <CheckoutButton
                   packageId="custom_program_200"
                   className="w-full border-2 border-bone px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors"
                 >
@@ -255,6 +261,20 @@ export default function ClientPortalPage() {
                   </div>
                 );
               })()}
+
+              {/* Community Forum */}
+              <a
+                href="/forum"
+                className="mt-8 block border-2 border-electric bg-electric/10 p-6 hover:bg-electric/20 transition-colors"
+              >
+                <p className="glow font-display uppercase tracking-wider text-electric text-lg">
+                  Community Forum →
+                </p>
+                <p className="mt-2 text-bone/80 text-sm leading-relaxed">
+                  Ask questions, post form-check videos, and help other members. Attach
+                  photos or videos to any post or reply.
+                </p>
+              </a>
 
               {/* Live chat */}
               <div className="mt-10 border-2 border-bone/15 bg-ink/30 backdrop-blur-sm p-6">

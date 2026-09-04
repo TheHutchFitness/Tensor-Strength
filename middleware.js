@@ -26,5 +26,5 @@ export function middleware(request) {
 
 export const config = {
   // Protect everything except API routes, Next internals, and static asset files.
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:jpg|jpeg|png|svg|gif|webp|ico|css|js|map|txt|xml|pdf|xlsx|csv|zip|json)).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:jpg|jpeg|png|svg|gif|webp|ico|css|js|map|txt|xml|pdf|xlsx|csv|zip|json|mp4|mov|webm)).*)'],
 }

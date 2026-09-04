@@ -29,14 +29,16 @@ export default function About() {
         </div>
 
         <div className="relative">
-          <div className="bg-electric text-ink px-6 py-4 font-display uppercase tracking-wider hidden sm:block w-fit">
-            Head Coach
-          </div>
-          <div className="relative mt-0 sm:mt-4 aspect-[4/5] border-4 border-electric overflow-hidden bg-ink">
-            <img
-              src="https://us.chat-img.sintra.ai/0d1255aa-5bdd-49c7-9b93-64af3dfc8e4f/e1af4534-8dc1-462e-92df-7d2eb92de149/image.png?w=1024&h=1024"
-              alt="Hutch squatting heavy in the rack"
+          <div className="relative aspect-[4/5] border-4 border-electric overflow-hidden bg-ink">
+            <video
+              src="/videos/coach.mp4"
               className="h-full w-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+              controls={false}
+              aria-label="Tensor Strength training"
             />
           </div>
         </div>
