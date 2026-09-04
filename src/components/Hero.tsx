@@ -16,7 +16,9 @@ export default function Hero() {
           <p className="mt-8 max-w-xl text-lg md:text-xl text-bone/85 leading-relaxed">
             Tensor Strength is a strength and performance brand for athletes who want
             real results — built through expert coaching, proven methods, and zero
-            gimmicks. No fluff. Just work that pays off.
+            gimmicks. We&apos;re proud to work with first responders and university &amp;
+            high-school athletes, with special discounts for each. No fluff. Just work
+            that pays off.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row gap-4">

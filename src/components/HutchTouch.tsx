@@ -17,10 +17,11 @@ const DAYS: HutchTouchDay[] = ["Push", "Pull", "Legs"];
 export default function HutchTouch({ mode }: { mode: Mode }) {
   const [week, setWeek] = useState(1);
   const [day, setDay] = useState<HutchTouchDay>("Push");
+  const [variant, setVariant] = useState<"A" | "B">("A");
 
   const session = useMemo(
-    () => hutchTouchSessions.find((s) => s.week === week && s.day === day),
-    [week, day]
+    () => hutchTouchSessions.find((s) => s.week === week && s.day === day && s.variant === variant),
+    [week, day, variant]
   );
 
   const isPublic = mode === "public";
@@ -41,12 +42,23 @@ export default function HutchTouch({ mode }: { mode: Mode }) {
           <p className="mt-6 text-bone/70 leading-relaxed">
             A complete Push / Pull / Legs block engineered around three primary lifts —
             Larson Press, Sumo Deadlift, and HBT Front Squat — with power work, accessories,
-            and conditioning built into every session. Eight weeks of progressive, programmed
-            training.
+            and conditioning built into every session. Run as a 6-day split — two sessions
+            (A &amp; B) per lift each week, 16 workouts per category across the 8 weeks.
             {isPublic
               ? " Members get every session, set, and target load in the Client Portal."
-              : " Pick a week and day below to see the full session."}
+              : " Pick a week, day, and session (A/B) below to see the full workout."}
           </p>
+
+          <div className="mt-4 border border-bone/20 bg-ink/30 p-4">
+            <p className="font-display uppercase tracking-wider text-xs text-electric">
+              Short on time? There&apos;s a 3-day-a-week version
+            </p>
+            <p className="text-sm text-bone/70 mt-1 leading-relaxed">
+              Prefer training 3 days a week? Run just the Session A (heavy) day for each
+              lift and skip the B sessions — you still hit Push, Pull, and Legs every week.
+              The full 3-day layout is in the downloadable program PDF.
+            </p>
+          </div>
 
           {/* From Hutch — personal endorsement, visible to everyone */}
           <div className="mt-6 border-2 border-electric bg-electric/10 p-5 md:p-6">
@@ -140,6 +152,22 @@ export default function HutchTouch({ mode }: { mode: Mode }) {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2">
+            {(["A", "B"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setVariant(v)}
+                className={
+                  "px-4 py-2 font-display uppercase tracking-wider text-xs transition-colors " +
+                  (variant === v
+                    ? "bg-electric text-ink"
+                    : "border border-bone/20 text-bone/60 hover:border-electric hover:text-electric")
+                }
+              >
+                Session {v}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Session */}
@@ -147,7 +175,7 @@ export default function HutchTouch({ mode }: { mode: Mode }) {
           <div className="border-2 border-electric/50 bg-ink/30 backdrop-blur-sm">
             <div className="px-5 py-4 border-b border-bone/15 flex items-center justify-between gap-4 flex-wrap">
               <p className="font-display uppercase tracking-wider text-bone">
-                Week {week} — {day}
+                Week {week} — {day} · {session.label}
               </p>
               <p className="font-display uppercase tracking-wider text-[10px] text-electric">
                 Primary: {HUTCH_TOUCH_PRIMARIES[day]}

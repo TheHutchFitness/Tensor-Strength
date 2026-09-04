@@ -13,6 +13,7 @@ type Post = {
   mediaUrl: string | null;
   mediaType: string | null;
   replyCount: number;
+  likes?: string[];
   createdAt: string;
 };
 type Reply = {
@@ -77,6 +78,8 @@ function MediaPicker({ media, setMedia }: { media: Media; setMedia: (m: Media) =
 export default function ForumPage() {
   const [loading, setLoading] = useState(true);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [me, setMe] = useState<{ id: string; role: string } | null>(null);
+  const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [thread, setThread] = useState<{ post: Post; replies: Reply[] } | null>(null);
 
@@ -101,7 +104,63 @@ export default function ForumPage() {
   }
   useEffect(() => {
     loadPosts();
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMe(d?.user ? { id: d.user.id, role: d.user.role } : null))
+      .catch(() => {});
   }, []);
+
+  async function toggleLike(id: string) {
+    const res = await fetch("/api/forum/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: id }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                likes: d.liked
+                  ? [...(p.likes || []), me?.id || "x"]
+                  : (p.likes || []).filter((u) => u !== me?.id),
+              }
+            : p
+        )
+      );
+    }
+  }
+
+  async function deletePost(id: string) {
+    if (!confirm("Delete this post? This can't be undone.")) return;
+    const res = await fetch("/api/forum/posts", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) {
+      if (openId === id) {
+        setOpenId(null);
+        setThread(null);
+      }
+      await loadPosts();
+    } else {
+      const d = await res.json();
+      alert(d.error || "Could not delete");
+    }
+  }
+
+  const filtered = posts.filter((p) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      p.title.toLowerCase().includes(q) ||
+      (p.body || "").toLowerCase().includes(q) ||
+      p.username.toLowerCase().includes(q)
+    );
+  });
 
   async function openThread(id: string) {
     setOpenId(id);
@@ -193,37 +252,66 @@ export default function ForumPage() {
                 </button>
               </form>
 
-              {/* List */}
-              <div className="mt-10 grid gap-3">
+              {/* Search + List */}
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search posts…"
+                className="mt-10 w-full bg-ink/40 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none"
+              />
+              <div className="mt-4 grid gap-3">
                 {loading ? (
                   <p className="text-bone/50 font-display uppercase tracking-wider">Loading…</p>
-                ) : posts.length === 0 ? (
-                  <p className="text-bone/50">No posts yet — be the first to start a thread.</p>
+                ) : filtered.length === 0 ? (
+                  <p className="text-bone/50">
+                    {posts.length === 0 ? "No posts yet — be the first to start a thread." : "No posts match your search."}
+                  </p>
                 ) : (
-                  posts.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => openThread(p.id)}
-                      className="text-left border border-bone/15 bg-ink/30 p-5 hover:border-electric transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="font-display uppercase tracking-wider text-bone truncate">{p.title}</p>
-                          <p className="text-xs text-bone/50 mt-1">
-                            by {p.username} · {new Date(p.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          {p.mediaType && (
-                            <span className="text-[10px] font-display uppercase tracking-wider text-electric">
-                              {p.mediaType === "video" ? "▶ video" : "▣ photo"}
-                            </span>
+                  filtered.map((p) => {
+                    const liked = !!(me && (p.likes || []).includes(me.id));
+                    const canDelete = me && (me.id === (p as any).userId || me.role === "admin");
+                    return (
+                      <div key={p.id} className="border border-bone/15 bg-ink/30 p-5 hover:border-electric transition-colors">
+                        <button onClick={() => openThread(p.id)} className="text-left w-full">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="font-display uppercase tracking-wider text-bone truncate">{p.title}</p>
+                              <p className="text-xs text-bone/50 mt-1">
+                                by {p.username} · {new Date(p.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {p.mediaType && (
+                                <span className="text-[10px] font-display uppercase tracking-wider text-electric">
+                                  {p.mediaType === "video" ? "▶ video" : "▣ photo"}
+                                </span>
+                              )}
+                              <span className="font-display text-electric">{p.replyCount} ▸</span>
+                            </div>
+                          </div>
+                        </button>
+                        <div className="mt-3 flex items-center gap-4 border-t border-bone/10 pt-3">
+                          <button
+                            onClick={() => toggleLike(p.id)}
+                            className={
+                              "font-display uppercase tracking-wider text-xs transition-colors " +
+                              (liked ? "text-electric" : "text-bone/50 hover:text-electric")
+                            }
+                          >
+                            {liked ? "♥" : "♡"} {(p.likes || []).length} {(p.likes || []).length === 1 ? "like" : "likes"}
+                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => deletePost(p.id)}
+                              className="font-display uppercase tracking-wider text-xs text-bone/40 hover:text-electric transition-colors ml-auto"
+                            >
+                              Delete
+                            </button>
                           )}
-                          <span className="font-display text-electric">{p.replyCount} ▸</span>
                         </div>
                       </div>
-                    </button>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </>

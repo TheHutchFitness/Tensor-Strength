@@ -40,13 +40,17 @@ export default function NearbyGyms() {
         setState("searching");
         const query = `[out:json][timeout:25];
 (
-  node["leisure"="fitness_centre"](around:12000,${lat},${lon});
-  way["leisure"="fitness_centre"](around:12000,${lat},${lon});
-  node["amenity"="gym"](around:12000,${lat},${lon});
-  way["amenity"="gym"](around:12000,${lat},${lon});
-  node["sport"="fitness"](around:12000,${lat},${lon});
+  node["leisure"="fitness_centre"](around:30000,${lat},${lon});
+  way["leisure"="fitness_centre"](around:30000,${lat},${lon});
+  node["amenity"="gym"](around:30000,${lat},${lon});
+  way["amenity"="gym"](around:30000,${lat},${lon});
+  node["sport"="fitness"](around:30000,${lat},${lon});
+  way["sport"="fitness"](around:30000,${lat},${lon});
+  node["leisure"="sports_centre"](around:30000,${lat},${lon});
+  way["leisure"="sports_centre"](around:30000,${lat},${lon});
+  node["club"="sport"](around:30000,${lat},${lon});
 );
-out center 60;`;
+out center 300;`;
         try {
           const res = await fetch("https://overpass-api.de/api/interpreter", {
             method: "POST",
@@ -83,7 +87,7 @@ out center 60;`;
               return true;
             })
             .sort((a: Gym, b: Gym) => a.distanceKm - b.distanceKm)
-            .slice(0, 15);
+            .slice(0, 30);
           setGyms(list);
           setState("done");
         } catch {
@@ -137,7 +141,7 @@ out center 60;`;
       )}
       {state === "done" && gyms.length === 0 && (
         <p className="mt-5 text-sm text-bone/60">
-          No gyms found within ~12&nbsp;km. Try again from a different spot.
+          No gyms found within ~30&nbsp;km. Try again from a different spot.
         </p>
       )}
 

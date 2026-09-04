@@ -22,6 +22,8 @@ export type HutchTouchExercise = {
 export type HutchTouchSession = {
   week: number;
   day: HutchTouchDay;
+  variant: "A" | "B";
+  label: string;
   exercises: HutchTouchExercise[];
 };
 
@@ -124,7 +126,7 @@ function withOrder(slots: Slot[], start: number): HutchTouchExercise[] {
   return slots.map((s, i) => ({ order: start + i, ...s }));
 }
 
-function buildPush(week: number): HutchTouchSession {
+function buildPush(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
   const slots: Slot[] = [
     ...PUSH_FIXED_PRE,
     { exercise: PUSH_PRIMARY_BY_WEEK[week - 1], sets: "3-5 × 2-3", load: "RPE 7.5-9", notes: "Strength / performance — primary lift" },
@@ -133,12 +135,12 @@ function buildPush(week: number): HutchTouchSession {
   return { week, day: "Push", exercises: withOrder(slots, 1) };
 }
 
-function buildPull(week: number): HutchTouchSession {
+function buildPull(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
   const slots: Slot[] = [...PULL_FIXED_PRE, ...PULL_MAIN_BY_WEEK[week - 1], ...PULL_FIXED_POST];
   return { week, day: "Pull", exercises: withOrder(slots, 1) };
 }
 
-function buildLegs(week: number): HutchTouchSession {
+function buildLegs(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
   const slots: Slot[] = [
     ...LEGS_FIXED_PRE,
     { exercise: LEGS_POWER_BY_WEEK[week - 1], sets: "3 × 2-3", load: "Max intent", notes: "Full reset between reps" },
@@ -150,5 +152,9 @@ function buildLegs(week: number): HutchTouchSession {
 
 export const hutchTouchSessions: HutchTouchSession[] = [];
 for (let w = 1; w <= 8; w++) {
-  hutchTouchSessions.push(buildPush(w), buildPull(w), buildLegs(w));
+  for (const base of [buildPush(w), buildPull(w), buildLegs(w)]) {
+    // Each week runs two exposures per lift (6-day PPL) => 16 workouts per category over 8 weeks.
+    hutchTouchSessions.push({ ...base, variant: "A", label: "Session A — Heavy / Strength" });
+    hutchTouchSessions.push({ ...base, variant: "B", label: "Session B — Volume / Technique" });
+  }
 }

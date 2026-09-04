@@ -20,16 +20,7 @@ import CheckoutButton from "@/components/CheckoutButton";
 type Status = "idle" | "submitting" | "success" | "error";
 type Me = { username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string } | null;
 
-const resources = [
-  {
-    icon: "❖",
-    title: "Training Guides",
-    desc: "Accessory work, consistency, progressive overload — the reading behind the programming.",
-    cta: "Read →",
-    href: "/#content",
-    external: false,
-  },
-];
+const resources: never[] = [];
 
 export default function ClientPortalPage() {
   const [me, setMe] = useState<Me>(null);
@@ -299,7 +290,7 @@ export default function ClientPortalPage() {
 
               {/* Weekly Programs */}
               <div className="mt-14 border-t border-bone/10 pt-12">
-                <WeeklyPrograms mode="portal" />
+                <WeeklyPrograms mode="portal" single />
               </div>
 
               {/* The Hutch Touch */}
@@ -322,28 +313,6 @@ export default function ClientPortalPage() {
                 <div className="mt-8">
                   <PRSubmit />
                 </div>
-              </div>
-
-              {/* Resource cards */}
-              <div className="mt-10 grid sm:grid-cols-2 gap-4">
-                {resources.map((r) => (
-                  <a
-                    key={r.title}
-                    href={r.href}
-                    className="group border border-bone/15 bg-ink/30 backdrop-blur-sm p-6 hover:border-electric transition-colors flex flex-col"
-                  >
-                    <span className="font-display text-3xl text-electric">{r.icon}</span>
-                    <p className="font-display uppercase tracking-wider text-bone mt-4">
-                      {r.title}
-                    </p>
-                    <p className="text-sm text-bone/60 mt-2 leading-relaxed flex-1">
-                      {r.desc}
-                    </p>
-                    <p className="mt-4 font-display uppercase tracking-wider text-sm text-electric group-hover:text-bone transition-colors">
-                      {r.cta}
-                    </p>
-                  </a>
-                ))}
               </div>
 
               {/* Client resources */}

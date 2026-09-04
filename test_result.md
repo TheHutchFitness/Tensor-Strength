@@ -245,9 +245,88 @@ backend_payments:
         -agent: "testing"
         -comment: "✅ PASSED all tests: (1) Valid session_id returns 200 with paid:false and status:'pending' (expected for unpaid session). (2) Missing session_id param returns 400 with error message. (3) Made-up session_id returns 404 (transaction not found). (4) Cross-user ownership test: second member attempting to access first member's session returns 404 (ownership correctly enforced). No _id leaks detected in responses."
 
+
+# ============ HUTCH TOUCH FILE DOWNLOADS (gated — portal access only) ============
+backend_hutch_touch:
+  - task: "Hutch Touch - PDF download (GET /api/hutch-touch/pdf)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) GET /api/hutch-touch/pdf with NO auth cookie returns 403 with JSON error message, not the file. (2) Registered new member with portalAccess=false, GET /api/hutch-touch/pdf returns 403 with JSON error. (3) Login as admin ('The Hutch' / 'Vzkfjf3n!3'), GET /api/hutch-touch/pdf returns 200 with Content-Type: application/pdf, body size 93044 bytes, starts with %PDF signature (valid PDF). (4) 403 responses do not leak the underlying file URL. No 500 errors encountered."
+  - task: "Hutch Touch - Tracker download (GET /api/hutch-touch/tracker)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) GET /api/hutch-touch/tracker with NO auth cookie returns 403 with JSON error message, not the file. (2) As admin, GET /api/hutch-touch/tracker returns 200 with Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, body size 50502 bytes, starts with PK signature (valid XLSX/ZIP). (3) 403 responses do not leak the underlying file URL. No 500 errors encountered."
+
 agent_communication:
     -agent: "main"
+    -agent: "testing"
+    -message: "✅ ALL HUTCH TOUCH FILE DOWNLOAD TESTS PASSED (5/5 - 100% success rate). Comprehensive testing completed: (1) GET /api/hutch-touch/pdf with NO auth returns 403 with JSON error (not file). (2) GET /api/hutch-touch/tracker with NO auth returns 403 with JSON error. (3) Registered new member with portalAccess=false, GET /api/hutch-touch/pdf returns 403 (member without portal access cannot download). (4) Login as admin ('The Hutch' / 'Vzkfjf3n!3'), GET /api/hutch-touch/pdf returns 200 with application/pdf, 93044 bytes, starts with %PDF. (5) As admin, GET /api/hutch-touch/tracker returns 200 with application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, 50502 bytes, starts with PK. All 403 responses return JSON errors without leaking file URLs. No 500 errors encountered. The fix is working correctly: Hutch Touch files are ONLY downloadable by users with portalAccess=true."
+
     -message: "PLEASE TEST THE NEW PAYMENTS BACKEND (all /api routes, httpOnly cookie ts_token, persist cookies). Uses Emergent-managed Stripe sandbox (proxy). Note: a REAL card payment cannot be completed headlessly (Stripe hosts the checkout page), so test creation + security + polling behavior, NOT a fully paid state. Flow: 1) Register/login a member (portalAccess=false). 2) POST /api/payments/checkout {packageId:'monthly_9_99'} -> expect 200 with {url (a stripe checkout url), sessionId (cs_test_...)} and a payment_transactions doc created. Repeat for 'custom_program_200' and 'remote_coaching_400' -> all 200 with a url. 3) POST /api/payments/checkout {packageId:'bogus'} -> 400. 4) POST /api/payments/checkout with NO auth cookie -> 401. 5) Price-tamper: POST {packageId:'monthly_9_99', amount:1, mode:'payment'} -> still 200 and server ignores extra fields (amount is fixed server-side; you cannot assert the Stripe amount headlessly, just confirm no error and a session is returned). 6) GET /api/payments/status?session_id=<the sessionId from step 2> as the SAME member -> expect 200 with paid:false and status 'pending' or 'open'/'unpaid' (payment not completed). It may take a few seconds for the sandbox session to be retrievable; 'pending' is acceptable. 7) GET /api/payments/status without session_id -> 400. 8) GET /api/payments/status with a made-up session_id not owned by the user -> 404 (transaction not found). 9) Register a SECOND member, and have them GET /api/payments/status?session_id=<first member's sessionId> -> expect 404 (ownership enforced). Confirm no 500s and that responses never leak _id. Report the actual Stripe checkout url host you received (should be a stripe.com / checkout URL)."
     -agent: "testing"
     -message: "✅ ALL PAYMENTS BACKEND TESTS PASSED (11/11 - 100% success rate). Comprehensive testing completed: (1) GET /api/payments/packages returns 3 packages with correct pricing. (2) POST /api/payments/checkout successfully creates sessions for all 3 packages (monthly_9_99, custom_program_200, remote_coaching_400) with valid Stripe checkout URLs (checkout.stripe.com) and sessionIds starting with 'cs_test_'. (3) Security tests passed: invalid packageId returns 400, no auth returns 401, price-tamper attempt correctly ignored by server. (4) GET /api/payments/status returns paid:false with status:'pending' for unpaid sessions, returns 400 for missing session_id, returns 404 for invalid/unowned sessions. (5) Cross-user ownership enforced correctly. No 500 errors encountered. No Mongo _id leaks detected. Stripe checkout URL host confirmed: checkout.stripe.com"
+
+
+# ============ TRAINER PORTAL (isTrainer flag + client assignment + trainer check-in view) ============
+backend_trainers:
+  - task: "Admin - set isTrainer & assignedTrainerId (PUT /api/admin/users)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Extended admin PUT: accepts isTrainer:boolean (marks a member as trainer). When isTrainer set to false, unassigns all clients that pointed to that trainer. Accepts assignedTrainerId:string|null to link a client to a trainer; validates the target is an existing user with isTrainer=true (400 otherwise). Admin-only (403). Non-admin should get 403."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) Admin successfully sets member A as trainer (isTrainer=true) via PUT /api/admin/users, returns 200. (2) Admin successfully assigns member B to trainer A (assignedTrainerId=A.id), returns 200. (3) Attempting to assign to a non-trainer user returns 400 with error 'Selected trainer is not a valid trainer.' (4) When admin demotes trainer A (isTrainer=false), member B is automatically unassigned (assignedTrainerId becomes null), verified via GET /api/admin/users. No passwordHash or _id leaks detected."
+  - task: "Trainer - list assigned clients (GET /api/trainer/clients)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Requires logged-in user with isTrainer=true OR role=admin (403 otherwise, incl. unauthenticated). Returns clients where assignedTrainerId === current user id, each with checkinCount and lastCheckinAt. No passwordHash/_id leaks."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) Non-trainer member attempting GET /api/trainer/clients returns 403 with error 'Forbidden'. (2) Trainer A successfully retrieves client list via GET /api/trainer/clients, returns 200 with member B in the list. (3) Each client has required fields: checkinCount (number, initially 0) and lastCheckinAt (null initially). (4) GET /api/trainer/clients with NO auth cookie returns 403. No passwordHash or _id leaks detected."
+  - task: "Trainer - view a client's check-ins (GET /api/trainer/checkins?clientId=)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Requires isTrainer or admin. Requires clientId query (400 if missing). Returns 403 if the client is not assigned to this trainer (admins can view any). Returns { client:{id,username,email}, checkins:[...] } sorted newest-first, no _id leaks."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) Trainer A successfully views member B's check-ins via GET /api/trainer/checkins?clientId=B.id, returns 200 with response structure { client:{id,username,email}, checkins:[...] }. (2) Check-ins array contains at least 1 check-in after member B created one (week='1', wins='hit all sessions', struggles='sleep', readiness='8'). (3) GET /api/trainer/checkins without clientId query returns 400 with error 'clientId is required'. (4) Trainer A attempting to view member C's check-ins (C not assigned to A) returns 403 with error 'Forbidden'. No _id leaks detected in responses."
+
+agent_communication:
+    -agent: "main"
+    -message: "PLEASE TEST THE NEW TRAINER PORTAL BACKEND (all /api routes, httpOnly cookie ts_token, persist cookies). Admin login: identifier 'The Hutch' password 'Vzkfjf3n!3'. Suggested flow: 1) Login as admin. 2) Register member A (trainerCandidate) and member B (client) via /api/auth/register. 3) As admin PUT /api/admin/users {id: A.id, isTrainer:true} -> A.isTrainer true. 4) As admin PUT /api/admin/users {id: B.id, assignedTrainerId: A.id} -> B.assignedTrainerId == A.id. 5) PUT with assignedTrainerId set to a NON-trainer user id -> expect 400. 6) As member B (non-trainer), GET /api/trainer/clients -> 403. 7) Login as A (the trainer), GET /api/trainer/clients -> 200, list contains B with checkinCount & lastCheckinAt fields. 8) As admin, grant B portalAccess=true, login B, POST /api/checkins {week:'1', wins:'x', struggles:'y', readiness:'8'} -> 200. 9) As trainer A, GET /api/trainer/checkins?clientId=B.id -> 200 with checkins array (>=1) and client info; no _id leaks. 10) GET /api/trainer/checkins without clientId -> 400. 11) Register member C, as trainer A GET /api/trainer/checkins?clientId=C.id (C not assigned to A) -> 403. 12) As admin PUT {id:A.id, isTrainer:false} -> should unassign B (B.assignedTrainerId becomes null); verify via GET /api/admin/users. 13) GET /api/trainer/clients with NO auth -> 403. Confirm no 500s and no _id/passwordHash leaks."
+    -agent: "testing"
+    -message: "✅ ALL TRAINER PORTAL BACKEND TESTS PASSED (14/14 - 100% success rate). Comprehensive testing completed covering all 13 test steps: (1) Admin login successful with correct credentials. (2) Member A and B registered with correct initial state (role=member, portalAccess=false, isTrainer=undefined). (3) Admin successfully sets member A as trainer (isTrainer=true). (4) Admin successfully assigns member B to trainer A (assignedTrainerId=A.id). (5) Attempting to assign to non-trainer returns 400 with proper error message. (6) Non-trainer member B correctly denied access to /api/trainer/clients (403). (7) Trainer A successfully retrieves client list containing member B with checkinCount and lastCheckinAt fields. (8) Member B granted portal access and successfully created check-in. (9) Trainer A successfully views member B's check-ins with proper response structure {client:{id,username,email}, checkins:[...]}. (10) Missing clientId query returns 400. (11) Trainer A correctly denied access to unassigned member C's check-ins (403). (12) Demoting trainer A (isTrainer=false) automatically unassigns member B (assignedTrainerId becomes null). (13) Unauthenticated request to /api/trainer/clients returns 403. No 500 errors encountered. No passwordHash or _id leaks detected in any responses. All endpoints return correct status codes and proper JSON responses."
 

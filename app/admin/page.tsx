@@ -10,6 +10,8 @@ type User = {
   email: string;
   role: "member" | "admin";
   portalAccess: boolean;
+  isTrainer?: boolean;
+  assignedTrainerId?: string | null;
   accessType?: string;
   subscriptionStatus?: string;
   createdAt: string;
@@ -106,6 +108,28 @@ export default function AdminPage() {
     setBusyId(null);
   }
 
+  async function toggleTrainer(u: User) {
+    setBusyId(u.id);
+    await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, isTrainer: !u.isTrainer }),
+    });
+    await loadUsers();
+    setBusyId(null);
+  }
+
+  async function assignTrainer(u: User, trainerId: string) {
+    setBusyId(u.id);
+    await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, assignedTrainerId: trainerId || null }),
+    });
+    await loadUsers();
+    setBusyId(null);
+  }
+
   async function removeUser(u: User) {
     if (!confirm(`Delete ${u.username}? This can't be undone.`)) return;
     setBusyId(u.id);
@@ -120,6 +144,9 @@ export default function AdminPage() {
 
   const members = users.filter((u) => u.role !== "admin");
   const approved = members.filter((u) => u.portalAccess).length;
+  const trainers = members.filter((u) => u.isTrainer);
+  const trainerName = (id?: string | null) =>
+    trainers.find((t) => t.id === id)?.username || "";
 
   return (
     <>
@@ -143,7 +170,7 @@ export default function AdminPage() {
             </p>
           ) : (
             <>
-              <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="border border-bone/15 bg-ink/30 p-5">
                   <p className="font-display text-3xl text-electric font-700">{members.length}</p>
                   <p className="text-xs uppercase tracking-wider text-bone/60 mt-1">Members</p>
@@ -156,10 +183,14 @@ export default function AdminPage() {
                   <p className="font-display text-3xl text-electric font-700">{members.length - approved}</p>
                   <p className="text-xs uppercase tracking-wider text-bone/60 mt-1">Pending</p>
                 </div>
+                <div className="border border-bone/15 bg-ink/30 p-5">
+                  <p className="font-display text-3xl text-electric font-700">{trainers.length}</p>
+                  <p className="text-xs uppercase tracking-wider text-bone/60 mt-1">Trainers</p>
+                </div>
               </div>
 
               <div className="mt-10 border border-bone/15 bg-ink/20 overflow-x-auto">
-                <table className="w-full text-sm min-w-[640px]">
+                <table className="w-full text-sm min-w-[880px]">
                   <thead>
                     <tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15">
                       <th className="text-left p-4 font-display">Username</th>
@@ -167,13 +198,15 @@ export default function AdminPage() {
                       <th className="text-left p-4 font-display">Access Via</th>
                       <th className="text-left p-4 font-display">Subscription</th>
                       <th className="text-left p-4 font-display">Portal Access</th>
+                      <th className="text-left p-4 font-display">Trainer</th>
+                      <th className="text-left p-4 font-display">Assigned Trainer</th>
                       <th className="text-right p-4 font-display">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {members.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-bone/50">
+                        <td colSpan={8} className="p-8 text-center text-bone/50">
                           No members yet. Share the site so people can register.
                         </td>
                       </tr>
@@ -214,6 +247,41 @@ export default function AdminPage() {
                           >
                             {u.portalAccess ? "Granted" : "Pending"}
                           </span>
+                        </td>
+                        <td className="p-4">
+                          <button
+                            onClick={() => toggleTrainer(u)}
+                            disabled={busyId === u.id}
+                            className={
+                              "inline-block px-3 py-1 text-[10px] font-display uppercase tracking-wider transition-colors disabled:opacity-50 " +
+                              (u.isTrainer
+                                ? "bg-electric text-ink hover:bg-bone"
+                                : "border border-bone/30 text-bone/60 hover:border-electric hover:text-electric")
+                            }
+                          >
+                            {u.isTrainer ? "Trainer ✓" : "Make Trainer"}
+                          </button>
+                        </td>
+                        <td className="p-4">
+                          {u.isTrainer ? (
+                            <span className="text-bone/40 text-xs">—</span>
+                          ) : (
+                            <select
+                              value={u.assignedTrainerId || ""}
+                              onChange={(e) => assignTrainer(u, e.target.value)}
+                              disabled={busyId === u.id || trainers.length === 0}
+                              className="bg-ink/60 border border-bone/20 px-2 py-1.5 text-bone text-xs focus:border-electric outline-none font-display tracking-wider disabled:opacity-50 max-w-[160px]"
+                            >
+                              <option value="">
+                                {trainers.length === 0 ? "No trainers yet" : "Unassigned"}
+                              </option>
+                              {trainers.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.username}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <button

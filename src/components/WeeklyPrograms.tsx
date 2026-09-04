@@ -190,7 +190,7 @@ function ProgramCard({ p, mode }: { p: WeeklyProgram; mode: Mode }) {
   );
 }
 
-export default function WeeklyPrograms({ mode }: { mode: Mode }) {
+export default function WeeklyPrograms({ mode, single }: { mode: Mode; single?: boolean }) {
   const isPublic = mode === "public";
 
   // ---- PUBLIC: static free starter library (always accessible, no weekly rotation) ----
@@ -264,28 +264,39 @@ export default function WeeklyPrograms({ mode }: { mode: Mode }) {
   const sorted = [...weeklyPrograms].sort(
     (a, b) => order[statusOf(a, now)] - order[statusOf(b, now)]
   );
+  const list = single ? sorted.slice(0, 1) : sorted;
 
   return (
     <section>
       <div>
         <div className="max-w-2xl mb-10">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
-            Weekly Programs
+            {single ? "This Week's Program" : "Weekly Programs"}
           </p>
           <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            A new program
-            <br />
-            every <span className="text-electric">week.</span>
+            {single ? (
+              <>
+                One program.
+                <br />
+                Every <span className="text-electric">member.</span>
+              </>
+            ) : (
+              <>
+                A new program
+                <br />
+                every <span className="text-electric">week.</span>
+              </>
+            )}
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
-            Each week, a fresh training program drops — built for a specific purpose:
-            hypertrophy, strength, conditioning, deload. Active and upcoming programs
-            below — open one to see every session.
+            {single
+              ? "This week's program — released for every member to run. Open it for the full session breakdown."
+              : "Each week, a fresh training program drops — built for a specific purpose: hypertrophy, strength, conditioning, deload. Active and upcoming programs below — open one to see every session."}
           </p>
         </div>
 
         <div className="grid gap-4">
-          {sorted.map((p) => (
+          {list.map((p) => (
             <ProgramCard key={p.id} p={p} mode={mode} />
           ))}
         </div>

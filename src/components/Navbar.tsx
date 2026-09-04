@@ -12,7 +12,7 @@ const links = [
   { href: "/apply", label: "Apply" },
 ];
 
-type Me = { username: string; role: string; portalAccess: boolean } | null;
+type Me = { username: string; role: string; portalAccess: boolean; isTrainer?: boolean } | null;
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
@@ -60,6 +60,24 @@ export default function Navbar() {
               Client Portal
             </a>
           </li>
+          <li>
+            <a
+              href="/forum"
+              className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors"
+            >
+              Forum
+            </a>
+          </li>
+          {(me?.isTrainer || me?.role === "admin") && (
+            <li>
+              <a
+                href="/trainers"
+                className="font-display uppercase text-sm tracking-wider text-electric hover:text-bone transition-colors"
+              >
+                Trainers
+              </a>
+            </li>
+          )}
           {me?.role === "admin" && (
             <li>
               <a
@@ -125,6 +143,26 @@ export default function Navbar() {
               Client Portal →
             </a>
           </li>
+          <li>
+            <a
+              href="/forum"
+              onClick={() => setOpen(false)}
+              className="block py-3 font-display uppercase tracking-wider hover:text-electric"
+            >
+              Forum →
+            </a>
+          </li>
+          {(me?.isTrainer || me?.role === "admin") && (
+            <li>
+              <a
+                href="/trainers"
+                onClick={() => setOpen(false)}
+                className="block py-3 font-display uppercase tracking-wider text-electric"
+              >
+                Trainers →
+              </a>
+            </li>
+          )}
           {me?.role === "admin" && (
             <li>
               <a

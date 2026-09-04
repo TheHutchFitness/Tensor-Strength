@@ -320,11 +320,31 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
       }
       const target = await db.collection('users').findOne({ id: body.id })
-      const grant = !!body.portalAccess
-      const update = { portalAccess: grant, portalAccessUpdatedAt: new Date() }
-      if (grant && !target?.accessType) {
-        // Manual/in-person grant by the admin (no online payment on record).
-        update.accessType = 'in_person'
+      const update = { portalAccessUpdatedAt: new Date() }
+      if (typeof body.portalAccess === 'boolean') {
+        update.portalAccess = body.portalAccess
+        if (body.portalAccess && !target?.accessType) update.accessType = 'in_person'
+      }
+      if (typeof body.isTrainer === 'boolean') {
+        update.isTrainer = body.isTrainer
+        // If demoting a trainer, unassign every client that pointed to them.
+        if (body.isTrainer === false) {
+          await db.collection('users').updateMany(
+            { assignedTrainerId: body.id },
+            { $set: { assignedTrainerId: null } }
+          )
+        }
+      }
+      // Assign (or clear) the trainer this member is coached by.
+      if ('assignedTrainerId' in body) {
+        const tid = body.assignedTrainerId || null
+        if (tid) {
+          const trainer = await db.collection('users').findOne({ id: tid })
+          if (!trainer || !trainer.isTrainer) {
+            return handleCORS(NextResponse.json({ error: 'Selected trainer is not a valid trainer.' }, { status: 400 }))
+          }
+        }
+        update.assignedTrainerId = tid
       }
       await db.collection('users').updateOne({ id: body.id }, { $set: update })
       const updated = await db.collection('users').findOne({ id: body.id })
@@ -365,6 +385,63 @@ async function handleRoute(request, { params }) {
       await db.collection('checkins').insertOne(checkin)
       const { _id, ...clean } = checkin
       return handleCORS(NextResponse.json(clean))
+    }
+
+    // ---------------- TRAINER PORTAL ----------------
+    // Trainer sees the clients assigned to them by the admin.
+    if (route === '/trainer/clients' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clients = await db.collection('users')
+        .find({ assignedTrainerId: user.id })
+        .sort({ createdAt: -1 })
+        .toArray()
+      // Attach the latest check-in date + count so the trainer sees activity at a glance.
+      const withMeta = await Promise.all(
+        clients.map(async (c) => {
+          const count = await db.collection('checkins').countDocuments({ userId: c.id })
+          const latest = await db.collection('checkins')
+            .find({ userId: c.id })
+            .sort({ createdAt: -1 })
+            .limit(1)
+            .toArray()
+          return {
+            ...publicUser(c),
+            checkinCount: count,
+            lastCheckinAt: latest[0]?.createdAt || null,
+          }
+        })
+      )
+      return handleCORS(NextResponse.json({ clients: withMeta }))
+    }
+
+    // Trainer views the check-in history for one of THEIR assigned clients.
+    if (route === '/trainer/checkins' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      if (!clientId) {
+        return handleCORS(NextResponse.json({ error: 'clientId is required' }, { status: 400 }))
+      }
+      const client = await db.collection('users').findOne({ id: clientId })
+      // Only allow if the client is assigned to this trainer (admins can view any).
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const checkins = await db.collection('checkins')
+        .find({ userId: clientId })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray()
+      const clean = checkins.map(({ _id, ...rest }) => rest)
+      return handleCORS(NextResponse.json({
+        client: { id: client.id, username: client.username, email: client.email },
+        checkins: clean,
+      }))
     }
 
     // ---------------- PAYMENTS (Stripe via Emergent proxy) ----------------
@@ -484,12 +561,12 @@ async function handleRoute(request, { params }) {
       }
       const HUTCH_FILES = {
         pdf: {
-          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/scqdmve8_The_Hutch_6_Day_PPL_Performance_Block.pdf',
+          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/uozo0w84_The_Hutch_6_Day_PPL_Performance_Block.pdf',
           type: 'application/pdf',
           name: 'The-Hutch-Touch-8-Week-Program.pdf',
         },
         tracker: {
-          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/gbcebvnh_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx',
+          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/6rp8lcad_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx',
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           name: 'The-Hutch-Touch-Tracker.xlsx',
         },
@@ -820,6 +897,7 @@ async function handleRoute(request, { params }) {
         mediaUrl: body.mediaUrl || null,
         mediaType: body.mediaType || null,
         replyCount: 0,
+        likes: [],
         createdAt: new Date(),
       }
       await db.collection('forum_posts').insertOne(post)
@@ -861,6 +939,35 @@ async function handleRoute(request, { params }) {
       await db.collection('forum_posts').updateOne({ id: body.postId }, { $inc: { replyCount: 1 } })
       const { _id, ...clean } = reply
       return handleCORS(NextResponse.json({ reply: clean }))
+    }
+
+    if (route === '/forum/like' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const post = await db.collection('forum_posts').findOne({ id: body.postId })
+      if (!post) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+      const liked = (post.likes || []).includes(user.id)
+      await db.collection('forum_posts').updateOne(
+        { id: body.postId },
+        liked ? { $pull: { likes: user.id } } : { $addToSet: { likes: user.id } }
+      )
+      const updated = await db.collection('forum_posts').findOne({ id: body.postId })
+      return handleCORS(NextResponse.json({ liked: !liked, likeCount: (updated.likes || []).length }))
+    }
+
+    if (route === '/forum/posts' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const post = await db.collection('forum_posts').findOne({ id: body.id })
+      if (!post) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+      if (post.userId !== user.id && user.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'You can only delete your own posts.' }, { status: 403 }))
+      }
+      await db.collection('forum_posts').deleteOne({ id: body.id })
+      await db.collection('forum_replies').deleteMany({ postId: body.id })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     // ---------------- STATUS (template) ----------------
