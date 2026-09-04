@@ -9,7 +9,7 @@ const links = [
   { href: "/#programs", label: "Weekly Programs" },
   { href: "/#tools", label: "Free Tools" },
   { href: "/#pricing", label: "Pricing" },
-  { href: "/#contact", label: "Apply" },
+  { href: "/apply", label: "Apply" },
 ];
 
 type Me = { username: string; role: string; portalAccess: boolean } | null;

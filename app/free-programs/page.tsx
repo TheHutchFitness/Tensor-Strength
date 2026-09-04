@@ -52,7 +52,10 @@ export default function FreeProgramsPage() {
       {/* Minimal public header */}
       <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b-2 border-electric">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <a href="/free-programs" className="flex items-center gap-3">
+          <a
+            href="/free-programs"
+            className="flex items-center gap-3"
+          >
             <img
               src="/tensor-strength-logo.jpg"
               alt="Tensor Strength"
@@ -61,6 +64,12 @@ export default function FreeProgramsPage() {
             <span className="font-display uppercase tracking-wider text-sm hidden sm:block">
               Tensor Strength
             </span>
+          </a>
+          <a
+            href="/apply"
+            className="font-display uppercase text-sm tracking-wider text-bone hover:text-electric transition-colors mr-4 hidden sm:inline"
+          >
+            Apply
           </a>
           <a
             href="/login"
