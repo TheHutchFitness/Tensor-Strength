@@ -153,6 +153,17 @@ export default function LoginPage() {
             {mode === "login" ? "Create an account" : "Sign in"}
           </button>
         </p>
+
+        <p className="mt-6 text-center text-sm text-bone/50">
+          Just want to train?{" "}
+          <a
+            href="/free-programs"
+            className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors font-display uppercase tracking-wider"
+          >
+            Browse free programs
+          </a>{" "}
+          — no sign-up needed.
+        </p>
       </div>
     </main>
   );
