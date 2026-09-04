@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const links = [
   { href: "/#about", label: "About" },
@@ -12,8 +12,23 @@ const links = [
   { href: "/#contact", label: "Apply" },
 ];
 
+type Me = { username: string; role: string; portalAccess: boolean } | null;
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [me, setMe] = useState<Me>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMe(d?.user ?? null))
+      .catch(() => setMe(null));
+  }, []);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b-2 border-electric">
@@ -45,14 +60,38 @@ export default function Navbar() {
               Client Portal
             </a>
           </li>
-          <li>
-            <a
-              href="/#contact"
-              className="bg-electric text-ink px-5 py-2 font-display uppercase text-sm tracking-wider hover:bg-bone transition-colors"
-            >
-              Start Now
-            </a>
-          </li>
+          {me?.role === "admin" && (
+            <li>
+              <a
+                href="/admin"
+                className="font-display uppercase text-sm tracking-wider text-electric hover:text-bone transition-colors"
+              >
+                Admin
+              </a>
+            </li>
+          )}
+          {me ? (
+            <li className="flex items-center gap-3">
+              <span className="font-display uppercase text-xs tracking-wider text-bone/60">
+                {me.username}
+              </span>
+              <button
+                onClick={logout}
+                className="border border-bone/30 px-4 py-2 font-display uppercase text-xs tracking-wider hover:border-electric hover:text-electric transition-colors"
+              >
+                Logout
+              </button>
+            </li>
+          ) : (
+            <li>
+              <a
+                href="/login"
+                className="bg-electric text-ink px-5 py-2 font-display uppercase text-sm tracking-wider hover:bg-bone transition-colors"
+              >
+                Sign In
+              </a>
+            </li>
+          )}
         </ul>
 
         <button
@@ -85,6 +124,35 @@ export default function Navbar() {
             >
               Client Portal →
             </a>
+          </li>
+          {me?.role === "admin" && (
+            <li>
+              <a
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className="block py-3 font-display uppercase tracking-wider text-electric"
+              >
+                Admin →
+              </a>
+            </li>
+          )}
+          <li>
+            {me ? (
+              <button
+                onClick={logout}
+                className="block w-full text-left py-3 font-display uppercase tracking-wider text-bone/70"
+              >
+                Logout ({me.username})
+              </button>
+            ) : (
+              <a
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="block py-3 font-display uppercase tracking-wider"
+              >
+                Sign In →
+              </a>
+            )}
           </li>
         </ul>
       )}

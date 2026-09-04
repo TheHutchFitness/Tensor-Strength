@@ -101,3 +101,114 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Migrate the Tensor Strength Next.js site to Emergent and add real server-side authentication: entire site gated behind login, self-registration for members, an admin (Hutch) who can approve/revoke each member's Client Portal access. Replace the old client-side passcode gate on /clients with the new auth."
+
+backend:
+  - task: "Auth - register (POST /api/auth/register)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Registers a new member (role=member, portalAccess=false). Validates username(3+), email, password(6+). Rejects duplicate username/email (409). Sets httpOnly ts_token cookie and returns public user."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) New member registration with unique credentials returns 200, user object with role=member, portalAccess=false, ts_token cookie set. (2) Duplicate username returns 409. (3) Duplicate email returns 409. (4) Invalid data (short username, short password, missing email) all return 400. No passwordHash or _id exposed in responses."
+  - task: "Auth - login (POST /api/auth/login)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Login by username OR email + password. bcrypt compare. Returns 401 on bad creds. Sets ts_token cookie. Admin seeded from env ADMIN_USERNAME=hutch / ADMIN_PASSWORD on first request."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) Admin login with correct credentials returns 200, user with role=admin, ts_token cookie set. (2) Login with wrong password returns 401. Admin auto-seeded successfully. NOTE: .env has ADMIN_PASSWORD=TensorStrength#2026 but # is treated as comment, actual password is 'TensorStrength'."
+  - task: "Auth - me & logout (GET /api/auth/me, POST /api/auth/logout)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "/auth/me returns current user from JWT cookie or 401. /auth/logout clears cookie."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) GET /auth/me with valid cookie returns 200 with user data, no passwordHash or _id exposed. (2) GET /auth/me without cookie returns 401. (3) POST /auth/logout clears cookie, subsequent /auth/me returns 401."
+  - task: "Admin - list/toggle/delete users (GET/PUT/DELETE /api/admin/users)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Admin-only (403 otherwise). GET lists users. PUT sets portalAccess by id. DELETE removes a member (cannot delete admin)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests: (1) GET /admin/users as admin returns 200 with users list, no passwordHash or _id exposed. (2) GET /admin/users as member returns 403. (3) PUT /admin/users as admin successfully updates portalAccess to true. (4) DELETE /admin/users as admin deletes member successfully. (5) DELETE admin account returns 400 error."
+  - task: "Client check-in (POST /api/checkins)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Requires logged-in user with portalAccess=true (403 otherwise). Stores check-in in Mongo checkins collection."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED: POST /api/checkins with member having portalAccess=true returns 200, creates check-in with id, userId, username. No _id exposed. Correctly enforces portalAccess requirement."
+
+frontend:
+  - task: "Site-wide login gate (middleware)"
+    implemented: true
+    working: "NA"
+    file: "middleware.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Verified via curl: / /clients /admin redirect (307) to /login when no cookie; /login and static logo return 200."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Please test the new auth backend on the /api routes. Admin is seeded from env (username: hutch, password: TensorStrength#2026). Cookie is httpOnly named ts_token - use a cookie jar/session to persist it across requests. Suggested flow: 1) register a new member -> expect member with portalAccess=false + cookie set; 2) GET /auth/me with that cookie -> returns the member; 3) duplicate register -> 409; 4) login as admin -> cookie; 5) GET /admin/users as admin -> list includes the new member; 6) PUT /admin/users {id, portalAccess:true} as admin -> member updated; 7) GET /admin/users as the member (non-admin) -> 403; 8) POST /checkins as member BEFORE approval -> 403, and AFTER approval (re-fetch me) -> 200; 9) bad login -> 401; 10) logout clears cookie so /auth/me -> 401. Note: all backend routes are prefixed with /api."
+    -agent: "testing"
+    -message: "✅ ALL BACKEND TESTS PASSED (16/16 - 100% success rate). Comprehensive testing completed covering: registration (valid/duplicate/invalid), login (admin/member/wrong password), /auth/me, logout, admin operations (list/update/delete users), check-ins with portalAccess enforcement. All endpoints return correct status codes, proper JSON responses without passwordHash or _id exposure, and httpOnly cookies work correctly. CRITICAL ISSUE FOUND: .env file has ADMIN_PASSWORD=TensorStrength#2026 but the # character is being parsed as a comment delimiter, so the actual password is only 'TensorStrength'. This needs to be fixed by quoting the value in .env or using a different password format."
+
+
+# --- Main agent update (post backend testing) ---
+# Backend auth: 16/16 tests passed. Fixed .env ADMIN_PASSWORD '#' comment-parsing bug by
+# quoting the value and re-seeding the admin. Verified admin login with full password returns
+# role=admin. All /api auth + admin + checkin endpoints working.
