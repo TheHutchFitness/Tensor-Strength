@@ -37,10 +37,8 @@ export const HUTCH_TOUCH_BASELINES: Record<string, string> = {
   "HBT Front Squat": "Hutch's reference: worked to 330 lb for 3×3. High-bar tempo, full depth, upright.",
 };
 
-export const HUTCH_TOUCH_PDF_URL =
-  "https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/scqdmve8_The_Hutch_6_Day_PPL_Performance_Block.pdf";
-export const HUTCH_TOUCH_TRACKER_URL =
-  "https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/gbcebvnh_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx";
+export const HUTCH_TOUCH_PDF_URL = "/api/hutch-touch/pdf";
+export const HUTCH_TOUCH_TRACKER_URL = "/api/hutch-touch/tracker";
 
 type Slot = { exercise: string; sets: string; load: string; notes: string };
 

@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
+import { readFile } from 'fs/promises'
+import path from 'path'
 
 // MongoDB connection
 let client
@@ -461,6 +463,43 @@ async function handleRoute(request, { params }) {
         payment_status: s.payment_status,
         packageId: tx.packageId,
       }))
+    }
+
+    // ---------------- HUTCH TOUCH FILES (gated — portal access only) ----------------
+    if ((route === '/hutch-touch/pdf' || route === '/hutch-touch/tracker') && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) {
+        return handleCORS(NextResponse.json(
+          { error: 'The Hutch Touch is for clients and members only. Get portal access to download it.' },
+          { status: 403 }
+        ))
+      }
+      const HUTCH_FILES = {
+        pdf: {
+          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/scqdmve8_The_Hutch_6_Day_PPL_Performance_Block.pdf',
+          type: 'application/pdf',
+          name: 'The-Hutch-Touch-8-Week-Program.pdf',
+        },
+        tracker: {
+          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/gbcebvnh_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx',
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          name: 'The-Hutch-Touch-Tracker.xlsx',
+        },
+      }
+      const f = route.endsWith('/pdf') ? HUTCH_FILES.pdf : HUTCH_FILES.tracker
+      try {
+        const r = await fetch(f.url)
+        if (!r.ok) throw new Error('source fetch failed ' + r.status)
+        const buf = Buffer.from(await r.arrayBuffer())
+        const headers = new Headers()
+        headers.set('Content-Type', f.type)
+        headers.set('Content-Disposition', `inline; filename="${f.name}"`)
+        headers.set('Cache-Control', 'private, no-store')
+        return new NextResponse(buf, { status: 200, headers })
+      } catch (e) {
+        console.error('Hutch Touch file error:', e)
+        return handleCORS(NextResponse.json({ error: 'File temporarily unavailable' }, { status: 502 }))
+      }
     }
 
     // ---------------- MEMBER SUBSCRIPTION INFO (My Membership panel) ----------------

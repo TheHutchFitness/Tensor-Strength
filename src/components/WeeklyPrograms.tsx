@@ -5,6 +5,16 @@ import { weeklyPrograms, type WeeklyProgram } from "@/data/weeklyPrograms";
 
 type Mode = "portal" | "public";
 
+// The free starter programs — static, always available to everyone (no weekly rotation).
+const FREE_STARTERS = [
+  { file: "01_tensor_athletic_performance.pdf", title: "Athletic Performance", tag: "Power & Speed", desc: "Jumps, sprints, and heavy compound work to build explosiveness and make you a better athlete." },
+  { file: "02_tensor_strength_focus.pdf", title: "Strength Focus", tag: "Get Strong", desc: "Squat, bench, deadlift, and press built around progressive overload for raw, usable strength." },
+  { file: "03_tensor_general_health.pdf", title: "General Health", tag: "Start Here", desc: "Balanced full-body training for energy, longevity, and staying capable — ideal if you're new." },
+  { file: "04_tensor_hypertrophy.pdf", title: "Hypertrophy", tag: "Build Muscle", desc: "Higher-volume training that targets every muscle group for size and definition." },
+  { file: "05_tensor_home_minimal_equipment.pdf", title: "Home / Minimal Equipment", tag: "Small Setup", desc: "A full week you can run with just dumbbells or a few basics — no commercial gym required." },
+  { file: "06_tensor_anywhere_bodyweight.pdf", title: "Anywhere / Bodyweight", tag: "Zero Gear", desc: "Train anywhere — hotel, park, living room — using nothing but your bodyweight." },
+];
+
 function parseDate(s: string) {
   // Treat as local midnight on that date
   const [y, m, d] = s.split("-").map(Number);
@@ -181,21 +191,83 @@ function ProgramCard({ p, mode }: { p: WeeklyProgram; mode: Mode }) {
 }
 
 export default function WeeklyPrograms({ mode }: { mode: Mode }) {
-  const now = new Date();
-  // Sort: active first, then upcoming, then archived. On public, free programs float to top.
-  const order = { active: 0, upcoming: 1, archived: 2 } as const;
-  const sorted = [...weeklyPrograms].sort((a, b) => {
-    if (mode === "public" && !!a.free !== !!b.free) return a.free ? -1 : 1;
-    return order[statusOf(a, now)] - order[statusOf(b, now)];
-  });
-
   const isPublic = mode === "public";
-  const freeCount = weeklyPrograms.filter((p) => p.free).length;
+
+  // ---- PUBLIC: static free starter library (always accessible, no weekly rotation) ----
+  if (isPublic) {
+    return (
+      <section id="programs" className="py-24 md:py-32 relative overflow-hidden">
+        <div className="absolute inset-0 stripe-bg opacity-15" aria-hidden />
+        <div className="relative mx-auto max-w-6xl px-6">
+          <div className="max-w-2xl mb-10">
+            <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
+              Free Programs
+            </p>
+            <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
+              Six free
+              <br />
+              starter <span className="text-electric">programs.</span>
+            </h2>
+            <p className="mt-6 text-bone/70 leading-relaxed">
+              Six complete training programs — free, always here, and available 24/7 with
+              no account needed. Pick the one that matches your goal and your setup, download
+              the PDF, and get to work. Members get the 8-week Hutch Touch block, the full
+              workout log, libraries, and check-ins in the portal.
+            </p>
+            <a
+              href="/free-programs"
+              className="mt-8 inline-flex bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
+            >
+              Browse all free programs →
+            </a>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {FREE_STARTERS.map((p) => (
+              <a
+                key={p.file}
+                href={`/programs/${p.file}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group border border-bone/15 bg-ink/30 backdrop-blur-sm p-6 hover:border-electric transition-colors flex flex-col"
+              >
+                <span className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5">
+                  {p.tag}
+                </span>
+                <p className="font-display uppercase tracking-wider text-bone text-xl mt-4">
+                  {p.title}
+                </p>
+                <p className="text-sm text-bone/60 mt-2 leading-relaxed flex-1">{p.desc}</p>
+                <span className="mt-5 inline-flex items-center gap-2 font-display uppercase tracking-wider text-sm text-electric group-hover:text-bone transition-colors">
+                  Open Program PDF →
+                </span>
+              </a>
+            ))}
+          </div>
+
+          <p className="mt-8 text-xs text-bone/40 leading-relaxed max-w-xl">
+            Want more than a starter week? The full sessions, the 8-week Hutch Touch block,
+            and weekly programming live in the{" "}
+            <a href="/clients" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors">
+              Client Portal
+            </a>
+            .
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- PORTAL: members' weekly programs (active/upcoming/archived) ----
+  const now = new Date();
+  const order = { active: 0, upcoming: 1, archived: 2 } as const;
+  const sorted = [...weeklyPrograms].sort(
+    (a, b) => order[statusOf(a, now)] - order[statusOf(b, now)]
+  );
 
   return (
-    <section id={isPublic ? "programs" : undefined} className={isPublic ? "py-24 md:py-32 relative overflow-hidden" : ""}>
-      {isPublic && <div className="absolute inset-0 stripe-bg opacity-15" aria-hidden />}
-      <div className={isPublic ? "relative mx-auto max-w-6xl px-6" : ""}>
+    <section>
+      <div>
         <div className="max-w-2xl mb-10">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
             Weekly Programs
@@ -207,22 +279,9 @@ export default function WeeklyPrograms({ mode }: { mode: Mode }) {
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
             Each week, a fresh training program drops — built for a specific purpose:
-            hypertrophy, strength, conditioning, deload. Members get temporary access
-            for the week it&apos;s live, then it archives.
-            {isPublic
-              ? freeCount > 0
-                ? ` Try ${freeCount} free starter programs below — no passcode needed. The weekly drops and full sessions are for members.`
-                : " Apply for coaching to unlock the current week's program and the full client portal."
-              : " Active and upcoming programs below — open one to see every session."}
+            hypertrophy, strength, conditioning, deload. Active and upcoming programs
+            below — open one to see every session.
           </p>
-          {isPublic && (
-            <a
-              href="/#contact"
-              className="mt-8 inline-flex bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
-            >
-              Apply to Access →
-            </a>
-          )}
         </div>
 
         <div className="grid gap-4">
@@ -230,17 +289,6 @@ export default function WeeklyPrograms({ mode }: { mode: Mode }) {
             <ProgramCard key={p.id} p={p} mode={mode} />
           ))}
         </div>
-
-        {isPublic && (
-          <p className="mt-8 text-xs text-bone/40 leading-relaxed max-w-xl">
-            This week&apos;s program is teased above. The full sessions, every week,
-            live in the{" "}
-            <a href="/clients" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors">
-              Client Portal
-            </a>{" "}
-            — unlocked with the passcode Hutch sends to active clients.
-          </p>
-        )}
       </div>
     </section>
   );
