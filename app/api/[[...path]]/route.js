@@ -1069,7 +1069,14 @@ async function handleRoute(request, { params }) {
         }
         const mime = file.type || 'application/octet-stream'
         const origName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
-        const dotExt = origName.includes('.') ? origName.split('.').pop() : 'bin'
+        const rawExt = origName.includes('.') ? origName.split('.').pop().toLowerCase() : ''
+        // Allowlist safe extensions only — never persist HTML/SVG/scripts that could
+        // execute on our own origin (SEC-001).
+        const ALLOWED = new Set(['png','jpg','jpeg','webp','gif','heic','heif','mp4','mov','webm','m4v','pdf','doc','docx','xls','xlsx','csv','txt'])
+        if (!ALLOWED.has(rawExt)) {
+          return handleCORS(NextResponse.json({ error: 'That file type is not allowed. Use images, video, PDF or documents.' }, { status: 400 }))
+        }
+        const dotExt = rawExt
         const buffer = Buffer.from(await file.arrayBuffer())
         const dir = process.cwd() + '/public/uploads'
         await mkdir(dir, { recursive: true })
