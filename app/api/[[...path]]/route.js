@@ -715,6 +715,66 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ profile: clientProfile }))
     }
 
+    // ---- Client nutrition sync (daily summary for coach view) ----
+    if (route === '/client/nutrition' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const b = await request.json()
+      const date = String(b.date || '').slice(0, 10)
+      if (!date) return handleCORS(NextResponse.json({ error: 'date is required' }, { status: 400 }))
+      const doc = {
+        userId: user.id,
+        date,
+        totals: {
+          cal: Number(b.totals?.cal) || 0,
+          p: Number(b.totals?.p) || 0,
+          c: Number(b.totals?.c) || 0,
+          f: Number(b.totals?.f) || 0,
+        },
+        goal: {
+          calories: Number(b.goal?.calories) || 0,
+          protein: Number(b.goal?.protein) || 0,
+          carbs: Number(b.goal?.carbs) || 0,
+          fat: Number(b.goal?.fat) || 0,
+        },
+        supplements: Array.isArray(b.supplements) ? b.supplements.map(String).slice(0, 60) : [],
+        updatedAt: new Date(),
+      }
+      await db.collection('nutrition_logs').updateOne(
+        { userId: user.id, date },
+        { $set: doc },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    // ---- Trainer views a client's nutrition (today + recent) ----
+    if (route === '/trainer/client-nutrition' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      if (!clientId) return handleCORS(NextResponse.json({ error: 'clientId is required' }, { status: 400 }))
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const date = request.nextUrl.searchParams.get('date') || new Date().toISOString().slice(0, 10)
+      const today = await db.collection('nutrition_logs').findOne({ userId: clientId, date })
+      const recentRaw = await db.collection('nutrition_logs')
+        .find({ userId: clientId })
+        .sort({ date: -1 })
+        .limit(7)
+        .toArray()
+      const strip = (d) => (d ? { date: d.date, totals: d.totals, goal: d.goal, supplements: d.supplements || [] } : null)
+      return handleCORS(NextResponse.json({
+        date,
+        day: strip(today),
+        recent: recentRaw.map(strip),
+      }))
+    }
+
     // ---- Client gets their assigned trainer (for messaging UI) ----
     if (route === '/client/trainer' && method === 'GET') {
       const user = await getCurrentUser(request, db)

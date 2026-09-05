@@ -469,3 +469,39 @@ agent_communication:
     -agent: "testing"
     -message: "✅ ALL CLIENT 'ABOUT ME' PROFILE TESTS PASSED (7/7 - 100% success rate). Comprehensive testing completed: (1) GET /api/client/profile initially returns {profile: null}. (2) PUT /api/client/profile saves all 11 fields correctly (squat, bench, deadlift, overheadPress, diet, gym, workoutsPerWeek, activityLevel, restingHeartRate, currentCalories, notes). (3) GET /api/client/profile retrieves saved profile. (4) Client can submit check-in. (5) Trainer viewing client check-ins sees complete About Me profile in response (GET /api/trainer/checkins?clientId=C1.id includes client.profile with all fields). (6-7) Auth guards work correctly (401 without cookie for both GET and PUT). No 500 errors. No _id or passwordHash leaks detected. All requirements from review request met."
 
+
+
+# ============ NUTRITION SYNC (client daily nutrition tracking for trainer view) ============
+backend_nutrition_sync:
+  - task: "Client nutrition sync (PUT /api/client/nutrition)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "PUT /api/client/nutrition (auth required) accepts date (YYYY-MM-DD), totals {cal, p, c, f}, goal {calories, protein, carbs, fat}, supplements array. Upserts to nutrition_logs collection by userId+date. Returns {ok:true}. 400 if date missing. 401 if not authenticated."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests (11/11 - 100% success rate): (1) C1 PUT /api/client/nutrition with valid data (date:'2026-01-15', totals:{cal:2100,p:180,c:190,f:60}, goal:{calories:2200,protein:170,carbs:220,fat:70}, supplements:['Creatine','Vitamin D3']) returns 200 {ok:true}. (2) C1 PUT again for SAME date with totals.cal:2400 returns 200 (correctly upserts/overwrites, not duplicate). (3) C1 PUT with NO date (omitted) returns 400 with error 'date is required'. (4) PUT with NO cookie returns 401 with error 'Authentication required'. No 500 errors. No _id or passwordHash leaks detected."
+  - task: "Trainer views client nutrition (GET /api/trainer/client-nutrition)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET /api/trainer/client-nutrition (isTrainer or admin only) requires clientId query param. Optional date param (defaults to today). Returns {date, day:{date,totals,goal,supplements}, recent:[...]} where recent is last 7 days sorted desc. 403 if client not assigned to trainer (admins can view any). 400 if clientId missing. 403 if not trainer/admin or no auth."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests (11/11 - 100% success rate): (5) T GET /api/trainer/client-nutrition?clientId=C1.id&date=2026-01-15 returns 200 with day.totals.cal==2400 (the upserted value), day.goal.calories==2200, day.supplements==['Creatine','Vitamin D3'], and recent array with 1 entry. (6) C1 PUT another day (date:'2026-01-16', totals.cal:1900). T GET /api/trainer/client-nutrition?clientId=C1.id (NO date param) returns 200 with recent array containing BOTH 2026-01-15 and 2026-01-16 entries (most recent first: 2026-01-16 before 2026-01-15). (7) T GET without clientId returns 400 with error 'clientId is required'. (8) T GET for C2.id (C2 not assigned to T) returns 403 with error 'Forbidden'. (9) C1 (non-trainer) GET /api/trainer/client-nutrition?clientId=C1.id returns 403 with error 'Forbidden'. (10) GET with NO cookie returns 403 with error 'Forbidden'. (11) No 500 errors encountered. No _id or passwordHash leaks detected in any responses."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL NUTRITION-SYNC BACKEND TESTS PASSED (11/11 - 100% success rate). Comprehensive testing completed covering all 10 numbered test steps from review request: (1) C1 PUT /api/client/nutrition with valid data returns 200 {ok:true}. (2) C1 PUT again for SAME date with different cal value returns 200 (upsert works correctly, overwrites not duplicates). (3) C1 PUT with NO date returns 400. (4) PUT with NO cookie returns 401. (5) T GET /api/trainer/client-nutrition?clientId=C1&date=2026-01-15 returns 200 with day.totals.cal==2400 (upserted value), day.goal, day.supplements==['Creatine','Vitamin D3'], and recent array. (6) C1 PUT another day (2026-01-16), T GET without date param returns 200 with recent array containing BOTH dates (2026-01-15 and 2026-01-16) sorted most recent first. (7) T GET without clientId returns 400. (8) T GET for C2 (not assigned to T) returns 403. (9) C1 (non-trainer) GET returns 403. (10) GET with NO cookie returns 403. (11) No 500 errors encountered. No _id or passwordHash leaks detected in any responses. All endpoints return correct status codes and proper JSON responses with correct data validation, authentication, and authorization checks."

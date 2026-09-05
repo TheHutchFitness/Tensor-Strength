@@ -243,6 +243,7 @@ export default function NutritionTracker() {
   const [supps, setSupps] = useState<Record<string, string[]>>({});
   const [customSupps, setCustomSupps] = useState<string[]>([]);
   const [newSupp, setNewSupp] = useState("");
+  const [savedMeals, setSavedMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
 
   useEffect(() => {
     try {
@@ -256,6 +257,8 @@ export default function NutritionTracker() {
       if (s) setSupps(JSON.parse(s));
       const cs = localStorage.getItem("ts-supp-custom");
       if (cs) setCustomSupps(JSON.parse(cs));
+      const sm = localStorage.getItem("ts-saved-meals");
+      if (sm) setSavedMeals(JSON.parse(sm));
     } catch {}
   }, []);
 
@@ -354,6 +357,26 @@ export default function NutritionTracker() {
     setNewSupp("");
   }
 
+  function saveMeal(meal: Meal) {
+    const items = day[meal];
+    if (!items.length) return;
+    const name = typeof window !== "undefined" ? window.prompt("Name this meal (e.g. 'Post-workout shake')") : "";
+    if (!name || !name.trim()) return;
+    const next = [...savedMeals, { id: uid(), name: name.trim(), items }];
+    setSavedMeals(next);
+    localStorage.setItem("ts-saved-meals", JSON.stringify(next));
+  }
+  function applyMeal(meal: Meal, sm: { items: Entry[] }) {
+    const next = { ...allLogs, [key]: { ...emptyDay(), ...(allLogs[key] || {}) } };
+    next[key][meal] = [...next[key][meal], ...sm.items.map((it) => ({ ...it, id: uid() }))];
+    persist(next);
+  }
+  function deleteMeal(id: string) {
+    const next = savedMeals.filter((m) => m.id !== id);
+    setSavedMeals(next);
+    localStorage.setItem("ts-saved-meals", JSON.stringify(next));
+  }
+
   const totals = useMemo(() => {
     const t = { cal: 0, p: 0, c: 0, f: 0 };
     (Object.keys(day) as Meal[]).forEach((m) => day[m].forEach((e) => {
@@ -370,6 +393,19 @@ export default function NutritionTracker() {
       return true;
     });
   }, [diet, cuisine, search]);
+
+  // Sync a daily summary to the server so the client's coach can see it.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch("/api/client/nutrition", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: key, totals, goal, supplements: takenToday }),
+      }).catch(() => {});
+    }, 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, totals.cal, totals.p, totals.c, totals.f, goal.calories, goal.protein, goal.carbs, goal.fat, takenToday.length]);
 
   function mealTotals(meal: Meal) {
     return day[meal].reduce((s, e) => s + e.cal, 0);
@@ -507,6 +543,38 @@ export default function NutritionTracker() {
                     <option value="l">liters</option>
                   </select>
                   <span className="text-[10px] uppercase tracking-wider text-bone/40">tap a food to log this amount</span>
+                </div>
+
+                {/* Saved meals */}
+                <div className="mb-3 border-b border-bone/10 pb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase tracking-wider text-bone/50">Saved meals — one-tap add</span>
+                    <button
+                      type="button"
+                      onClick={() => saveMeal(meal.id)}
+                      disabled={day[meal.id].length === 0}
+                      className="font-display uppercase tracking-wider text-[10px] border border-electric text-electric px-2.5 py-1 hover:bg-electric hover:text-ink transition-colors disabled:opacity-40"
+                    >
+                      Save this {meal.label} as a meal
+                    </button>
+                  </div>
+                  {savedMeals.length === 0 ? (
+                    <p className="text-[11px] text-bone/40">Build a meal below, then save it to reuse it any day.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {savedMeals.map((sm) => {
+                        const cals = Math.round(sm.items.reduce((s, i) => s + i.cal, 0));
+                        return (
+                          <span key={sm.id} className="inline-flex items-center border border-bone/20 text-bone/70 text-xs">
+                            <button onClick={() => applyMeal(meal.id, sm)} className="px-2.5 py-1.5 hover:text-electric transition-colors">
+                              + {sm.name} <span className="text-bone/40">· {cals} cal</span>
+                            </button>
+                            <button onClick={() => deleteMeal(sm.id)} className="px-2 py-1.5 text-bone/40 hover:text-electric border-l border-bone/20">✕</button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Search + cuisine */}

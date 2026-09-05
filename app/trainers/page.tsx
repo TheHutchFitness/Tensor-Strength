@@ -53,6 +53,7 @@ export default function TrainersPage() {
   const [unread, setUnread] = useState(0);
   const [unseenCheckins, setUnseenCheckins] = useState(0);
   const [clientProfile, setClientProfile] = useState<any>(null);
+  const [clientNutrition, setClientNutrition] = useState<any>(null);
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
 
@@ -115,12 +116,17 @@ export default function TrainersPage() {
     setLoadingCheckins(true);
     setCheckins([]);
     setClientProfile(null);
+    setClientNutrition(null);
     const res = await fetch(`/api/trainer/checkins?clientId=${encodeURIComponent(c.id)}`);
     if (res.ok) {
       const data = await res.json();
       setCheckins(data.checkins || []);
       setClientProfile(data.client?.profile || null);
     }
+    fetch(`/api/trainer/client-nutrition?clientId=${encodeURIComponent(c.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setClientNutrition(d))
+      .catch(() => setClientNutrition(null));
     setLoadingCheckins(false);
     // Viewing marks them seen server-side — refresh badges.
     await loadClients();
@@ -275,6 +281,54 @@ export default function TrainersPage() {
                             </div>
                             {clientProfile.notes && (
                               <p className="mt-3 text-sm text-bone/70 border-t border-bone/10 pt-3">{clientProfile.notes}</p>
+                            )}
+                          </div>
+                        )}
+                        {clientNutrition?.day && (
+                          <div className="mt-6 border border-bone/15 bg-ink/20 p-5">
+                            <div className="flex items-baseline justify-between mb-3">
+                              <p className="font-display uppercase tracking-wider text-electric text-sm">Nutrition — {clientNutrition.date}</p>
+                              <span className="text-[10px] uppercase tracking-wider text-bone/40">most recent synced day</span>
+                            </div>
+                            <div className="grid grid-cols-4 gap-3 text-center">
+                              {[
+                                ["Calories", clientNutrition.day.totals?.cal, clientNutrition.day.goal?.calories],
+                                ["Protein", clientNutrition.day.totals?.p, clientNutrition.day.goal?.protein],
+                                ["Carbs", clientNutrition.day.totals?.c, clientNutrition.day.goal?.carbs],
+                                ["Fat", clientNutrition.day.totals?.f, clientNutrition.day.goal?.fat],
+                              ].map(([label, val, goal]) => (
+                                <div key={label as string} className="border border-bone/10 bg-ink/30 p-3">
+                                  <p className="font-display text-2xl text-electric font-700">{Math.round((val as number) || 0)}</p>
+                                  <p className="text-[10px] uppercase tracking-wider text-bone/50 mt-1">{label}</p>
+                                  {goal ? <p className="text-[10px] text-bone/40">/ {goal as number}</p> : null}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-4">
+                              <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">
+                                Supplements taken ({(clientNutrition.day.supplements || []).length})
+                              </p>
+                              {(clientNutrition.day.supplements || []).length === 0 ? (
+                                <p className="text-sm text-bone/40">None logged this day.</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {clientNutrition.day.supplements.map((s: string) => (
+                                    <span key={s} className="text-[10px] uppercase tracking-wider border border-electric/40 text-electric px-2 py-1">{s}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {Array.isArray(clientNutrition.recent) && clientNutrition.recent.length > 1 && (
+                              <div className="mt-4 border-t border-bone/10 pt-3">
+                                <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Last {clientNutrition.recent.length} days (calories)</p>
+                                <div className="flex flex-wrap gap-3">
+                                  {clientNutrition.recent.map((d: any) => (
+                                    <span key={d.date} className="text-xs text-bone/60">
+                                      {d.date.slice(5)}: <span className="text-bone/90">{Math.round(d.totals?.cal || 0)}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
                             )}
                           </div>
                         )}
