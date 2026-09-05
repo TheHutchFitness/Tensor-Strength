@@ -413,6 +413,55 @@ async function handleRoute(request, { params }) {
       }))
     }
 
+    // ---------------- COACHING SHOWCASE CONTENT ----------------
+    // Public: fetch admin-editable captions + featured-reel config
+    if (route === '/coaching-content' && method === 'GET') {
+      const doc = await db.collection('site_content').findOne({ key: 'coaching' })
+      return handleCORS(NextResponse.json({
+        labels: doc?.labels || {},
+        featuredLabel: doc?.featuredLabel || null,
+        featuredEnabled: doc?.featuredEnabled !== false,
+      }))
+    }
+    // Admin: save captions + featured-reel config
+    if (route === '/admin/coaching-content' && method === 'PUT') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const update = { key: 'coaching', updatedAt: new Date() }
+      if (body.labels && typeof body.labels === 'object') {
+        // sanitize: only string keys/values, cap length
+        const clean = {}
+        for (const [k, v] of Object.entries(body.labels)) {
+          if (typeof k === 'string' && typeof v === 'string') {
+            clean[k.slice(0, 200)] = v.slice(0, 120)
+          }
+        }
+        update.labels = clean
+      }
+      if (typeof body.featuredLabel === 'string') {
+        update.featuredLabel = body.featuredLabel.slice(0, 120)
+      }
+      if (typeof body.featuredEnabled === 'boolean') {
+        update.featuredEnabled = body.featuredEnabled
+      }
+      await db.collection('site_content').updateOne(
+        { key: 'coaching' },
+        { $set: update },
+        { upsert: true }
+      )
+      const doc = await db.collection('site_content').findOne({ key: 'coaching' })
+      return handleCORS(NextResponse.json({
+        ok: true,
+        labels: doc?.labels || {},
+        featuredLabel: doc?.featuredLabel || null,
+        featuredEnabled: doc?.featuredEnabled !== false,
+      }))
+    }
+
+
     if (route === '/auth/logout' && method === 'POST') {
       const res = NextResponse.json({ ok: true })
       res.cookies.set(COOKIE_NAME, '', { httpOnly: true, path: '/', maxAge: 0 })

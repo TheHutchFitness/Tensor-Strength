@@ -1,4 +1,10 @@
-const CLIPS = [
+"use client";
+
+import { useEffect, useState } from "react";
+
+// Default clips + captions. Captions can be overridden by admins (persisted in
+// the DB) and are merged over these defaults at runtime.
+export const DEFAULT_CLIPS = [
   { src: "/videos/coaching1.mp4", poster: "/videos/coaching1-poster.jpg", label: "Hill Sprints" },
   { src: "/videos/coaching2.mp4", poster: "/videos/coaching2-poster.jpg", label: "Weighted Dips — 45 lb" },
   { src: "/videos/coaching3.mp4", poster: "/videos/coaching3-poster.jpg", label: "Bench Press" },
@@ -16,7 +22,31 @@ const CLIPS = [
   { src: "/videos/coaching15.mp4", poster: "/videos/coaching15-poster.jpg", label: "Deadlift — 560 lb" },
 ];
 
+export const FEATURED = {
+  src: "/videos/featured.mp4",
+  poster: "/videos/featured-poster.jpg",
+  label: "The Big Three — 555 · 290 · 560 lb",
+};
+
 export default function CoachingShowcase() {
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const [featuredLabel, setFeaturedLabel] = useState<string>(FEATURED.label);
+  const [featuredEnabled, setFeaturedEnabled] = useState<boolean>(true);
+
+  useEffect(() => {
+    fetch("/api/coaching-content")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setLabels(d.labels || {});
+        if (d.featuredLabel) setFeaturedLabel(d.featuredLabel);
+        if (typeof d.featuredEnabled === "boolean") setFeaturedEnabled(d.featuredEnabled);
+      })
+      .catch(() => {});
+  }, []);
+
+  const labelFor = (src: string, fallback: string) => labels[src] || fallback;
+
   return (
     <section id="coaching" className="py-24 md:py-32 bg-ink/40">
       <div className="mx-auto max-w-6xl px-6">
@@ -34,28 +64,60 @@ export default function CoachingShowcase() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
-          {CLIPS.map((c) => (
-            <figure
-              key={c.src}
-              className="group relative aspect-[9/16] overflow-hidden border-2 border-electric/40 hover:border-electric transition-colors bg-ink"
-            >
+        {/* Featured reel — the full squat/bench/deadlift showcase, autoplays muted */}
+        {featuredEnabled && (
+          <div className="mb-16 flex flex-col items-center">
+            <p className="glow font-display uppercase tracking-[0.25em] text-electric text-xs mb-4">
+              Featured
+            </p>
+            <figure className="relative w-full max-w-[340px] aspect-[9/16] overflow-hidden border-4 border-electric bg-ink shadow-[0_0_40px_rgba(0,168,255,0.25)]">
               <video
-                src={c.src}
-                poster={c.poster}
+                src={FEATURED.src}
+                poster={FEATURED.poster}
                 className="h-full w-full object-cover"
-                controls
+                autoPlay
+                muted
+                loop
                 playsInline
+                controls
                 preload="metadata"
-                aria-label={`Tensor Strength coaching: ${c.label}`}
+                aria-label={`Tensor Strength featured: ${featuredLabel}`}
               />
-              <figcaption className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink/90 to-transparent px-3 pt-8 pb-3">
-                <span className="font-display uppercase tracking-wider text-[11px] text-bone/90">
-                  {c.label}
+              <figcaption className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink to-transparent px-4 pt-10 pb-4 text-center">
+                <span className="font-display uppercase tracking-wider text-sm text-bone">
+                  {featuredLabel}
                 </span>
               </figcaption>
             </figure>
-          ))}
+            <p className="mt-3 text-xs text-bone/50">Muted by default — tap the clip for sound.</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
+          {DEFAULT_CLIPS.map((c) => {
+            const label = labelFor(c.src, c.label);
+            return (
+              <figure
+                key={c.src}
+                className="group relative aspect-[9/16] overflow-hidden border-2 border-electric/40 hover:border-electric transition-colors bg-ink"
+              >
+                <video
+                  src={c.src}
+                  poster={c.poster}
+                  className="h-full w-full object-cover"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  aria-label={`Tensor Strength coaching: ${label}`}
+                />
+                <figcaption className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink/90 to-transparent px-3 pt-8 pb-3">
+                  <span className="font-display uppercase tracking-wider text-[11px] text-bone/90">
+                    {label}
+                  </span>
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       </div>
     </section>
