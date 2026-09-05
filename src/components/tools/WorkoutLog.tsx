@@ -44,11 +44,25 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 
+// Estimated one-rep max (Epley). Returns 0 if inputs aren't usable.
+function est1RM(weight: string, reps: string): number {
+  const w = parseFloat(weight);
+  const r = parseFloat(reps);
+  if (!isFinite(w) || !isFinite(r) || w <= 0 || r <= 0) return 0;
+  if (r === 1) return Math.round(w);
+  return Math.round(w * (1 + r / 30));
+}
+// Best estimated 1RM across an exercise's sets.
+function bestE1RM(sets: { weight: string; reps: string }[]): number {
+  return sets.reduce((m, s) => Math.max(m, est1RM(s.weight, s.reps)), 0);
+}
+
 export default function WorkoutLog() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
+  const [chartLift, setChartLift] = useState<string>("");
   const [templateFlash, setTemplateFlash] = useState(false);
   const [customExercises, setCustomExercises] = useState<Exercise[]>([]);
   const [activeSplitId, setActiveSplitId] = useState<string | null>(null);
@@ -160,7 +174,81 @@ export default function WorkoutLog() {
 
   const activeSplit = SPLITS.find((s) => s.id === activeSplitId) || null;
 
+  // Ready-made workouts for each split. Clicking a split loads these straight
+  // into the builder with a sensible set/rep scheme — weight left blank.
+  const PREMADE: Record<string, { name: string; sets: number; reps: string }[]> = {
+    push: [
+      { name: "Bench Press", sets: 4, reps: "6-8" },
+      { name: "Overhead Press", sets: 3, reps: "8-10" },
+      { name: "Incline Dumbbell Press", sets: 3, reps: "8-12" },
+      { name: "Weighted Dips", sets: 3, reps: "8-12" },
+      { name: "Lateral Raise", sets: 3, reps: "12-20" },
+      { name: "Triceps Pushdown", sets: 3, reps: "10-15" },
+    ],
+    pull: [
+      { name: "Deadlift", sets: 3, reps: "3-5" },
+      { name: "Barbell Row", sets: 4, reps: "6-10" },
+      { name: "Pull-Up", sets: 3, reps: "6-12" },
+      { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+      { name: "Face Pull", sets: 3, reps: "15-20" },
+      { name: "Bicep Curl", sets: 3, reps: "10-15" },
+    ],
+    legs: [
+      { name: "Back Squat", sets: 4, reps: "5-8" },
+      { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
+      { name: "Leg Press", sets: 3, reps: "10-15" },
+      { name: "Walking Lunge", sets: 3, reps: "10-12" },
+      { name: "Leg Curl", sets: 3, reps: "10-15" },
+      { name: "Calf Raise", sets: 4, reps: "12-20" },
+    ],
+    upper: [
+      { name: "Bench Press", sets: 4, reps: "6-8" },
+      { name: "Barbell Row", sets: 4, reps: "6-10" },
+      { name: "Overhead Press", sets: 3, reps: "8-10" },
+      { name: "Pull-Up", sets: 3, reps: "6-12" },
+      { name: "Lateral Raise", sets: 3, reps: "12-20" },
+      { name: "Bicep Curl", sets: 3, reps: "10-15" },
+      { name: "Triceps Pushdown", sets: 3, reps: "10-15" },
+    ],
+    lower: [
+      { name: "Back Squat", sets: 4, reps: "5-8" },
+      { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
+      { name: "Bulgarian Split Squat", sets: 3, reps: "8-12" },
+      { name: "Leg Press", sets: 3, reps: "10-15" },
+      { name: "Leg Curl", sets: 3, reps: "10-15" },
+      { name: "Calf Raise", sets: 4, reps: "12-20" },
+    ],
+    fullbody: [
+      { name: "Back Squat", sets: 3, reps: "5-8" },
+      { name: "Bench Press", sets: 3, reps: "6-8" },
+      { name: "Deadlift", sets: 3, reps: "3-5" },
+      { name: "Overhead Press", sets: 3, reps: "8-10" },
+      { name: "Barbell Row", sets: 3, reps: "8-10" },
+      { name: "Plank", sets: 3, reps: "30-60s" },
+    ],
+  };
+
   function openLibraryForSplit(splitId: string) {
+    const preset = PREMADE[splitId];
+    if (preset) {
+      // Load a ready-made workout for this split straight into the builder.
+      const split = SPLITS.find((s) => s.id === splitId);
+      const loaded: SessionExercise[] = preset.map((ex) => ({
+        id: uid(),
+        name: ex.name,
+        cue: "",
+        sets: Array.from({ length: ex.sets }, () => ({ id: uid(), weight: "", reps: ex.reps, rpe: "" })),
+      }));
+      setSession(loaded);
+      setSessionTitle(split?.name ? `${split.name} Day` : "Workout");
+      setSessionNotes("");
+      setSessionDate(new Date().toLocaleDateString());
+      setCurrentTemplateId(null);
+      setActiveSplitId(splitId);
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    // Custom (or any split without a preset): open the blank library builder.
     setActiveSplitId(splitId);
     setLibraryOpen(true);
   }
@@ -676,6 +764,79 @@ export default function WorkoutLog() {
         </div>
       )}
 
+      {/* PROGRESS CHARTS */}
+      {(() => {
+        // Build per-lift progression (best estimated 1RM per session, chronological).
+        const byLift: Record<string, { date: string; e1rm: number; top: number }[]> = {};
+        [...workouts].reverse().forEach((w) => {
+          w.exercises.forEach((ex) => {
+            const e = bestE1RM(ex.sets);
+            const top = ex.sets.reduce((m, s) => Math.max(m, parseFloat(s.weight) || 0), 0);
+            if (e <= 0) return;
+            (byLift[ex.name] ||= []).push({ date: w.date, e1rm: e, top });
+          });
+        });
+        const lifts = Object.keys(byLift).filter((k) => byLift[k].length >= 1).sort();
+        if (lifts.length === 0) return null;
+        const active = chartLift && byLift[chartLift] ? chartLift : lifts[0];
+        const series = byLift[active];
+        const max = Math.max(...series.map((p) => p.e1rm));
+        const min = Math.min(...series.map((p) => p.e1rm));
+        const range = Math.max(1, max - min);
+        const W = 640, H = 180, padX = 12, padY = 18;
+        const n = series.length;
+        const x = (i: number) => (n <= 1 ? W / 2 : padX + (i * (W - padX * 2)) / (n - 1));
+        const y = (v: number) => H - padY - ((v - min) / range) * (H - padY * 2);
+        const pts = series.map((p, i) => `${x(i)},${y(p.e1rm)}`).join(" ");
+        const latest = series[series.length - 1];
+        const first = series[0];
+        const delta = latest.e1rm - first.e1rm;
+        return (
+          <div className="border-t border-bone/15 pt-8 mb-2">
+            <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-1">
+              Progress
+            </p>
+            <p className="text-bone/50 text-xs mb-4">
+              Estimated 1-rep max per lift over time (Epley). Pick a lift to see your trend.
+            </p>
+            <select
+              value={active}
+              onChange={(e) => setChartLift(e.target.value)}
+              className="mb-4 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm"
+            >
+              {lifts.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+            <div className="border border-bone/15 bg-ink/30 p-4">
+              <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+                <span className="font-display uppercase tracking-wider text-bone text-sm">{active}</span>
+                <span className="text-xs text-bone/60">
+                  Current <span className="text-electric font-display">~{latest.e1rm}</span>
+                  {series.length > 1 && (
+                    <span className={delta >= 0 ? "text-emerald-400 ml-2" : "text-rose-400 ml-2"}>
+                      {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)} since start
+                    </span>
+                  )}
+                </span>
+              </div>
+              <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
+                <polyline points={pts} fill="none" stroke="#00A8FF" strokeWidth="2.5" />
+                {series.map((p, i) => (
+                  <g key={i}>
+                    <circle cx={x(i)} cy={y(p.e1rm)} r="4" fill="#00A8FF" />
+                  </g>
+                ))}
+              </svg>
+              <div className="flex justify-between text-[10px] text-bone/40 mt-1">
+                <span>{first.date}</span>
+                {series.length > 1 && <span>{latest.date}</span>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* HISTORY */}
       <div className="border-t border-bone/15 pt-8">
         <p className="glow font-display uppercase tracking-[0.3em] text-bone/70 text-sm mb-4">
@@ -691,17 +852,26 @@ export default function WorkoutLog() {
               const open = expandedWorkoutId === w.id;
               return (
                 <li key={w.id} className="border border-bone/15 bg-ink/30">
-                  <button
-                    onClick={() => setExpandedWorkoutId(open ? null : w.id)}
-                    className="w-full flex items-center justify-between gap-4 p-4 text-left hover:border-electric transition-colors"
-                    aria-expanded={open}
-                  >
-                    <span className="min-w-0">
-                      <span className="block font-display uppercase tracking-wider text-bone truncate">{w.title}</span>
-                      <span className="block text-xs text-bone/50">{w.date} · {w.exercises.length} exercise{w.exercises.length === 1 ? "" : "s"}</span>
-                    </span>
-                    <span className="font-display text-electric text-xl shrink-0">{open ? "−" : "+"}</span>
-                  </button>
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => setExpandedWorkoutId(open ? null : w.id)}
+                      className="flex-1 min-w-0 flex items-center justify-between gap-4 p-4 text-left hover:border-electric transition-colors"
+                      aria-expanded={open}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-display uppercase tracking-wider text-bone truncate">{w.title}</span>
+                        <span className="block text-xs text-bone/50">{w.date} · {w.exercises.length} exercise{w.exercises.length === 1 ? "" : "s"}</span>
+                      </span>
+                      <span className="font-display text-electric text-xl shrink-0">{open ? "−" : "+"}</span>
+                    </button>
+                    <button
+                      onClick={() => deleteWorkout(w.id)}
+                      title="Delete workout"
+                      className="px-4 self-stretch text-bone/40 hover:text-electric text-sm border-l border-bone/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
                   {open && (
                     <div className="px-4 pb-4">
                       <button
@@ -712,14 +882,24 @@ export default function WorkoutLog() {
                         ↻ Load &amp; reuse
                       </button>
                       <ul className="grid gap-2">
-                        {w.exercises.map((ex) => (
+                        {w.exercises.map((ex) => {
+                          const e1 = bestE1RM(ex.sets);
+                          return (
                           <li key={ex.id} className="text-sm">
-                            <p className="font-display uppercase tracking-wider text-bone/80 text-xs">{ex.name}</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-display uppercase tracking-wider text-bone/80 text-xs">{ex.name}</p>
+                              {e1 > 0 && (
+                                <span className="font-display uppercase tracking-wider text-[10px] text-electric border border-electric/40 px-1.5 py-0.5 shrink-0">
+                                  ~{e1} 1RM
+                                </span>
+                              )}
+                            </div>
                             <p className="text-bone/60 text-xs mt-0.5">
                               {ex.sets.map((s) => `${s.weight}×${s.reps}${s.rpe ? ` @${s.rpe}` : ""}`).join("  ·  ")}
                             </p>
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                       {w.notes && <p className="mt-3 text-xs text-bone/50 border-t border-bone/10 pt-2">{w.notes}</p>}
                     </div>

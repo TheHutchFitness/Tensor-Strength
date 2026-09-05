@@ -1387,9 +1387,6 @@ export const splits: Split[] = [
   { id: "legs", name: "LEGS", subtitle: "Quads · Hams · Calves", muscles: ["LEGS"] },
   { id: "upper", name: "UPPER", subtitle: "Chest · Back · Shoulders · Arms", muscles: ["CHEST", "BACK", "SHOULDERS", "ARMS"] },
   { id: "lower", name: "LOWER", subtitle: "Quads · Hams · Glutes · Calves", muscles: ["LEGS"] },
-  { id: "arms", name: "ARMS", subtitle: "Biceps · Triceps · Forearms", muscles: ["ARMS"] },
-  { id: "core", name: "CORE", subtitle: "Abs · Obliques · Stability", muscles: ["CORE"] },
-  { id: "back", name: "BACK", subtitle: "Lats · Traps · Erectors", muscles: ["BACK"] },
   { id: "fullbody", name: "FULL BODY", subtitle: "Total body compound day", muscles: ["CHEST", "BACK", "LEGS", "CORE"] },
   { id: "custom", name: "CUSTOM", subtitle: "Start blank · build your own", muscles: [], custom: true },
 ];
