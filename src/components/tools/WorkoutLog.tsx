@@ -30,9 +30,15 @@ type Workout = {
   notes: string;
   exercises: SessionExercise[];
 };
+type Template = {
+  id: string;
+  name: string;
+  exercises: SessionExercise[];
+};
 
 const WORKOUT_KEY = "hutch-workouts";
 const CUSTOM_KEY = "hutch-custom-exercises";
+const TEMPLATE_KEY = "hutch-templates";
 
 function uid() {
   return Math.random().toString(36).slice(2);
@@ -40,6 +46,10 @@ function uid() {
 
 export default function WorkoutLog() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
+  const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
+  const [templateFlash, setTemplateFlash] = useState(false);
   const [customExercises, setCustomExercises] = useState<Exercise[]>([]);
   const [activeSplitId, setActiveSplitId] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -53,19 +63,39 @@ export default function WorkoutLog() {
   const [hutchOpen, setHutchOpen] = useState(false);
   const [htWeek, setHtWeek] = useState(1);
   const [htDay, setHtDay] = useState<HutchTouchDay>("Push");
+  const [htVariant, setHtVariant] = useState<"A" | "B">("A");
 
   function loadHutchTouchSession() {
-    const s = hutchTouchSessions.find((x) => x.week === htWeek && x.day === htDay);
+    const s = hutchTouchSessions.find(
+      (x) => x.week === htWeek && x.day === htDay && x.variant === htVariant
+    );
     if (!s) return;
-    const loaded: SessionExercise[] = s.exercises.map((ex) => ({
-      id: uid(),
-      name: ex.exercise,
-      cue: `${ex.sets} · ${ex.load} · ${ex.notes}`,
-      sets: [{ id: uid(), weight: "", reps: "", rpe: "" }],
-    }));
+    const loaded: SessionExercise[] = s.exercises.map((ex) => {
+      // Pre-fill sets, reps and RPE from the prescription so the client only
+      // has to enter the weight they used.
+      const setsStr = ex.sets || "";
+      const countMatch = setsStr.match(/(\d+)/);
+      const count = Math.max(1, Math.min(6, countMatch ? parseInt(countMatch[1], 10) : 1));
+      const reps = setsStr.includes("×") ? setsStr.split("×")[1].trim() : "";
+      const rpeMatch = (ex.load || "").match(/RPE\s*([\d.]+(?:\s*-\s*[\d.]+)?)/i);
+      const rpe = rpeMatch ? rpeMatch[1].replace(/\s/g, "") : "";
+      const sets: Set[] = Array.from({ length: count }, () => ({
+        id: uid(),
+        weight: "",
+        reps,
+        rpe,
+      }));
+      return {
+        id: uid(),
+        name: ex.exercise,
+        cue: `${ex.sets} · ${ex.load} · ${ex.notes}`,
+        sets,
+      };
+    });
     setSession(loaded);
-    setSessionTitle(`The Hutch Touch — W${htWeek} ${htDay}`);
+    setSessionTitle(`The Hutch Touch — W${htWeek} ${htDay} (Session ${htVariant === "A" ? "1" : "2"})`);
     setActiveSplitId(null);
+    setCurrentTemplateId(null);
     setHutchOpen(false);
   }
 
@@ -98,6 +128,8 @@ export default function WorkoutLog() {
       if (w) setWorkouts(JSON.parse(w));
       const c = localStorage.getItem(CUSTOM_KEY);
       if (c) setCustomExercises(JSON.parse(c));
+      const t = localStorage.getItem(TEMPLATE_KEY);
+      if (t) setTemplates(JSON.parse(t));
       // If a trainer program was handed off from the portal, load it in.
       const pending = localStorage.getItem("ts-pending-program");
       if (pending) {
@@ -120,6 +152,10 @@ export default function WorkoutLog() {
   function persistCustom(list: Exercise[]) {
     setCustomExercises(list);
     localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
+  }
+  function persistTemplates(list: Template[]) {
+    setTemplates(list);
+    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
   }
 
   const activeSplit = SPLITS.find((s) => s.id === activeSplitId) || null;
@@ -256,11 +292,23 @@ export default function WorkoutLog() {
       exercises: clean,
     };
     persistWorkouts([w, ...workouts]);
+    // If this session came from a template, update that template's values so
+    // next week starts from the numbers just entered.
+    if (currentTemplateId) {
+      setTemplates((prev) => {
+        const next = prev.map((t) =>
+          t.id === currentTemplateId ? { ...t, exercises: cloneExercises(clean) } : t
+        );
+        localStorage.setItem(TEMPLATE_KEY, JSON.stringify(next));
+        return next;
+      });
+    }
     setSession([]);
     setSessionTitle("");
     setSessionNotes("");
     setSessionDate("");
     setActiveSplitId(null);
+    setCurrentTemplateId(null);
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 2500);
   }
@@ -269,11 +317,95 @@ export default function WorkoutLog() {
     persistWorkouts(workouts.filter((w) => w.id !== id));
   }
 
+  // ---- Templates: save the current session (with values) so it can be
+  // reused next week with everything prefilled. Values entered carry over. ----
+  function cloneExercises(list: SessionExercise[]): SessionExercise[] {
+    return list.map((ex) => ({
+      id: uid(),
+      name: ex.name,
+      cue: ex.cue,
+      sets: ex.sets.map((st) => ({ id: uid(), weight: st.weight, reps: st.reps, rpe: st.rpe })),
+    }));
+  }
+
+  function saveAsTemplate() {
+    const clean = session.filter((e) => e.name.trim());
+    if (clean.length === 0) return;
+    const name = sessionTitle.trim() || activeSplit?.name || "My Template";
+    const exercises = cloneExercises(clean);
+    if (currentTemplateId) {
+      persistTemplates(
+        templates.map((t) => (t.id === currentTemplateId ? { ...t, name, exercises } : t))
+      );
+    } else {
+      const id = uid();
+      persistTemplates([{ id, name, exercises }, ...templates]);
+      setCurrentTemplateId(id);
+    }
+    setTemplateFlash(true);
+    setTimeout(() => setTemplateFlash(false), 2500);
+  }
+
+  // Load a template into the builder with its saved values prefilled.
+  function useTemplate(t: Template) {
+    setSession(cloneExercises(t.exercises));
+    setSessionTitle(t.name);
+    setSessionNotes("");
+    setSessionDate(new Date().toLocaleDateString());
+    setCurrentTemplateId(t.id);
+    setActiveSplitId(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function deleteTemplate(id: string) {
+    persistTemplates(templates.filter((t) => t.id !== id));
+    if (currentTemplateId === id) setCurrentTemplateId(null);
+  }
+
   const setCell =
     "bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-center focus:border-electric outline-none w-full";
 
   return (
     <div className="grid gap-8">
+      {/* YOUR TEMPLATES */}
+      {templates.length > 0 && (
+        <div>
+          <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-1">
+            Your Templates
+          </p>
+          <p className="text-bone/50 text-xs mb-4">
+            Tap a template to load it — your last weights &amp; reps come with it. Just update this week&apos;s numbers and save.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {templates.map((t) => (
+              <div
+                key={t.id}
+                className={
+                  "flex items-center justify-between gap-2 border p-3 bg-ink/30 transition-colors " +
+                  (currentTemplateId === t.id ? "border-electric" : "border-bone/15 hover:border-electric/60")
+                }
+              >
+                <button onClick={() => useTemplate(t)} className="flex-1 text-left min-w-0">
+                  <span className="block font-display uppercase tracking-wider text-bone text-sm truncate">
+                    {t.name}
+                  </span>
+                  <span className="block text-bone/50 text-xs">
+                    {t.exercises.length} exercise{t.exercises.length === 1 ? "" : "s"} · tap to load
+                  </span>
+                </button>
+                <button
+                  onClick={() => deleteTemplate(t.id)}
+                  title="Delete template"
+                  className="text-bone/40 hover:text-electric text-sm shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* SPLIT SELECTOR */}
       <div>
         <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
@@ -375,12 +507,36 @@ export default function WorkoutLog() {
               ))}
             </div>
 
+            <p className="font-display uppercase tracking-wider text-xs text-bone/70 mb-2">
+              Session
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              {([
+                { v: "A" as const, n: "1", label: "Heavy / Strength" },
+                { v: "B" as const, n: "2", label: "Volume / Technique" },
+              ]).map((opt) => (
+                <button
+                  key={opt.v}
+                  onClick={() => setHtVariant(opt.v)}
+                  className={
+                    "px-4 py-2.5 font-display uppercase tracking-wider text-sm transition-colors text-left " +
+                    (htVariant === opt.v
+                      ? "bg-electric text-ink"
+                      : "border border-bone/20 text-bone/60 hover:border-electric hover:text-electric")
+                  }
+                >
+                  Session {opt.n}
+                  <span className="block text-[10px] tracking-wide opacity-80">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="text-xs text-bone/50 mb-5 leading-relaxed border-l-2 border-electric/40 pl-3">
               Primary lift: <span className="text-electric">{HUTCH_TOUCH_PRIMARIES[htDay]}</span>
               {" · "}
               {(() => {
-                const s = hutchTouchSessions.find((x) => x.week === htWeek && x.day === htDay);
-                return s ? `${s.exercises.length} exercises in this session` : "";
+                const s = hutchTouchSessions.find((x) => x.week === htWeek && x.day === htDay && x.variant === htVariant);
+                return s ? `${s.exercises.length} exercises · sets, reps & RPE pre-filled` : "";
               })()}
             </div>
 
@@ -388,7 +544,7 @@ export default function WorkoutLog() {
               onClick={loadHutchTouchSession}
               className="w-full bg-electric text-ink py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
             >
-              Load Week {htWeek} {htDay} →
+              Load W{htWeek} {htDay} · Session {htVariant === "A" ? "1" : "2"} →
             </button>
           </div>
         </div>
@@ -480,15 +636,29 @@ export default function WorkoutLog() {
             className="mt-4 w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none resize-none"
           />
 
-          <button
-            onClick={saveWorkout}
-            className="mt-2 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
-          >
-            Save Workout
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              onClick={saveWorkout}
+              className="bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
+            >
+              Save Workout
+            </button>
+            <button
+              onClick={saveAsTemplate}
+              title="Save these exercises as a reusable template — your numbers carry over next time"
+              className="border border-electric text-electric px-6 py-3 font-display uppercase tracking-wider hover:bg-electric hover:text-ink transition-colors"
+            >
+              {currentTemplateId ? "↻ Update Template" : "☆ Save as Template"}
+            </button>
+          </div>
           {savedFlash && (
             <p className="mt-3 font-display uppercase tracking-wider text-sm text-electric">
               ✓ Workout saved to this device.
+            </p>
+          )}
+          {templateFlash && (
+            <p className="mt-3 font-display uppercase tracking-wider text-sm text-electric">
+              ✓ Template saved — reuse it any time below.
             </p>
           )}
         </div>
@@ -504,29 +674,40 @@ export default function WorkoutLog() {
             No workouts logged yet. Pick a split to start.
           </p>
         ) : (
-          <ul className="grid gap-3 max-h-[460px] overflow-y-auto">
-            {workouts.map((w) => (
-              <li key={w.id} className="border border-bone/15 bg-ink/30 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-display uppercase tracking-wider text-bone">{w.title}</p>
-                    <p className="text-xs text-bone/50">{w.date}</p>
-                  </div>
-                  <button onClick={() => deleteWorkout(w.id)} className="text-bone/40 hover:text-electric text-sm">✕</button>
-                </div>
-                <ul className="mt-3 grid gap-2">
-                  {w.exercises.map((ex) => (
-                    <li key={ex.id} className="text-sm">
-                      <p className="font-display uppercase tracking-wider text-bone/80 text-xs">{ex.name}</p>
-                      <p className="text-bone/60 text-xs mt-0.5">
-                        {ex.sets.map((s) => `${s.weight}×${s.reps}${s.rpe ? ` @${s.rpe}` : ""}`).join("  ·  ")}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-                {w.notes && <p className="mt-3 text-xs text-bone/50 border-t border-bone/10 pt-2">{w.notes}</p>}
-              </li>
-            ))}
+          <ul className="grid gap-2 max-h-[460px] overflow-y-auto">
+            {workouts.map((w) => {
+              const open = expandedWorkoutId === w.id;
+              return (
+                <li key={w.id} className="border border-bone/15 bg-ink/30">
+                  <button
+                    onClick={() => setExpandedWorkoutId(open ? null : w.id)}
+                    className="w-full flex items-center justify-between gap-4 p-4 text-left hover:border-electric transition-colors"
+                    aria-expanded={open}
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-display uppercase tracking-wider text-bone truncate">{w.title}</span>
+                      <span className="block text-xs text-bone/50">{w.date} · {w.exercises.length} exercise{w.exercises.length === 1 ? "" : "s"}</span>
+                    </span>
+                    <span className="font-display text-electric text-xl shrink-0">{open ? "−" : "+"}</span>
+                  </button>
+                  {open && (
+                    <div className="px-4 pb-4">
+                      <ul className="grid gap-2">
+                        {w.exercises.map((ex) => (
+                          <li key={ex.id} className="text-sm">
+                            <p className="font-display uppercase tracking-wider text-bone/80 text-xs">{ex.name}</p>
+                            <p className="text-bone/60 text-xs mt-0.5">
+                              {ex.sets.map((s) => `${s.weight}×${s.reps}${s.rpe ? ` @${s.rpe}` : ""}`).join("  ·  ")}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                      {w.notes && <p className="mt-3 text-xs text-bone/50 border-t border-bone/10 pt-2">{w.notes}</p>}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
