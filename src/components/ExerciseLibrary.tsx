@@ -8,15 +8,44 @@ const categories = ["All", ...Array.from(new Set(exercises.map((e) => e.category
 
 export default function ExerciseLibrary() {
   const [filter, setFilter] = useState<string>("All");
+  const [query, setQuery] = useState<string>("");
   const [openName, setOpenName] = useState<string | null>(null);
 
-  const filtered = useMemo(
-    () => (filter === "All" ? exercises : exercises.filter((e) => e.category === filter)),
-    [filter]
-  );
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return exercises.filter((e) => {
+      const matchesCategory = filter === "All" || e.category === filter;
+      const matchesQuery =
+        q === "" ||
+        e.name.toLowerCase().includes(q) ||
+        e.muscles.toLowerCase().includes(q) ||
+        e.category.toLowerCase().includes(q);
+      return matchesCategory && matchesQuery;
+    });
+  }, [filter, query]);
 
   return (
     <div>
+      {/* Search bar */}
+      <div className="relative mb-4">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search a lift, muscle or category…"
+          className="w-full bg-ink/40 border border-bone/20 focus:border-electric outline-none text-bone placeholder:text-bone/40 px-4 py-3 pr-10 text-sm tracking-wide transition-colors"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-bone/50 hover:text-electric font-display text-lg"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       {/* Category filter chips */}
       <div className="flex flex-wrap gap-2 mb-6">
         {categories.map((c) => (
@@ -35,8 +64,18 @@ export default function ExerciseLibrary() {
         ))}
       </div>
 
+      {/* Result count */}
+      <p className="text-xs text-bone/50 mb-4 font-display uppercase tracking-wider">
+        {filtered.length} {filtered.length === 1 ? "exercise" : "exercises"}
+      </p>
+
       {/* Exercise cards */}
       <ul className="grid gap-3">
+        {filtered.length === 0 && (
+          <li className="border border-bone/15 bg-ink/30 px-5 py-8 text-center text-sm text-bone/50">
+            No exercises match your search. Try a different name, muscle or category.
+          </li>
+        )}
         {filtered.map((ex) => {
           const isOpen = openName === ex.name;
           return (
