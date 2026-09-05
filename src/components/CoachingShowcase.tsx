@@ -7,6 +7,10 @@ const CLIPS = [
   { src: "/videos/coaching6.mp4", poster: "/videos/coaching6-poster.jpg", label: "Accessory Focus" },
   { src: "/videos/coaching7.mp4", poster: "/videos/coaching7-poster.jpg", label: "Heavy Singles" },
   { src: "/videos/coaching8.mp4", poster: "/videos/coaching8-poster.jpg", label: "Form Under Load" },
+  { src: "/videos/coaching9.mp4", poster: "/videos/coaching9-poster.jpg", label: "Compound Lifts" },
+  { src: "/videos/coaching10.mp4", poster: "/videos/coaching10-poster.jpg", label: "Building Volume" },
+  { src: "/videos/coaching11.mp4", poster: "/videos/coaching11-poster.jpg", label: "Explosive Power" },
+  { src: "/videos/coaching12.mp4", poster: "/videos/coaching12-poster.jpg", label: "Dialing In Form" },
 ];
 
 export default function CoachingShowcase() {
