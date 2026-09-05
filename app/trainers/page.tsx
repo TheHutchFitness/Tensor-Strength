@@ -59,6 +59,55 @@ export default function TrainersPage() {
   const [savingNote, setSavingNote] = useState<string | null>(null);
   const [assignFlash, setAssignFlash] = useState("");
   const [assigning, setAssigning] = useState("");
+  // Custom template builder
+  const [tplName, setTplName] = useState("");
+  const [tplRows, setTplRows] = useState<{ name: string; sets: string; reps: string }[]>([
+    { name: "", sets: "3", reps: "8-12" },
+  ]);
+  const [sendingCustom, setSendingCustom] = useState(false);
+
+  function updateRow(i: number, patch: Partial<{ name: string; sets: string; reps: string }>) {
+    setTplRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    setTplRows((rows) => [...rows, { name: "", sets: "3", reps: "8-12" }]);
+  }
+  function removeRow(i: number) {
+    setTplRows((rows) => (rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows));
+  }
+
+  async function sendCustomTemplate(clientId: string) {
+    const rows = tplRows.filter((r) => r.name.trim());
+    if (rows.length === 0) {
+      setAssignFlash("Add at least one exercise");
+      setTimeout(() => setAssignFlash(""), 3000);
+      return;
+    }
+    setSendingCustom(true);
+    setAssignFlash("");
+    const exercises = rows.map((r) => {
+      const n = Math.max(1, Math.min(10, parseInt(r.sets, 10) || 1));
+      return {
+        name: r.name.trim(),
+        cue: "",
+        sets: Array.from({ length: n }, () => ({ weight: "", reps: r.reps.trim(), rpe: "" })),
+      };
+    });
+    const res = await fetch("/api/trainer/assign-template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, template: { name: tplName.trim() || "Custom Template", exercises } }),
+    });
+    setSendingCustom(false);
+    if (res.ok) {
+      setTplName("");
+      setTplRows([{ name: "", sets: "3", reps: "8-12" }]);
+      setAssignFlash("✓ Custom template sent to this client's tracker");
+    } else {
+      setAssignFlash("Could not send template");
+    }
+    setTimeout(() => setAssignFlash(""), 3000);
+  }
 
   const COACH_TEMPLATES: Record<string, string[]> = {
     Push: ["Bench Press", "Overhead Press", "Incline Dumbbell Press", "Weighted Dips", "Lateral Raise", "Triceps Pushdown"],
@@ -390,6 +439,66 @@ export default function TrainersPage() {
                           {assignFlash && (
                             <p className="mt-3 font-display uppercase tracking-wider text-xs text-electric">{assignFlash}</p>
                           )}
+
+                          {/* Custom template builder */}
+                          <div className="mt-5 pt-5 border-t border-bone/10">
+                            <p className="font-display uppercase tracking-wider text-bone/70 text-xs mb-2">
+                              Or build a custom template
+                            </p>
+                            <input
+                              value={tplName}
+                              onChange={(e) => setTplName(e.target.value)}
+                              placeholder="Template name (e.g. Ben — Week 3 Push)"
+                              className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone mb-3 focus:border-electric outline-none text-sm"
+                            />
+                            <div className="grid gap-2">
+                              {tplRows.map((r, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <input
+                                    value={r.name}
+                                    onChange={(e) => updateRow(i, { name: e.target.value })}
+                                    placeholder="Exercise"
+                                    className="flex-1 min-w-0 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none text-sm"
+                                  />
+                                  <input
+                                    value={r.sets}
+                                    onChange={(e) => updateRow(i, { sets: e.target.value })}
+                                    className="w-14 bg-ink/40 border border-bone/20 px-2 py-2 text-bone focus:border-electric outline-none text-sm text-center"
+                                    title="Sets"
+                                  />
+                                  <span className="text-bone/40 text-xs">×</span>
+                                  <input
+                                    value={r.reps}
+                                    onChange={(e) => updateRow(i, { reps: e.target.value })}
+                                    className="w-20 bg-ink/40 border border-bone/20 px-2 py-2 text-bone focus:border-electric outline-none text-sm text-center"
+                                    title="Reps"
+                                  />
+                                  <button
+                                    onClick={() => removeRow(i)}
+                                    className="text-bone/40 hover:text-electric text-sm px-1 shrink-0"
+                                    title="Remove exercise"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                              <button
+                                onClick={addRow}
+                                className="border border-bone/25 text-bone/70 px-3 py-2 font-display uppercase tracking-wider text-[11px] hover:border-electric hover:text-electric transition-colors"
+                              >
+                                + Add exercise
+                              </button>
+                              <button
+                                onClick={() => sendCustomTemplate(selected.id)}
+                                disabled={sendingCustom}
+                                className="bg-electric text-ink px-5 py-2 font-display uppercase tracking-wider text-[11px] hover:bg-bone transition-colors disabled:opacity-50"
+                              >
+                                {sendingCustom ? "Sending…" : "Send Custom Template"}
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
                         {loadingCheckins ? (
