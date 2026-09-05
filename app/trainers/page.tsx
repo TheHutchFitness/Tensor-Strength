@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import TrainerProfileForm from "@/components/portal/TrainerProfileForm";
+import { exercises as EXERCISE_LIBRARY } from "@/data/exercises";
 import TrainerPrograms from "@/components/portal/TrainerPrograms";
 import TrainerFiles from "@/components/portal/TrainerFiles";
 import TrainerMeals from "@/components/portal/TrainerMeals";
@@ -65,6 +66,41 @@ export default function TrainersPage() {
     { name: "", sets: "3", reps: "8-12" },
   ]);
   const [sendingCustom, setSendingCustom] = useState(false);
+  const [myTemplates, setMyTemplates] = useState<{ id: string; name: string; rows: { name: string; sets: string; reps: string }[] }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/trainer/templates").then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (Array.isArray(d?.templates)) setMyTemplates(d.templates);
+    }).catch(() => {});
+  }, []);
+
+  function persistMyTemplates(list: typeof myTemplates) {
+    setMyTemplates(list);
+    fetch("/api/trainer/templates", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templates: list }),
+    }).catch(() => {});
+  }
+  function saveMyTemplate() {
+    const rows = tplRows.filter((r) => r.name.trim());
+    if (rows.length === 0) {
+      setAssignFlash("Add at least one exercise to save");
+      setTimeout(() => setAssignFlash(""), 3000);
+      return;
+    }
+    const entry = { id: Math.random().toString(36).slice(2), name: tplName.trim() || "Untitled Template", rows };
+    persistMyTemplates([entry, ...myTemplates]);
+    setAssignFlash("✓ Saved to your templates");
+    setTimeout(() => setAssignFlash(""), 3000);
+  }
+  function loadMyTemplate(t: { name: string; rows: { name: string; sets: string; reps: string }[] }) {
+    setTplName(t.name);
+    setTplRows(t.rows.length ? t.rows : [{ name: "", sets: "3", reps: "8-12" }]);
+  }
+  function deleteMyTemplate(id: string) {
+    persistMyTemplates(myTemplates.filter((t) => t.id !== id));
+  }
 
   function updateRow(i: number, patch: Partial<{ name: string; sets: string; reps: string }>) {
     setTplRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -451,6 +487,27 @@ export default function TrainersPage() {
                               placeholder="Template name (e.g. Ben — Week 3 Push)"
                               className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone mb-3 focus:border-electric outline-none text-sm"
                             />
+                            {/* Searchable exercise library for the picker inputs */}
+                            <datalist id="ts-exercise-lib">
+                              {EXERCISE_LIBRARY.map((ex) => (
+                                <option key={ex.name} value={ex.name} />
+                              ))}
+                            </datalist>
+                            {myTemplates.length > 0 && (
+                              <div className="mb-3">
+                                <p className="text-[10px] uppercase tracking-wider text-bone/40 mb-1">Your saved templates — tap to load</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {myTemplates.map((t) => (
+                                    <span key={t.id} className="flex items-center gap-1 border border-bone/20 bg-ink/30 pl-3 pr-1 py-1">
+                                      <button onClick={() => loadMyTemplate(t)} className="font-display uppercase tracking-wider text-[11px] text-bone/80 hover:text-electric">
+                                        {t.name}
+                                      </button>
+                                      <button onClick={() => deleteMyTemplate(t.id)} title="Delete" className="text-bone/40 hover:text-electric text-xs px-1">✕</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             <div className="grid gap-2">
                               {tplRows.map((r, i) => (
                                 <div key={i} className="flex items-center gap-2">
@@ -458,6 +515,7 @@ export default function TrainersPage() {
                                     value={r.name}
                                     onChange={(e) => updateRow(i, { name: e.target.value })}
                                     placeholder="Exercise"
+                                    list="ts-exercise-lib"
                                     className="flex-1 min-w-0 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none text-sm"
                                   />
                                   <input
@@ -489,6 +547,12 @@ export default function TrainersPage() {
                                 className="border border-bone/25 text-bone/70 px-3 py-2 font-display uppercase tracking-wider text-[11px] hover:border-electric hover:text-electric transition-colors"
                               >
                                 + Add exercise
+                              </button>
+                              <button
+                                onClick={saveMyTemplate}
+                                className="border border-electric text-electric px-3 py-2 font-display uppercase tracking-wider text-[11px] hover:bg-electric hover:text-ink transition-colors"
+                              >
+                                ☆ Save Template
                               </button>
                               <button
                                 onClick={() => sendCustomTemplate(selected.id)}

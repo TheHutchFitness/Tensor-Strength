@@ -577,6 +577,30 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true }))
     }
 
+    // ---------------- COACH SAVED TEMPLATES (reusable across clients) ----------------
+    if (route === '/trainer/templates' && method === 'GET') {
+      const coach = await getCurrentUser(request, db)
+      if (!coach || (coach.role !== 'admin' && !coach.isTrainer)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const doc = await db.collection('coach_templates').findOne({ coachId: coach.id })
+      return handleCORS(NextResponse.json({ templates: Array.isArray(doc?.templates) ? doc.templates : [] }))
+    }
+    if (route === '/trainer/templates' && method === 'PUT') {
+      const coach = await getCurrentUser(request, db)
+      if (!coach || (coach.role !== 'admin' && !coach.isTrainer)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const templates = Array.isArray(body.templates) ? body.templates.slice(0, 100) : []
+      await db.collection('coach_templates').updateOne(
+        { coachId: coach.id },
+        { $set: { coachId: coach.id, templates, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true, templates }))
+    }
+
 
 
 
