@@ -55,6 +55,7 @@ export default function TrainerProfileForm({ onSaved }: { onSaved?: () => void }
     setError("");
     const fd = new FormData();
     fd.append("file", file);
+    fd.append("visibility", "public");
     const res = await fetch("/api/uploads/file", { method: "POST", body: fd });
     if (res.ok) {
       const d = await res.json();

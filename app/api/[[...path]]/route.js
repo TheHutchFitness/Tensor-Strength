@@ -6,6 +6,58 @@ import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import path from 'path'
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+
+// ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
+// When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
+// served back through the /api/files/<key> proxy on our own domain. If not
+// configured, we transparently fall back to local disk so nothing breaks.
+let s3Client
+function getS3() {
+  if (s3Client) return s3Client
+  s3Client = new S3Client({
+    region: 'auto',
+    endpoint: process.env.S3_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    },
+  })
+  return s3Client
+}
+function r2Enabled() {
+  return !!(process.env.S3_ENDPOINT && process.env.S3_BUCKET && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY)
+}
+// Persist an upload buffer and return a browser-usable URL string.
+// Records a per-file ACL doc (owner + visibility) so the /api/files proxy can
+// enforce who may read it. visibility: 'public' (any logged-in member) or
+// 'private' (owner + their assigned trainer/client + admin only).
+async function saveUploadBuffer(db, buffer, ext, mime, ownerId, visibility) {
+  const filename = uuidv4() + '.' + ext
+  if (r2Enabled()) {
+    const key = 'uploads/' + filename
+    await getS3().send(new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: mime || 'application/octet-stream',
+      ContentLength: buffer.length,
+      CacheControl: 'public, max-age=31536000, immutable',
+    }))
+    try {
+      await db.collection('uploads').updateOne(
+        { key },
+        { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', mime: mime || '', createdAt: new Date() } },
+        { upsert: true }
+      )
+    } catch (e) { console.error('upload ACL write failed:', e?.message) }
+    return '/api/files/' + key
+  }
+  const dir = process.cwd() + '/public/uploads'
+  await mkdir(dir, { recursive: true })
+  await writeFile(dir + '/' + filename, buffer)
+  return '/uploads/' + filename
+}
 
 // MongoDB connection
 let client
@@ -265,6 +317,51 @@ async function handleRoute(request, { params }) {
 
     if ((route === '/' || route === '/root') && method === 'GET') {
       return handleCORS(NextResponse.json({ message: 'Tensor Strength API' }))
+    }
+
+    // ---- Serve uploaded files from durable R2 storage (access-controlled proxy) ----
+    // Every uploaded object has an ACL doc (owner + visibility). Access rules:
+    //   • Any request must be from a logged-in user (blocks anonymous URL leaks).
+    //   • 'public' files (profile photos, forum media): any logged-in member.
+    //   • 'private' files (trainer<->client files, message media): owner, their
+    //     assigned trainer/client, or an admin only.
+    if (path[0] === 'files' && method === 'GET') {
+      const key = path.slice(1).join('/')
+      if (!key || !key.startsWith('uploads/') || key.includes('..')) {
+        return handleCORS(NextResponse.json({ error: 'Invalid key' }, { status: 400 }))
+      }
+      if (!r2Enabled()) {
+        return handleCORS(NextResponse.json({ error: 'Storage not configured' }, { status: 404 }))
+      }
+      const me = await getCurrentUser(request, db)
+      if (!me) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const meta = await db.collection('uploads').findOne({ key })
+      if (meta && meta.visibility === 'private') {
+        let allowed = me.role === 'admin' || me.id === meta.ownerId
+        if (!allowed && meta.ownerId) {
+          const owner = await db.collection('users').findOne({ id: meta.ownerId })
+          // Allow the two parties of an assigned trainer<->client relationship.
+          if (owner && (owner.assignedTrainerId === me.id || me.assignedTrainerId === owner.id)) {
+            allowed = true
+          }
+        }
+        if (!allowed) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      try {
+        const obj = await getS3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }))
+        const bytes = await obj.Body.transformToByteArray()
+        return new NextResponse(Buffer.from(bytes), {
+          status: 200,
+          headers: {
+            'Content-Type': obj.ContentType || 'application/octet-stream',
+            'Content-Length': String(bytes.length),
+            'Cache-Control': 'private, max-age=31536000, immutable',
+          },
+        })
+      } catch (e) {
+        console.error('R2 fetch error:', e?.name, e?.message)
+        return handleCORS(NextResponse.json({ error: 'File not found' }, { status: 404 }))
+      }
     }
 
     // ---------------- AUTH ----------------
@@ -1269,11 +1366,11 @@ async function handleRoute(request, { params }) {
         }
         const dotExt = rawExt
         const buffer = Buffer.from(await file.arrayBuffer())
-        const dir = process.cwd() + '/public/uploads'
-        await mkdir(dir, { recursive: true })
-        const filename = uuidv4() + '.' + dotExt
-        await writeFile(dir + '/' + filename, buffer)
-        return handleCORS(NextResponse.json({ url: '/uploads/' + filename, name: origName, size, mime }))
+        // Private by default; callers pass visibility=public only for member-visible
+        // assets like coach profile photos.
+        const visibility = (form.get('visibility') === 'public') ? 'public' : 'private'
+        const url = await saveUploadBuffer(db, buffer, dotExt, mime, user.id, visibility)
+        return handleCORS(NextResponse.json({ url, name: origName, size, mime }))
       } catch (e) {
         console.error('File upload error:', e)
         return handleCORS(NextResponse.json({ error: 'Upload failed' }, { status: 500 }))
@@ -1801,11 +1898,9 @@ async function handleRoute(request, { params }) {
         const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }
         const ext = extMap[mime] || (isImg ? 'jpg' : 'mp4')
         const buffer = Buffer.from(await file.arrayBuffer())
-        const dir = process.cwd() + '/public/uploads'
-        await mkdir(dir, { recursive: true })
-        const filename = uuidv4() + '.' + ext
-        await writeFile(dir + '/' + filename, buffer)
-        return handleCORS(NextResponse.json({ url: '/uploads/' + filename, type: isImg ? 'image' : 'video' }))
+        // Forum media is community-visible to any logged-in member.
+        const url = await saveUploadBuffer(db, buffer, ext, mime, user.id, 'public')
+        return handleCORS(NextResponse.json({ url, type: isImg ? 'image' : 'video' }))
       } catch (e) {
         console.error('Forum upload error:', e)
         return handleCORS(NextResponse.json({ error: 'Upload failed' }, { status: 500 }))

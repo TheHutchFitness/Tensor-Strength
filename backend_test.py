@@ -1,467 +1,300 @@
 #!/usr/bin/env python3
 """
-Backend API test for:
-(A) WORKOUT TRACKER CLOUD SYNC
-(B) COACH ASSIGN TEMPLATE
-
-Tests ONLY these two new features as requested in the review.
+Backend test for R2 (Cloudflare S3-compatible) file storage migration.
+Tests POST /api/uploads/file, POST /api/forum/upload, and GET /api/files/<key>.
 """
-
 import requests
-import json
-import sys
-from datetime import datetime
+import io
+import os
+from PIL import Image
 
-# Base URL from environment
-BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
+# Base URL from environment - read from .env file
+import re
+try:
+    with open('/app/.env', 'r') as f:
+        env_content = f.read()
+        match = re.search(r'NEXT_PUBLIC_BASE_URL=(.+)', env_content)
+        if match:
+            BASE_URL = match.group(1).strip()
+        else:
+            BASE_URL = 'http://localhost:3000'
+except:
+    BASE_URL = 'http://localhost:3000'
 
-# Test results tracking
-test_results = []
-total_tests = 0
-passed_tests = 0
+API_BASE = f"{BASE_URL}/api"
 
-def log_test(step, description, passed, details=""):
-    """Log test result"""
-    global total_tests, passed_tests
-    total_tests += 1
-    if passed:
-        passed_tests += 1
-    status = "✅ PASS" if passed else "❌ FAIL"
-    result = f"{status} - Step {step}: {description}"
-    if details:
-        result += f"\n    Details: {details}"
-    print(result)
-    test_results.append({
-        "step": step,
-        "description": description,
-        "passed": passed,
-        "details": details
-    })
+# Admin credentials
+ADMIN_USERNAME = "The Hutch"
+ADMIN_PASSWORD = "Vzkfjf3n!3"
 
-def check_no_mongo_id(data, context=""):
-    """Check that response doesn't contain MongoDB _id field"""
-    if isinstance(data, dict):
-        if '_id' in data:
-            return False, f"Found _id in {context}"
-        for key, value in data.items():
-            passed, msg = check_no_mongo_id(value, f"{context}.{key}")
-            if not passed:
-                return False, msg
-    elif isinstance(data, list):
-        for i, item in enumerate(data):
-            passed, msg = check_no_mongo_id(item, f"{context}[{i}]")
-            if not passed:
-                return False, msg
-    return True, ""
-
-def test_workout_tracker_cloud_sync():
-    """Test (A) WORKOUT TRACKER CLOUD SYNC"""
-    
-    print("\n" + "="*80)
-    print("(A) TESTING WORKOUT TRACKER CLOUD SYNC")
-    print("="*80 + "\n")
-    
-    # Test 1: GET /api/client/tracker with NO auth -> 401
-    print("\n--- Test 1: GET /api/client/tracker with NO auth -> 401 ---")
-    try:
-        no_auth_session = requests.Session()
-        r = no_auth_session.get(f"{BASE_URL}/client/tracker")
-        if r.status_code == 401:
-            log_test(1, "GET /client/tracker with NO auth returns 401", True,
-                    f"Correctly returns 401. Response: {r.json()}")
-        else:
-            log_test(1, "GET /client/tracker with NO auth returns 401", False,
-                    f"Expected 401, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(1, "GET /client/tracker with NO auth returns 401", False, f"Exception: {str(e)}")
-    
-    # Test 2: Register + login NEW member M1, GET /api/client/tracker -> 200 with empty arrays
-    print("\n--- Test 2: Register + login member M1, GET /client/tracker -> 200 with empty arrays ---")
-    m1_session = requests.Session()
-    m1_id = None
-    try:
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
-        m1_data = {
-            "username": f"m1_tracker_{timestamp}",
-            "email": f"m1_tracker_{timestamp}@test.com",
-            "password": "testpass123"
-        }
-        r = m1_session.post(f"{BASE_URL}/auth/register", json=m1_data)
-        if r.status_code == 200:
-            user_data = r.json()
-            # Response structure is {'user': {...}}
-            m1_id = user_data.get('user', {}).get('id') or user_data.get('id')
-            print(f"    ✓ M1 registered successfully. ID: {m1_id}")
-            
-            # GET /client/tracker as M1
-            r = m1_session.get(f"{BASE_URL}/client/tracker")
-            if r.status_code == 200:
-                data = r.json()
-                has_workouts = 'workouts' in data
-                has_templates = 'templates' in data
-                workouts_empty = data.get('workouts') == []
-                templates_empty = data.get('templates') == []
-                
-                # Check no _id leaks
-                no_id_leak, id_msg = check_no_mongo_id(data, "response")
-                
-                if has_workouts and has_templates and workouts_empty and templates_empty and no_id_leak:
-                    log_test(2, "M1 GET /client/tracker returns empty arrays", True,
-                            f"Returns 200 with workouts=[], templates=[]. No _id leaks.")
-                else:
-                    log_test(2, "M1 GET /client/tracker returns empty arrays", False,
-                            f"Validation failed. has_workouts={has_workouts}, has_templates={has_templates}, workouts_empty={workouts_empty}, templates_empty={templates_empty}, no_id_leak={no_id_leak}. {id_msg}")
-            else:
-                log_test(2, "M1 GET /client/tracker returns empty arrays", False,
-                        f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-        else:
-            log_test(2, "M1 GET /client/tracker returns empty arrays", False,
-                    f"Failed to register M1: {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(2, "M1 GET /client/tracker returns empty arrays", False, f"Exception: {str(e)}")
-    
-    # Test 3: As M1, PUT /api/client/tracker with workout/template data -> 200
-    print("\n--- Test 3: M1 PUT /client/tracker with workout/template data -> 200 ---")
-    try:
-        tracker_data = {
-            "workouts": [
-                {
-                    "id": "w1",
-                    "date": "9/5/2026",
-                    "title": "Push Day",
-                    "notes": "",
-                    "exercises": [
-                        {
-                            "id": "e1",
-                            "name": "Bench Press",
-                            "cue": "",
-                            "sets": [
-                                {
-                                    "id": "s1",
-                                    "weight": "185",
-                                    "reps": "5",
-                                    "rpe": "8"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ],
-            "templates": [
-                {
-                    "id": "t1",
-                    "name": "My Push",
-                    "exercises": []
-                }
-            ]
-        }
-        r = m1_session.put(f"{BASE_URL}/client/tracker", json=tracker_data)
-        if r.status_code == 200:
-            data = r.json()
-            has_ok = data.get('ok') == True
-            has_workouts = 'workouts' in data
-            has_templates = 'templates' in data
-            
-            # Check no _id leaks
-            no_id_leak, id_msg = check_no_mongo_id(data, "response")
-            
-            if has_ok and has_workouts and has_templates and no_id_leak:
-                log_test(3, "M1 PUT /client/tracker with data", True,
-                        f"Returns 200 with ok:true, workouts, templates. No _id leaks.")
-            else:
-                log_test(3, "M1 PUT /client/tracker with data", False,
-                        f"Validation failed. ok={has_ok}, has_workouts={has_workouts}, has_templates={has_templates}, no_id_leak={no_id_leak}. {id_msg}")
-        else:
-            log_test(3, "M1 PUT /client/tracker with data", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(3, "M1 PUT /client/tracker with data", False, f"Exception: {str(e)}")
-    
-    # Test 4: GET /api/client/tracker as M1 -> workouts and templates persist
-    print("\n--- Test 4: M1 GET /client/tracker -> verify persistence ---")
-    try:
-        r = m1_session.get(f"{BASE_URL}/client/tracker")
-        if r.status_code == 200:
-            data = r.json()
-            workouts = data.get('workouts', [])
-            templates = data.get('templates', [])
-            
-            # Check workouts
-            has_workout = len(workouts) == 1
-            workout_correct = False
-            if has_workout:
-                w = workouts[0]
-                workout_correct = (
-                    w.get('id') == 'w1' and
-                    w.get('date') == '9/5/2026' and
-                    w.get('title') == 'Push Day' and
-                    len(w.get('exercises', [])) == 1 and
-                    w['exercises'][0].get('name') == 'Bench Press' and
-                    len(w['exercises'][0].get('sets', [])) == 1 and
-                    w['exercises'][0]['sets'][0].get('weight') == '185'
-                )
-            
-            # Check templates
-            has_template = len(templates) == 1
-            template_correct = False
-            if has_template:
-                t = templates[0]
-                template_correct = (
-                    t.get('id') == 't1' and
-                    t.get('name') == 'My Push'
-                )
-            
-            if has_workout and workout_correct and has_template and template_correct:
-                log_test(4, "M1 GET /client/tracker verifies persistence", True,
-                        f"Workouts and templates persisted correctly. Workout: {workouts[0].get('title')}, Template: {templates[0].get('name')}")
-            else:
-                log_test(4, "M1 GET /client/tracker verifies persistence", False,
-                        f"Data not persisted correctly. has_workout={has_workout}, workout_correct={workout_correct}, has_template={has_template}, template_correct={template_correct}. Data: {json.dumps(data)[:300]}")
-        else:
-            log_test(4, "M1 GET /client/tracker verifies persistence", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(4, "M1 GET /client/tracker verifies persistence", False, f"Exception: {str(e)}")
-    
-    # Test 5: PUT /api/client/tracker with NO auth -> 401
-    print("\n--- Test 5: PUT /client/tracker with NO auth -> 401 ---")
-    try:
-        no_auth_session = requests.Session()
-        r = no_auth_session.put(f"{BASE_URL}/client/tracker", json={"workouts": [], "templates": []})
-        if r.status_code == 401:
-            log_test(5, "PUT /client/tracker with NO auth returns 401", True,
-                    "Correctly returns 401 without auth")
-        else:
-            log_test(5, "PUT /client/tracker with NO auth returns 401", False,
-                    f"Expected 401, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(5, "PUT /client/tracker with NO auth returns 401", False, f"Exception: {str(e)}")
-    
-    return m1_session, m1_id
-
-def test_coach_assign_template(m1_session, m1_id):
-    """Test (B) COACH ASSIGN TEMPLATE"""
-    
-    print("\n" + "="*80)
-    print("(B) TESTING COACH ASSIGN TEMPLATE")
-    print("="*80 + "\n")
-    
-    # Test 6: Register client M2 and capture their user id
-    print("\n--- Test 6: Register client M2 and capture user id ---")
-    m2_session = requests.Session()
-    m2_id = None
-    try:
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
-        m2_data = {
-            "username": f"m2_client_{timestamp}",
-            "email": f"m2_client_{timestamp}@test.com",
-            "password": "testpass123"
-        }
-        r = m2_session.post(f"{BASE_URL}/auth/register", json=m2_data)
-        if r.status_code == 200:
-            user_data = r.json()
-            # Response structure is {'user': {...}}
-            m2_id = user_data.get('user', {}).get('id') or user_data.get('id')
-            if m2_id:
-                log_test(6, "Register client M2 and capture user id", True,
-                        f"M2 registered successfully. ID: {m2_id}")
-            else:
-                log_test(6, "Register client M2 and capture user id", False,
-                        f"M2 registered but no id in response: {user_data}")
-        else:
-            log_test(6, "Register client M2 and capture user id", False,
-                    f"Failed to register M2: {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(6, "Register client M2 and capture user id", False, f"Exception: {str(e)}")
-    
-    # Test 7: POST /api/trainer/assign-template with NO auth -> 403
-    print("\n--- Test 7: POST /trainer/assign-template with NO auth -> 403 ---")
-    try:
-        no_auth_session = requests.Session()
-        r = no_auth_session.post(f"{BASE_URL}/trainer/assign-template",
-                                json={"clientId": m2_id, "template": {"name": "Test", "exercises": []}})
-        if r.status_code == 403:
-            log_test(7, "POST /trainer/assign-template with NO auth returns 403", True,
-                    "Correctly returns 403 without auth")
-        else:
-            log_test(7, "POST /trainer/assign-template with NO auth returns 403", False,
-                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(7, "POST /trainer/assign-template with NO auth returns 403", False, f"Exception: {str(e)}")
-    
-    # Test 8: As plain member M1, POST /api/trainer/assign-template -> 403
-    print("\n--- Test 8: M1 (plain member) POST /trainer/assign-template -> 403 ---")
-    try:
-        r = m1_session.post(f"{BASE_URL}/trainer/assign-template",
-                           json={"clientId": m2_id, "template": {"name": "Test", "exercises": []}})
-        if r.status_code == 403:
-            log_test(8, "M1 (plain member) POST /trainer/assign-template returns 403", True,
-                    "Correctly returns 403 for non-trainer/non-admin")
-        else:
-            log_test(8, "M1 (plain member) POST /trainer/assign-template returns 403", False,
-                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(8, "M1 (plain member) POST /trainer/assign-template returns 403", False, f"Exception: {str(e)}")
-    
-    # Test 9: As ADMIN, POST /api/trainer/assign-template with valid data -> 200
-    print("\n--- Test 9: Admin POST /trainer/assign-template with valid data -> 200 ---")
-    admin_session = requests.Session()
-    try:
-        # Login as admin
-        r = admin_session.post(f"{BASE_URL}/auth/login",
-                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
-        if r.status_code != 200:
-            log_test(9, "Admin POST /trainer/assign-template with valid data", False,
-                    f"Admin login failed: {r.status_code}. Response: {r.text[:200]}")
-        else:
-            print(f"    ✓ Admin logged in successfully")
-            
-            # POST assign-template
-            template_data = {
-                "clientId": m2_id,
-                "template": {
-                    "name": "Push (Coach)",
-                    "exercises": [
-                        {
-                            "name": "Bench Press",
-                            "cue": "",
-                            "sets": [
-                                {
-                                    "weight": "",
-                                    "reps": "8-12",
-                                    "rpe": ""
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }
-            r = admin_session.post(f"{BASE_URL}/trainer/assign-template", json=template_data)
-            if r.status_code == 200:
-                data = r.json()
-                has_ok = data.get('ok') == True
-                
-                # Check no _id leaks
-                no_id_leak, id_msg = check_no_mongo_id(data, "response")
-                
-                if has_ok and no_id_leak:
-                    log_test(9, "Admin POST /trainer/assign-template with valid data", True,
-                            f"Returns 200 with ok:true. No _id leaks.")
-                else:
-                    log_test(9, "Admin POST /trainer/assign-template with valid data", False,
-                            f"Validation failed. ok={has_ok}, no_id_leak={no_id_leak}. {id_msg}")
-            else:
-                log_test(9, "Admin POST /trainer/assign-template with valid data", False,
-                        f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(9, "Admin POST /trainer/assign-template with valid data", False, f"Exception: {str(e)}")
-    
-    # Test 10: Login as M2, GET /api/client/tracker -> templates includes "Push (Coach)" with coachName
-    print("\n--- Test 10: M2 GET /client/tracker -> verify template with coachName ---")
-    try:
-        r = m2_session.get(f"{BASE_URL}/client/tracker")
-        if r.status_code == 200:
-            data = r.json()
-            templates = data.get('templates', [])
-            
-            # Find the "Push (Coach)" template
-            push_template = None
-            for t in templates:
-                if t.get('name') == 'Push (Coach)':
-                    push_template = t
-                    break
-            
-            if push_template:
-                has_coach_name = 'coachName' in push_template
-                coach_name_value = push_template.get('coachName', '')
-                has_exercises = len(push_template.get('exercises', [])) > 0
-                
-                if has_exercises:
-                    exercise = push_template['exercises'][0]
-                    exercise_name_correct = exercise.get('name') == 'Bench Press'
-                else:
-                    exercise_name_correct = False
-                
-                if has_coach_name and has_exercises and exercise_name_correct:
-                    log_test(10, "M2 GET /client/tracker shows template with coachName", True,
-                            f"Template 'Push (Coach)' found with coachName='{coach_name_value}', exercise='Bench Press'")
-                else:
-                    log_test(10, "M2 GET /client/tracker shows template with coachName", False,
-                            f"Template validation failed. has_coach_name={has_coach_name}, has_exercises={has_exercises}, exercise_name_correct={exercise_name_correct}. Template: {push_template}")
-            else:
-                log_test(10, "M2 GET /client/tracker shows template with coachName", False,
-                        f"Template 'Push (Coach)' not found. Templates: {templates}")
-        else:
-            log_test(10, "M2 GET /client/tracker shows template with coachName", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(10, "M2 GET /client/tracker shows template with coachName", False, f"Exception: {str(e)}")
-    
-    # Test 11: As ADMIN, POST /api/trainer/assign-template with missing clientId -> 400
-    print("\n--- Test 11: Admin POST /trainer/assign-template with missing clientId -> 400 ---")
-    try:
-        r = admin_session.post(f"{BASE_URL}/trainer/assign-template",
-                              json={"template": {"name": "Test", "exercises": []}})
-        if r.status_code == 400:
-            log_test(11, "Admin POST with missing clientId returns 400", True,
-                    f"Correctly returns 400. Response: {r.json()}")
-        else:
-            log_test(11, "Admin POST with missing clientId returns 400", False,
-                    f"Expected 400, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(11, "Admin POST with missing clientId returns 400", False, f"Exception: {str(e)}")
-    
-    # Test 12: As ADMIN, POST with clientId that does not exist -> 404
-    print("\n--- Test 12: Admin POST /trainer/assign-template with nonexistent clientId -> 404 ---")
-    try:
-        r = admin_session.post(f"{BASE_URL}/trainer/assign-template",
-                              json={"clientId": "nonexistent123", "template": {"name": "Test", "exercises": []}})
-        if r.status_code == 404:
-            log_test(12, "Admin POST with nonexistent clientId returns 404", True,
-                    f"Correctly returns 404. Response: {r.json()}")
-        else:
-            log_test(12, "Admin POST with nonexistent clientId returns 404", False,
-                    f"Expected 404, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(12, "Admin POST with nonexistent clientId returns 404", False, f"Exception: {str(e)}")
+def create_test_png():
+    """Create a small valid PNG image in memory (1x1 pixel red)."""
+    img = Image.new('RGB', (1, 1), color='red')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return buf.getvalue()
 
 def main():
-    """Main test runner"""
+    print("=" * 80)
+    print("R2 STORAGE BACKEND TEST")
+    print("=" * 80)
+    print(f"Base URL: {BASE_URL}")
+    print(f"API Base: {API_BASE}\n")
+    
+    session = requests.Session()
+    
+    # ========== TEST 1: POST /api/uploads/file WITHOUT auth -> 401 ==========
+    print("\n[TEST 1] POST /api/uploads/file WITHOUT auth cookie -> expect 401")
     try:
-        # Test (A) WORKOUT TRACKER CLOUD SYNC
-        m1_session, m1_id = test_workout_tracker_cloud_sync()
-        
-        # Test (B) COACH ASSIGN TEMPLATE
-        test_coach_assign_template(m1_session, m1_id)
-        
-        print("\n" + "="*80)
-        print("TEST SUMMARY")
-        print("="*80)
-        print(f"Total tests: {total_tests}")
-        print(f"Passed: {passed_tests}")
-        print(f"Failed: {total_tests - passed_tests}")
-        print(f"Success rate: {(passed_tests/total_tests*100):.1f}%")
-        
-        # Check for 500 errors
-        has_500_errors = any("500" in str(result.get('details', '')) for result in test_results)
-        if not has_500_errors:
-            print("\n✅ No 500 errors encountered in any test")
+        png_bytes = create_test_png()
+        files = {'file': ('test.png', png_bytes, 'image/png')}
+        resp = requests.post(f"{API_BASE}/uploads/file", files=files)
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        if resp.status_code == 401:
+            print("  ✅ PASSED: Correctly returns 401 without auth")
         else:
-            print("\n❌ 500 errors were encountered")
-        
-        # Check for _id leaks
-        print("✅ No MongoDB _id leaks detected (checked in all relevant tests)")
-        
-        print("="*80 + "\n")
-        
-        # Exit with appropriate code
-        sys.exit(0 if passed_tests == total_tests else 1)
-        
+            print(f"  ❌ FAILED: Expected 401, got {resp.status_code}")
     except Exception as e:
-        print(f"\n❌ FATAL ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 2: POST /api/forum/upload WITHOUT auth -> 401 ==========
+    print("\n[TEST 2] POST /api/forum/upload WITHOUT auth cookie -> expect 401")
+    try:
+        png_bytes = create_test_png()
+        files = {'file': ('test.png', png_bytes, 'image/png')}
+        resp = requests.post(f"{API_BASE}/forum/upload", files=files)
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        if resp.status_code == 401:
+            print("  ✅ PASSED: Correctly returns 401 without auth")
+        else:
+            print(f"  ❌ FAILED: Expected 401, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== LOGIN AS ADMIN ==========
+    print("\n[SETUP] Login as admin to get auth cookie")
+    try:
+        login_resp = session.post(
+            f"{API_BASE}/auth/login",
+            json={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD}
+        )
+        print(f"  Login status: {login_resp.status_code}")
+        if login_resp.status_code == 200:
+            print(f"  ✅ Admin logged in successfully")
+            print(f"  Cookies: {session.cookies.get_dict()}")
+        else:
+            print(f"  ❌ Login failed: {login_resp.text[:200]}")
+            return
+    except Exception as e:
+        print(f"  ❌ Login exception: {e}")
+        return
+    
+    # ========== TEST 3: GENERIC UPLOAD -> R2 (POST /api/uploads/file with PNG) ==========
+    print("\n[TEST 3] POST /api/uploads/file as authenticated admin with PNG -> expect 200")
+    try:
+        png_bytes = create_test_png()
+        files = {'file': ('test.png', png_bytes, 'image/png')}
+        resp = session.post(f"{API_BASE}/uploads/file", files=files)
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:500]}")
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'url' in data and 'name' in data and 'size' in data and 'mime' in data:
+                url = data['url']
+                print(f"  ✅ PASSED: Returns 200 with url={url}, name={data['name']}, size={data['size']}, mime={data['mime']}")
+                
+                # Verify URL format
+                if url.startswith('/api/files/uploads/') and url.endswith('.png'):
+                    print(f"  ✅ URL format correct: starts with /api/files/uploads/ and ends with .png")
+                else:
+                    print(f"  ❌ URL format incorrect: {url}")
+                
+                # ========== TEST 3b: GET the uploaded file -> expect 200 with image bytes ==========
+                print(f"\n[TEST 3b] GET {url} -> expect 200 with image/png and non-empty bytes")
+                try:
+                    # Construct full URL (url already starts with /api)
+                    full_url = f"{BASE_URL}{url}"
+                    get_resp = requests.get(full_url)
+                    print(f"  Status: {get_resp.status_code}")
+                    print(f"  Content-Type: {get_resp.headers.get('Content-Type')}")
+                    print(f"  Content-Length: {len(get_resp.content)} bytes")
+                    
+                    if get_resp.status_code == 200:
+                        if get_resp.headers.get('Content-Type') == 'image/png':
+                            if len(get_resp.content) > 0:
+                                # Verify it's a valid PNG (starts with PNG signature)
+                                if get_resp.content[:8] == b'\x89PNG\r\n\x1a\n':
+                                    print(f"  ✅ PASSED: Returns 200 with image/png, {len(get_resp.content)} bytes, valid PNG signature")
+                                else:
+                                    print(f"  ⚠️  WARNING: Content doesn't start with PNG signature")
+                                    print(f"  First 16 bytes: {get_resp.content[:16]}")
+                            else:
+                                print(f"  ❌ FAILED: Empty response body")
+                        else:
+                            print(f"  ❌ FAILED: Wrong Content-Type: {get_resp.headers.get('Content-Type')}")
+                    else:
+                        print(f"  ❌ FAILED: Expected 200, got {get_resp.status_code}")
+                        print(f"  Response: {get_resp.text[:200]}")
+                except Exception as e:
+                    print(f"  ❌ FAILED: Exception during GET: {e}")
+            else:
+                print(f"  ❌ FAILED: Missing required fields in response")
+        else:
+            print(f"  ❌ FAILED: Expected 200, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 4: FORUM UPLOAD -> R2 (POST /api/forum/upload with PNG) ==========
+    print("\n[TEST 4] POST /api/forum/upload as authenticated admin with PNG -> expect 200")
+    try:
+        png_bytes = create_test_png()
+        files = {'file': ('forum.png', png_bytes, 'image/png')}
+        resp = session.post(f"{API_BASE}/forum/upload", files=files)
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:500]}")
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'url' in data and 'type' in data:
+                url = data['url']
+                file_type = data['type']
+                print(f"  ✅ PASSED: Returns 200 with url={url}, type={file_type}")
+                
+                # Verify URL format and type
+                if url.startswith('/api/files/uploads/') and url.endswith('.png'):
+                    print(f"  ✅ URL format correct: starts with /api/files/uploads/ and ends with .png")
+                else:
+                    print(f"  ❌ URL format incorrect: {url}")
+                
+                if file_type == 'image':
+                    print(f"  ✅ Type correct: 'image'")
+                else:
+                    print(f"  ❌ Type incorrect: expected 'image', got '{file_type}'")
+                
+                # ========== TEST 4b: GET the uploaded file -> expect 200 with image bytes ==========
+                print(f"\n[TEST 4b] GET {url} -> expect 200 with image bytes")
+                try:
+                    full_url = f"{BASE_URL}{url}"
+                    get_resp = requests.get(full_url)
+                    print(f"  Status: {get_resp.status_code}")
+                    print(f"  Content-Type: {get_resp.headers.get('Content-Type')}")
+                    print(f"  Content-Length: {len(get_resp.content)} bytes")
+                    
+                    if get_resp.status_code == 200:
+                        if len(get_resp.content) > 0:
+                            print(f"  ✅ PASSED: Returns 200 with {len(get_resp.content)} bytes")
+                        else:
+                            print(f"  ❌ FAILED: Empty response body")
+                    else:
+                        print(f"  ❌ FAILED: Expected 200, got {get_resp.status_code}")
+                except Exception as e:
+                    print(f"  ❌ FAILED: Exception during GET: {e}")
+            else:
+                print(f"  ❌ FAILED: Missing required fields in response")
+        else:
+            print(f"  ❌ FAILED: Expected 200, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 5: EXTENSION ALLOWLIST - POST /api/uploads/file with .html -> 400 ==========
+    print("\n[TEST 5] POST /api/uploads/file with .html file -> expect 400 (rejected)")
+    try:
+        html_content = b'<script>alert(1)</script>'
+        files = {'file': ('evil.html', html_content, 'text/html')}
+        resp = session.post(f"{API_BASE}/uploads/file", files=files)
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        
+        if resp.status_code == 400:
+            print(f"  ✅ PASSED: Correctly rejects .html file with 400")
+        else:
+            print(f"  ❌ FAILED: Expected 400, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 6: FORUM UPLOAD with non-image/video (text/plain .txt) -> 400 ==========
+    print("\n[TEST 6] POST /api/forum/upload with text/plain .txt -> expect 400 (rejected)")
+    try:
+        txt_content = b'This is a text file'
+        files = {'file': ('test.txt', txt_content, 'text/plain')}
+        resp = session.post(f"{API_BASE}/forum/upload", files=files)
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        
+        if resp.status_code == 400:
+            print(f"  ✅ PASSED: Correctly rejects text/plain file with 400")
+        else:
+            print(f"  ❌ FAILED: Expected 400, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 7: PROXY KEY VALIDATION - GET non-existent file -> 404 ==========
+    print("\n[TEST 7] GET /api/files/uploads/does-not-exist-random123.png -> expect 404")
+    try:
+        resp = requests.get(f"{BASE_URL}/api/files/uploads/does-not-exist-random123.png")
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        
+        if resp.status_code == 404:
+            print(f"  ✅ PASSED: Correctly returns 404 for non-existent file")
+        else:
+            print(f"  ❌ FAILED: Expected 404, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 8: PROXY KEY VALIDATION - GET key not starting with uploads/ -> 400 ==========
+    print("\n[TEST 8] GET /api/files/somethingelse/x.png (key not starting with uploads/) -> expect 400")
+    try:
+        resp = requests.get(f"{BASE_URL}/api/files/somethingelse/x.png")
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        
+        if resp.status_code == 400:
+            print(f"  ✅ PASSED: Correctly returns 400 for invalid key")
+        else:
+            print(f"  ❌ FAILED: Expected 400, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 9: PROXY KEY VALIDATION - GET with path traversal -> 400 ==========
+    print("\n[TEST 9] GET /api/files/uploads/..%2f..%2fetc (path traversal attempt) -> expect 400")
+    try:
+        resp = requests.get(f"{BASE_URL}/api/files/uploads/..%2f..%2fetc")
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text[:200]}")
+        
+        if resp.status_code == 400:
+            print(f"  ✅ PASSED: Correctly returns 400 for path traversal attempt")
+        else:
+            print(f"  ❌ FAILED: Expected 400, got {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    # ========== TEST 10: Check for MongoDB _id leaks ==========
+    print("\n[TEST 10] Verify no MongoDB _id leaks in responses")
+    try:
+        png_bytes = create_test_png()
+        files = {'file': ('leak-test.png', png_bytes, 'image/png')}
+        resp = session.post(f"{API_BASE}/uploads/file", files=files)
+        
+        if resp.status_code == 200:
+            response_text = resp.text
+            if '_id' in response_text:
+                print(f"  ❌ FAILED: Found '_id' in response: {response_text[:200]}")
+            else:
+                print(f"  ✅ PASSED: No '_id' found in response")
+        else:
+            print(f"  ⚠️  SKIPPED: Upload failed with status {resp.status_code}")
+    except Exception as e:
+        print(f"  ❌ FAILED: Exception: {e}")
+    
+    print("\n" + "=" * 80)
+    print("R2 STORAGE BACKEND TEST COMPLETE")
+    print("=" * 80)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
