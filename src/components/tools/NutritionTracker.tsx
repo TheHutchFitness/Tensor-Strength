@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Food = { name: string; cuisine: string; cal: number; p: number; c: number; f: number; diets: string[] };
+type Food = { name: string; cuisine: string; cal: number; p: number; c: number; f: number; diets: string[]; perItem?: boolean; serving?: string };
 type Entry = { id: string; name: string; label: string; cal: number; p: number; c: number; f: number };
 type Meal = "breakfast" | "lunch" | "dinner" | "snacks";
 type DayLog = Record<Meal, Entry[]>;
@@ -21,7 +21,25 @@ const MEALS: { id: Meal; label: string }[] = [
 ];
 
 const DIETS = ["balanced", "vegetarian", "vegan", "keto", "carnivore"];
-const CUISINES = ["all", "general", "american", "indian", "mexican", "chinese", "takeout"];
+
+// Common supplements & vitamins with a typical dose / daily-value note.
+const COMMON_SUPPS: { name: string; info: string }[] = [
+  { name: "Multivitamin", info: "1 tablet · ~100% DV" },
+  { name: "Vitamin D3", info: "1000–2000 IU · 100%+ DV" },
+  { name: "Vitamin C", info: "500–1000 mg · 100%+ DV" },
+  { name: "Vitamin B12", info: "500–1000 mcg" },
+  { name: "B-Complex", info: "1 capsule" },
+  { name: "Fish Oil (Omega-3)", info: "1–2 g EPA/DHA" },
+  { name: "Magnesium", info: "200–400 mg" },
+  { name: "Zinc", info: "15–30 mg" },
+  { name: "Calcium", info: "500–1000 mg" },
+  { name: "Iron", info: "18 mg · 100% DV" },
+  { name: "Creatine", info: "5 g daily" },
+  { name: "Probiotic", info: "1 capsule" },
+  { name: "Vitamin K2", info: "100 mcg" },
+  { name: "Ashwagandha", info: "300–600 mg" },
+];
+const CUISINES = ["all", "general", "american", "indian", "mexican", "chinese", "takeout", "mcdonalds", "timhortons", "brands"];
 
 // Macros are per 100 g / 100 ml.
 const FOODS: Food[] = [
@@ -105,6 +123,90 @@ const FOODS: Food[] = [
   { name: "Doner Kebab", cuisine: "takeout", cal: 215, p: 15, c: 10, f: 12, diets: ["keto"] },
   { name: "Fish & Chips", cuisine: "takeout", cal: 280, p: 12, c: 28, f: 14, diets: [] },
   { name: "Burrito Bowl", cuisine: "takeout", cal: 170, p: 10, c: 18, f: 6, diets: [] },
+
+  // ===== McDONALD'S (per item) =====
+  { name: "McD Big Mac", cuisine: "mcdonalds", cal: 550, p: 25, c: 45, f: 30, diets: [], perItem: true, serving: "1 burger" },
+  { name: "McD Quarter Pounder w/ Cheese", cuisine: "mcdonalds", cal: 520, p: 30, c: 42, f: 26, diets: [], perItem: true, serving: "1 burger" },
+  { name: "McD Double Quarter Pounder", cuisine: "mcdonalds", cal: 740, p: 48, c: 43, f: 42, diets: [], perItem: true, serving: "1 burger" },
+  { name: "McD Cheeseburger", cuisine: "mcdonalds", cal: 300, p: 15, c: 32, f: 13, diets: [], perItem: true, serving: "1 burger" },
+  { name: "McD Double Cheeseburger", cuisine: "mcdonalds", cal: 450, p: 25, c: 34, f: 24, diets: [], perItem: true, serving: "1 burger" },
+  { name: "McD Hamburger", cuisine: "mcdonalds", cal: 250, p: 12, c: 31, f: 9, diets: [], perItem: true, serving: "1 burger" },
+  { name: "McD McChicken", cuisine: "mcdonalds", cal: 400, p: 14, c: 39, f: 21, diets: [], perItem: true, serving: "1 sandwich" },
+  { name: "McD McCrispy Chicken", cuisine: "mcdonalds", cal: 470, p: 27, c: 46, f: 20, diets: [], perItem: true, serving: "1 sandwich" },
+  { name: "McD Filet-O-Fish", cuisine: "mcdonalds", cal: 390, p: 16, c: 39, f: 19, diets: [], perItem: true, serving: "1 sandwich" },
+  { name: "McD 10 pc Chicken McNuggets", cuisine: "mcdonalds", cal: 410, p: 23, c: 26, f: 24, diets: [], perItem: true, serving: "10 pc" },
+  { name: "McD 6 pc Chicken McNuggets", cuisine: "mcdonalds", cal: 250, p: 14, c: 16, f: 15, diets: [], perItem: true, serving: "6 pc" },
+  { name: "McD Fries (Medium)", cuisine: "mcdonalds", cal: 320, p: 4, c: 43, f: 15, diets: ["vegetarian", "vegan"], perItem: true, serving: "medium" },
+  { name: "McD Fries (Large)", cuisine: "mcdonalds", cal: 480, p: 6, c: 65, f: 23, diets: ["vegetarian", "vegan"], perItem: true, serving: "large" },
+  { name: "McD Egg McMuffin", cuisine: "mcdonalds", cal: 310, p: 17, c: 30, f: 13, diets: ["vegetarian"], perItem: true, serving: "1 muffin" },
+  { name: "McD Sausage McMuffin w/ Egg", cuisine: "mcdonalds", cal: 480, p: 20, c: 30, f: 31, diets: [], perItem: true, serving: "1 muffin" },
+  { name: "McD Hotcakes", cuisine: "mcdonalds", cal: 580, p: 9, c: 101, f: 15, diets: ["vegetarian"], perItem: true, serving: "3 cakes" },
+  { name: "McD Hash Brown", cuisine: "mcdonalds", cal: 140, p: 1, c: 15, f: 8, diets: ["vegetarian", "vegan"], perItem: true, serving: "1 piece" },
+  { name: "McD Sausage Burrito", cuisine: "mcdonalds", cal: 310, p: 12, c: 26, f: 17, diets: [], perItem: true, serving: "1 burrito" },
+  { name: "McD McFlurry Oreo", cuisine: "mcdonalds", cal: 510, p: 12, c: 80, f: 16, diets: ["vegetarian"], perItem: true, serving: "regular" },
+  { name: "McD Vanilla Cone", cuisine: "mcdonalds", cal: 200, p: 5, c: 32, f: 5, diets: ["vegetarian"], perItem: true, serving: "1 cone" },
+  { name: "McD Apple Pie", cuisine: "mcdonalds", cal: 230, p: 2, c: 33, f: 11, diets: ["vegetarian"], perItem: true, serving: "1 pie" },
+  { name: "McD Coca-Cola (Medium)", cuisine: "mcdonalds", cal: 210, p: 0, c: 58, f: 0, diets: ["vegan", "vegetarian"], perItem: true, serving: "medium" },
+  { name: "McD Iced Coffee", cuisine: "mcdonalds", cal: 140, p: 2, c: 24, f: 4, diets: ["vegetarian"], perItem: true, serving: "medium" },
+  { name: "McD McCafé Latte", cuisine: "mcdonalds", cal: 190, p: 9, c: 18, f: 9, diets: ["vegetarian"], perItem: true, serving: "medium" },
+
+  // ===== TIM HORTONS (per item) =====
+  { name: "Tim Coffee (Double-Double, M)", cuisine: "timhortons", cal: 160, p: 4, c: 22, f: 6, diets: ["vegetarian"], perItem: true, serving: "medium" },
+  { name: "Tim Coffee (Black)", cuisine: "timhortons", cal: 5, p: 0, c: 1, f: 0, diets: ["vegan", "vegetarian"], perItem: true, serving: "medium" },
+  { name: "Tim French Vanilla", cuisine: "timhortons", cal: 250, p: 3, c: 40, f: 8, diets: ["vegetarian"], perItem: true, serving: "medium" },
+  { name: "Tim Iced Capp", cuisine: "timhortons", cal: 300, p: 4, c: 46, f: 11, diets: ["vegetarian"], perItem: true, serving: "medium" },
+  { name: "Tim Latte", cuisine: "timhortons", cal: 180, p: 9, c: 17, f: 8, diets: ["vegetarian"], perItem: true, serving: "medium" },
+  { name: "Tim Boston Cream Donut", cuisine: "timhortons", cal: 250, p: 4, c: 35, f: 10, diets: ["vegetarian"], perItem: true, serving: "1 donut" },
+  { name: "Tim Honey Dip Donut", cuisine: "timhortons", cal: 210, p: 4, c: 33, f: 8, diets: ["vegetarian"], perItem: true, serving: "1 donut" },
+  { name: "Tim Chocolate Dip Donut", cuisine: "timhortons", cal: 230, p: 4, c: 34, f: 9, diets: ["vegetarian"], perItem: true, serving: "1 donut" },
+  { name: "Tim Apple Fritter", cuisine: "timhortons", cal: 300, p: 5, c: 49, f: 10, diets: ["vegetarian"], perItem: true, serving: "1 fritter" },
+  { name: "Tim Timbits (10)", cuisine: "timhortons", cal: 660, p: 8, c: 90, f: 30, diets: ["vegetarian"], perItem: true, serving: "10 timbits" },
+  { name: "Tim Plain Bagel", cuisine: "timhortons", cal: 280, p: 10, c: 56, f: 2, diets: ["vegan", "vegetarian"], perItem: true, serving: "1 bagel" },
+  { name: "Tim Bagel B.E.L.T.", cuisine: "timhortons", cal: 450, p: 20, c: 58, f: 16, diets: [], perItem: true, serving: "1 bagel" },
+  { name: "Tim Bacon Farmer's Wrap", cuisine: "timhortons", cal: 480, p: 18, c: 48, f: 24, diets: [], perItem: true, serving: "1 wrap" },
+  { name: "Tim Sausage Farmer's Wrap", cuisine: "timhortons", cal: 610, p: 20, c: 49, f: 37, diets: [], perItem: true, serving: "1 wrap" },
+  { name: "Tim Chicken Wrap Snacker", cuisine: "timhortons", cal: 280, p: 12, c: 30, f: 12, diets: [], perItem: true, serving: "1 wrap" },
+  { name: "Tim Turkey Bacon Club", cuisine: "timhortons", cal: 470, p: 30, c: 52, f: 15, diets: [], perItem: true, serving: "1 sandwich" },
+  { name: "Tim Chili (Medium)", cuisine: "timhortons", cal: 280, p: 22, c: 24, f: 11, diets: [], perItem: true, serving: "medium" },
+  { name: "Tim Chicken Noodle Soup", cuisine: "timhortons", cal: 110, p: 6, c: 18, f: 2, diets: [], perItem: true, serving: "medium" },
+  { name: "Tim Blueberry Muffin", cuisine: "timhortons", cal: 360, p: 6, c: 55, f: 13, diets: ["vegetarian"], perItem: true, serving: "1 muffin" },
+  { name: "Tim Chocolate Chip Muffin", cuisine: "timhortons", cal: 430, p: 6, c: 62, f: 18, diets: ["vegetarian"], perItem: true, serving: "1 muffin" },
+
+  // ===== CEREALS (per bowl ~1 cup) =====
+  { name: "Cheerios (1 cup)", cuisine: "brands", cal: 140, p: 5, c: 29, f: 3, diets: ["vegetarian"], perItem: true, serving: "1 cup" },
+  { name: "Frosted Flakes (1 cup)", cuisine: "brands", cal: 130, p: 2, c: 32, f: 0, diets: ["vegetarian", "vegan"], perItem: true, serving: "1 cup" },
+  { name: "Special K (1 cup)", cuisine: "brands", cal: 120, p: 6, c: 27, f: 1, diets: ["vegetarian"], perItem: true, serving: "1 cup" },
+  { name: "Raisin Bran (1 cup)", cuisine: "brands", cal: 190, p: 5, c: 46, f: 1.5, diets: ["vegetarian", "vegan"], perItem: true, serving: "1 cup" },
+  { name: "Froot Loops (1 cup)", cuisine: "brands", cal: 150, p: 2, c: 34, f: 1.5, diets: ["vegetarian", "vegan"], perItem: true, serving: "1 cup" },
+  { name: "Corn Flakes (1 cup)", cuisine: "brands", cal: 100, p: 2, c: 24, f: 0, diets: ["vegetarian", "vegan"], perItem: true, serving: "1 cup" },
+  { name: "Granola (1/2 cup)", cuisine: "brands", cal: 230, p: 5, c: 37, f: 8, diets: ["vegetarian", "vegan"], perItem: true, serving: "1/2 cup" },
+  { name: "Oatmeal (1 packet)", cuisine: "brands", cal: 150, p: 4, c: 27, f: 3, diets: ["vegetarian", "vegan"], perItem: true, serving: "1 packet" },
+
+  // ===== MILK (per cup ~250 ml) =====
+  { name: "Whole Milk (1 cup)", cuisine: "brands", cal: 150, p: 8, c: 12, f: 8, diets: ["vegetarian"], perItem: true, serving: "1 cup" },
+  { name: "2% Milk (1 cup)", cuisine: "brands", cal: 120, p: 8, c: 12, f: 5, diets: ["vegetarian"], perItem: true, serving: "1 cup" },
+  { name: "Skim Milk (1 cup)", cuisine: "brands", cal: 80, p: 8, c: 12, f: 0, diets: ["vegetarian"], perItem: true, serving: "1 cup" },
+  { name: "Almond Milk unsw. (1 cup)", cuisine: "brands", cal: 30, p: 1, c: 1, f: 2.5, diets: ["vegan", "vegetarian", "keto"], perItem: true, serving: "1 cup" },
+  { name: "Oat Milk (1 cup)", cuisine: "brands", cal: 120, p: 3, c: 16, f: 5, diets: ["vegan", "vegetarian"], perItem: true, serving: "1 cup" },
+  { name: "Soy Milk (1 cup)", cuisine: "brands", cal: 100, p: 7, c: 8, f: 4, diets: ["vegan", "vegetarian"], perItem: true, serving: "1 cup" },
+
+  // ===== ENERGY DRINKS (per can) =====
+  { name: "Red Bull (250ml)", cuisine: "brands", cal: 110, p: 1, c: 28, f: 0, diets: ["vegetarian"], perItem: true, serving: "1 can" },
+  { name: "Red Bull Sugarfree", cuisine: "brands", cal: 5, p: 0, c: 1, f: 0, diets: ["vegan", "vegetarian", "keto"], perItem: true, serving: "1 can" },
+  { name: "Monster Energy (473ml)", cuisine: "brands", cal: 210, p: 0, c: 54, f: 0, diets: ["vegan", "vegetarian"], perItem: true, serving: "1 can" },
+  { name: "Monster Zero Ultra", cuisine: "brands", cal: 10, p: 0, c: 2, f: 0, diets: ["vegan", "vegetarian", "keto"], perItem: true, serving: "1 can" },
+  { name: "Celsius", cuisine: "brands", cal: 10, p: 0, c: 2, f: 0, diets: ["vegan", "vegetarian", "keto"], perItem: true, serving: "1 can" },
+  { name: "Rockstar Energy", cuisine: "brands", cal: 250, p: 0, c: 63, f: 0, diets: ["vegan", "vegetarian"], perItem: true, serving: "1 can" },
+  { name: "Prime Energy", cuisine: "brands", cal: 20, p: 0, c: 5, f: 0, diets: ["vegan", "vegetarian", "keto"], perItem: true, serving: "1 can" },
+  { name: "Bang Energy", cuisine: "brands", cal: 0, p: 0, c: 0, f: 0, diets: ["vegan", "vegetarian", "keto"], perItem: true, serving: "1 can" },
+
+  // ===== PROTEIN POWDERS (per scoop) =====
+  { name: "Whey Isolate (1 scoop)", cuisine: "brands", cal: 120, p: 25, c: 3, f: 1, diets: ["vegetarian", "keto"], perItem: true, serving: "1 scoop" },
+  { name: "Whey Concentrate (1 scoop)", cuisine: "brands", cal: 150, p: 24, c: 5, f: 3, diets: ["vegetarian"], perItem: true, serving: "1 scoop" },
+  { name: "Casein (1 scoop)", cuisine: "brands", cal: 120, p: 24, c: 4, f: 1, diets: ["vegetarian"], perItem: true, serving: "1 scoop" },
+  { name: "Vegan Pea Protein (1 scoop)", cuisine: "brands", cal: 120, p: 24, c: 4, f: 2, diets: ["vegan", "vegetarian"], perItem: true, serving: "1 scoop" },
+  { name: "Mass Gainer (1 scoop)", cuisine: "brands", cal: 380, p: 30, c: 60, f: 4, diets: ["vegetarian"], perItem: true, serving: "1 scoop" },
+  { name: "Clear Whey (1 scoop)", cuisine: "brands", cal: 90, p: 20, c: 1, f: 0, diets: ["vegetarian", "keto"], perItem: true, serving: "1 scoop" },
 ];
 
 function uid() {
@@ -138,6 +240,9 @@ export default function NutritionTracker() {
   const [search, setSearch] = useState("");
   const [cuisine, setCuisine] = useState("all");
   const [manual, setManual] = useState({ name: "", cal: "", p: "", c: "", f: "" });
+  const [supps, setSupps] = useState<Record<string, string[]>>({});
+  const [customSupps, setCustomSupps] = useState<string[]>([]);
+  const [newSupp, setNewSupp] = useState("");
 
   useEffect(() => {
     try {
@@ -147,6 +252,10 @@ export default function NutritionTracker() {
       if (g) { const p = JSON.parse(g); setGoal(p); setGoalDraft(p); }
       const d = localStorage.getItem(DIET_KEY);
       if (d) setDiet(d);
+      const s = localStorage.getItem("ts-supp-log");
+      if (s) setSupps(JSON.parse(s));
+      const cs = localStorage.getItem("ts-supp-custom");
+      if (cs) setCustomSupps(JSON.parse(cs));
     } catch {}
   }, []);
 
@@ -170,6 +279,19 @@ export default function NutritionTracker() {
   }
 
   function addFoodToMeal(meal: Meal, food: Food) {
+    // Branded / menu items are logged as one whole serving (not scaled by grams).
+    if (food.perItem) {
+      addEntry(meal, {
+        id: uid(),
+        name: food.name,
+        label: food.serving || "1 serving",
+        cal: food.cal,
+        p: food.p,
+        c: food.c,
+        f: food.f,
+      });
+      return;
+    }
     const amt = parseFloat(amount) || 0;
     if (amt <= 0) return;
     const factor = gramsOf(amt, unit) / 100;
@@ -207,6 +329,29 @@ export default function NutritionTracker() {
   function changeDiet(d: string) {
     setDiet(d);
     localStorage.setItem(DIET_KEY, d);
+  }
+
+  const takenToday = supps[key] || [];
+  function toggleSupp(name: string) {
+    const current = supps[key] || [];
+    const next = {
+      ...supps,
+      [key]: current.includes(name) ? current.filter((x) => x !== name) : [...current, name],
+    };
+    setSupps(next);
+    localStorage.setItem("ts-supp-log", JSON.stringify(next));
+  }
+  function addCustomSupp() {
+    const n = newSupp.trim();
+    if (!n || customSupps.includes(n) || COMMON_SUPPS.some((s) => s.name === n)) {
+      setNewSupp("");
+      return;
+    }
+    const next = [...customSupps, n];
+    setCustomSupps(next);
+    localStorage.setItem("ts-supp-custom", JSON.stringify(next));
+    toggleSupp(n);
+    setNewSupp("");
   }
 
   const totals = useMemo(() => {
@@ -378,7 +523,7 @@ export default function NutritionTracker() {
                   ) : (
                     foodList.map((f) => (
                       <button key={f.name} onClick={() => addFoodToMeal(meal.id, f)} className="text-xs border border-bone/20 text-bone/70 px-2.5 py-1.5 hover:border-electric hover:text-electric transition-colors">
-                        {f.name} <span className="text-bone/40">· {f.cal}/100g</span>
+                        {f.name} <span className="text-bone/40">· {f.cal}{f.perItem ? " cal" : "/100g"}</span>
                       </button>
                     ))
                   )}
@@ -405,6 +550,57 @@ export default function NutritionTracker() {
       <p className="text-[10px] uppercase tracking-wider text-bone/40">
         Food macros are per 100g/ml and scale to your chosen amount. Your log saves on this device. Set targets with the Macro Calculator.
       </p>
+
+      {/* Supplements & vitamins */}
+      <div className="border border-bone/15 bg-ink/20 p-5">
+        <div className="flex items-center justify-between mb-1">
+          <p className="font-display uppercase tracking-wider text-electric text-sm">
+            Supplements &amp; Vitamins
+          </p>
+          <span className="text-[10px] uppercase tracking-wider text-bone/40">
+            {takenToday.length} taken {isToday ? "today" : "this day"}
+          </span>
+        </div>
+        <p className="text-bone/60 text-xs mb-4 leading-relaxed">
+          Tap what you took to check it off for the selected day. Daily values are general guidance — follow your own plan.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {[...COMMON_SUPPS, ...customSupps.map((n) => ({ name: n, info: "custom" }))].map((s) => {
+            const on = takenToday.includes(s.name);
+            return (
+              <button
+                key={s.name}
+                onClick={() => toggleSupp(s.name)}
+                title={s.info}
+                className={
+                  "px-3 py-2 text-xs font-display uppercase tracking-wider transition-colors border " +
+                  (on
+                    ? "bg-electric text-ink border-electric"
+                    : "text-bone/70 border-bone/20 hover:border-electric hover:text-electric")
+                }
+              >
+                {on ? "✓ " : ""}{s.name}
+                <span className={"ml-1 " + (on ? "text-ink/60" : "text-bone/40")}>· {s.info}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4 flex items-center gap-2 max-w-sm">
+          <input
+            value={newSupp}
+            onChange={(e) => setNewSupp(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addCustomSupp(); }}
+            placeholder="Add a custom supplement…"
+            className={inputCls}
+          />
+          <button
+            onClick={addCustomSupp}
+            className="shrink-0 bg-electric text-ink px-4 py-1.5 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors"
+          >
+            Add
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
