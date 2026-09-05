@@ -1332,6 +1332,44 @@ export const exercises: Exercise[] = [
     categories: ["STRETCH"],
     description: "Pin a lacrosse ball into the pec and move the arm — chest tissue release.",
   },
+
+  // ===== ADDED: extra strength / accessory movements =====
+  { id: "ch9", name: "Cable Fly", muscle: "CHEST", categories: ["CALISTHENICS"], description: "Constant-tension chest isolation. Keep a soft elbow and squeeze the pecs at the midline." },
+  { id: "ch10", name: "Machine Chest Press", muscle: "CHEST", categories: ["CALISTHENICS"], description: "Beginner-friendly pressing with a fixed path — great for controlled hypertrophy and burnouts." },
+  { id: "ch11", name: "Svend Press", muscle: "CHEST", categories: ["CALISTHENICS"], description: "Press two plates together and push straight out — pure inner-chest contraction." },
+  { id: "bk9", name: "Chest-Supported Row", muscle: "BACK", categories: ["CALISTHENICS"], description: "Row with your chest on an incline pad to remove momentum and hammer the mid-back." },
+  { id: "bk10", name: "Straight-Arm Pulldown", muscle: "BACK", categories: ["CALISTHENICS"], description: "Lat isolation with locked elbows — drive the bar to your thighs feeling the lats stretch and shorten." },
+  { id: "bk11", name: "Meadows Row", muscle: "BACK", categories: ["STRONGMAN"], description: "Landmine single-arm row from a staggered stance for a big unilateral lat/upper-back stretch." },
+  { id: "sh9", name: "Cable Lateral Raise", muscle: "SHOULDERS", categories: ["CALISTHENICS"], description: "Side-delt isolation with constant cable tension through the full range." },
+  { id: "sh10", name: "Face Pull", muscle: "SHOULDERS", categories: ["CALISTHENICS"], description: "Pull a rope to your forehead with high elbows — rear delts and healthy shoulders." },
+  { id: "sh11", name: "Z Press", muscle: "SHOULDERS", categories: ["STRONGMAN"], description: "Seated-on-floor overhead press with no back support — brutal core and shoulder stability." },
+  { id: "ar9", name: "Incline Dumbbell Curl", muscle: "ARMS", categories: ["CALISTHENICS"], description: "Curl with arms behind the torso for a deep biceps stretch and long-head emphasis." },
+  { id: "ar10", name: "Overhead Cable Triceps Extension", muscle: "ARMS", categories: ["CALISTHENICS"], description: "Long-head triceps stretch under load — keep elbows tight and fully extend." },
+  { id: "ar11", name: "Hammer Curl", muscle: "ARMS", categories: ["CALISTHENICS"], description: "Neutral-grip curl building the brachialis and forearms for thicker arms." },
+  { id: "lg13", name: "Bulgarian Split Squat", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Rear-foot-elevated single-leg squat — quads, glutes and balance with less spinal load." },
+  { id: "lg14", name: "Walking Lunge", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Step through long lunges for quad/glute hypertrophy and single-leg stability." },
+  { id: "lg15", name: "Seated Leg Curl", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Hamstring isolation — control the eccentric and squeeze hard at full flexion." },
+  { id: "lg16", name: "Nordic Ham Curl", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Bodyweight eccentric hamstring builder — lower slowly and resist all the way down." },
+
+  // ===== ADDED: plyometrics =====
+  { id: "pl10", name: "Box Jump", muscle: "LEGS", categories: ["PLYOMETRIC"], description: "Explode onto a box, landing soft and stable. Builds triple-extension power. Step down each rep." },
+  { id: "pl11", name: "Broad Jump", muscle: "LEGS", categories: ["PLYOMETRIC"], description: "Maximal horizontal jump for distance — arms drive hard and stick the landing." },
+  { id: "pl12", name: "Depth Jump", muscle: "LEGS", categories: ["PLYOMETRIC"], description: "Step off a low box, land and immediately rebound up — trains reactive/elastic strength." },
+  { id: "pl13", name: "Plyo Push-Up", muscle: "CHEST", categories: ["PLYOMETRIC"], description: "Explosive push-up where the hands leave the floor — upper-body power and rate of force." },
+  { id: "pl14", name: "Medicine Ball Slam", muscle: "CORE", categories: ["PLYOMETRIC"], description: "Overhead slam driven by the core and lats — full-body power and conditioning." },
+  { id: "pl15", name: "Medicine Ball Rotational Throw", muscle: "CORE", categories: ["PLYOMETRIC"], description: "Throw the ball sideways into a wall — rotational power for athletes and lifters." },
+  { id: "pl16", name: "Tuck Jump", muscle: "LEGS", categories: ["PLYOMETRIC"], description: "Jump and pull knees to chest, landing soft — quick reactive lower-body power." },
+  { id: "pl17", name: "Lateral Bound", muscle: "LEGS", categories: ["PLYOMETRIC"], description: "Skater-style side-to-side bounds — single-leg power and lateral stability." },
+
+  // ===== ADDED: isometrics (holds) =====
+  { id: "iso1", name: "Plank", muscle: "CORE", categories: ["CALISTHENICS"], description: "Isometric hold: brace hard, glutes tight, straight line from head to heels. Add time weekly." },
+  { id: "iso2", name: "Side Plank", muscle: "CORE", categories: ["CALISTHENICS"], description: "Isometric anti-lateral-flexion hold on one forearm — obliques and lateral core." },
+  { id: "iso3", name: "Wall Sit", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Isometric quad hold at 90 degrees against a wall — burns and builds tendon resilience." },
+  { id: "iso4", name: "Hollow Body Hold", muscle: "CORE", categories: ["CALISTHENICS", "CROSSFIT"], description: "Gymnastics isometric: low back pressed to floor, arms and legs off the ground and locked." },
+  { id: "iso5", name: "Isometric Mid-Thigh Pull", muscle: "BACK", categories: ["STRONGMAN"], description: "Pull maximally against an immovable bar at mid-thigh — pure force production, low fatigue." },
+  { id: "iso6", name: "Bar Hang (Dead Hang)", muscle: "BACK", categories: ["CALISTHENICS"], description: "Isometric grip and shoulder decompression hold — builds grip and healthy shoulders." },
+  { id: "iso7", name: "Copenhagen Plank", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Side-plank with top leg on a bench — powerful adductor and groin isometric." },
+  { id: "iso8", name: "Spanish Squat Hold", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Band-behind-knees isometric squat hold — knee-friendly quad tension and tendon health." },
 ];
 
 export type Split = {

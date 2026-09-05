@@ -440,6 +440,7 @@ async function handleRoute(request, { params }) {
       const withMeta = await Promise.all(
         clients.map(async (c) => {
           const count = await db.collection('checkins').countDocuments({ userId: c.id })
+          const unseen = await db.collection('checkins').countDocuments({ userId: c.id, seenByTrainer: { $ne: true } })
           const latest = await db.collection('checkins')
             .find({ userId: c.id })
             .sort({ createdAt: -1 })
@@ -448,11 +449,26 @@ async function handleRoute(request, { params }) {
           return {
             ...publicUser(c),
             checkinCount: count,
+            unseenCheckins: unseen,
             lastCheckinAt: latest[0]?.createdAt || null,
           }
         })
       )
       return handleCORS(NextResponse.json({ clients: withMeta }))
+    }
+
+    // Total unseen check-ins across this trainer's clients (notification badge).
+    if (route === '/trainer/checkins-unseen' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ count: 0 }))
+      }
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).toArray()
+      const ids = clients.map((c) => c.id)
+      const count = ids.length
+        ? await db.collection('checkins').countDocuments({ userId: { $in: ids }, seenByTrainer: { $ne: true } })
+        : 0
+      return handleCORS(NextResponse.json({ count }))
     }
 
     // Trainer views the check-in history for one of THEIR assigned clients.
@@ -475,11 +491,48 @@ async function handleRoute(request, { params }) {
         .sort({ createdAt: -1 })
         .limit(500)
         .toArray()
+      // Mark this client's check-ins as seen by the trainer (clears the badge).
+      if (user.isTrainer) {
+        await db.collection('checkins').updateMany(
+          { userId: clientId, seenByTrainer: { $ne: true } },
+          { $set: { seenByTrainer: true } }
+        )
+      }
       const clean = checkins.map(({ _id, ...rest }) => rest)
       return handleCORS(NextResponse.json({
-        client: { id: client.id, username: client.username, email: client.email },
+        client: {
+          id: client.id,
+          username: client.username,
+          email: client.email,
+          profile: client.clientProfile || null,
+        },
         checkins: clean,
       }))
+    }
+
+    // Trainer adds/updates a private note on one of their client's check-ins.
+    if (route === '/trainer/checkins' && method === 'PATCH') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      if (!body.checkinId) {
+        return handleCORS(NextResponse.json({ error: 'checkinId is required' }, { status: 400 }))
+      }
+      const ci = await db.collection('checkins').findOne({ id: body.checkinId })
+      if (!ci) return handleCORS(NextResponse.json({ error: 'Check-in not found' }, { status: 404 }))
+      const client = await db.collection('users').findOne({ id: ci.userId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      await db.collection('checkins').updateOne(
+        { id: body.checkinId },
+        { $set: { trainerNote: String(body.note || ''), trainerNoteUpdatedAt: new Date() } }
+      )
+      const updated = await db.collection('checkins').findOne({ id: body.checkinId })
+      const { _id, ...clean } = updated
+      return handleCORS(NextResponse.json({ checkin: clean }))
     }
 
     // ---- Trainer profile: get / save (first-entry onboarding) ----
@@ -632,6 +685,34 @@ async function handleRoute(request, { params }) {
         .sort({ createdAt: -1 })
         .toArray()
       return handleCORS(NextResponse.json({ programs: list.map(({ _id, ...r }) => r) }))
+    }
+
+    // ---- Client "About Me" profile (for trainer use) ----
+    if (route === '/client/profile' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      return handleCORS(NextResponse.json({ profile: user.clientProfile || null }))
+    }
+    if (route === '/client/profile' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const b = await request.json()
+      const clientProfile = {
+        squat: String(b.squat || '').trim(),
+        bench: String(b.bench || '').trim(),
+        deadlift: String(b.deadlift || '').trim(),
+        overheadPress: String(b.overheadPress || '').trim(),
+        diet: String(b.diet || '').trim(),
+        gym: String(b.gym || '').trim(),
+        workoutsPerWeek: String(b.workoutsPerWeek || '').trim(),
+        activityLevel: String(b.activityLevel || '').trim(),
+        restingHeartRate: String(b.restingHeartRate || '').trim(),
+        currentCalories: String(b.currentCalories || '').trim(),
+        notes: String(b.notes || '').trim(),
+        updatedAt: new Date(),
+      }
+      await db.collection('users').updateOne({ id: user.id }, { $set: { clientProfile } })
+      return handleCORS(NextResponse.json({ profile: clientProfile }))
     }
 
     // ---- Client gets their assigned trainer (for messaging UI) ----
@@ -1226,6 +1307,36 @@ async function handleRoute(request, { params }) {
       const REVOKE_STATES = ['canceled', 'unpaid', 'incomplete_expired']
 
       switch (event.type) {
+        case 'checkout.session.completed': {
+          // Robustly grant access on any completed checkout (one-time OR subscription),
+          // even if the buyer never lands on the success page.
+          const u = await findUser(obj)
+          const paid = obj.payment_status === 'paid' || obj.status === 'complete'
+          if (u && paid) {
+            const tx = await db.collection('payment_transactions').findOne({ sessionId: obj.id })
+            const accessType =
+              tx?.accessType || PACKAGES[obj?.metadata?.packageId]?.accessType || 'membership'
+            await db.collection('users').updateOne(
+              { id: u.id },
+              {
+                $set: {
+                  portalAccess: true,
+                  accessType,
+                  portalAccessUpdatedAt: new Date(),
+                  ...(obj.subscription ? { stripeSubscriptionId: obj.subscription } : {}),
+                  ...(obj.customer ? { stripeCustomerId: obj.customer } : {}),
+                },
+              }
+            )
+            if (tx) {
+              await db.collection('payment_transactions').updateOne(
+                { id: tx.id },
+                { $set: { accessGranted: true, status: obj.status, paymentStatus: obj.payment_status, completedAt: new Date() } }
+              )
+            }
+          }
+          break
+        }
         case 'customer.subscription.deleted': {
           const u = await findUser(obj)
           await setAccess(u, false, 'canceled')
@@ -1292,7 +1403,9 @@ async function handleRoute(request, { params }) {
     if (route === '/forum/posts' && method === 'GET') {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
-      const posts = await db.collection('forum_posts').find({}).sort({ createdAt: -1 }).limit(200).toArray()
+      const category = request.nextUrl.searchParams.get('category')
+      const query = category && category !== 'all' ? { category } : {}
+      const posts = await db.collection('forum_posts').find(query).sort({ createdAt: -1 }).limit(200).toArray()
       return handleCORS(NextResponse.json({ posts: posts.map(({ _id, ...p }) => p) }))
     }
 
@@ -1301,12 +1414,15 @@ async function handleRoute(request, { params }) {
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const body = await request.json()
       if (!body.title?.trim()) return handleCORS(NextResponse.json({ error: 'A title is required' }, { status: 400 }))
+      const FORUM_CATEGORIES = ['general', 'faq', 'prs', 'nutrition', 'form-checks']
+      const category = FORUM_CATEGORIES.includes(body.category) ? body.category : 'general'
       const post = {
         id: uuidv4(),
         userId: user.id,
         username: user.username,
         title: body.title.trim(),
         body: (body.body || '').trim(),
+        category,
         mediaUrl: body.mediaUrl || null,
         mediaType: body.mediaType || null,
         replyCount: 0,

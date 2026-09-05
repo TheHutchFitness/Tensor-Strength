@@ -14,6 +14,7 @@ type Client = {
   email: string;
   portalAccess: boolean;
   checkinCount: number;
+  unseenCheckins?: number;
   lastCheckinAt: string | null;
 };
 
@@ -23,6 +24,7 @@ type CheckIn = {
   wins?: string;
   struggles?: string;
   readiness?: string;
+  trainerNote?: string;
   createdAt: string;
 };
 
@@ -49,12 +51,24 @@ export default function TrainersPage() {
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loadingCheckins, setLoadingCheckins] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [unseenCheckins, setUnseenCheckins] = useState(0);
+  const [clientProfile, setClientProfile] = useState<any>(null);
+  const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
+  const [savingNote, setSavingNote] = useState<string | null>(null);
 
   async function loadClients() {
     const res = await fetch("/api/trainer/clients");
     if (res.ok) {
       const data = await res.json();
       setClients(data.clients || []);
+    }
+  }
+
+  async function loadUnseen() {
+    const res = await fetch("/api/trainer/checkins-unseen");
+    if (res.ok) {
+      const d = await res.json();
+      setUnseenCheckins(d.count || 0);
     }
   }
 
@@ -86,9 +100,13 @@ export default function TrainersPage() {
       setAuthorized(true);
       await loadClients();
       await loadUnread();
+      await loadUnseen();
       setLoading(false);
     })();
-    const t = setInterval(loadUnread, 8000);
+    const t = setInterval(() => {
+      loadUnread();
+      loadUnseen();
+    }, 8000);
     return () => clearInterval(t);
   }, []);
 
@@ -96,16 +114,36 @@ export default function TrainersPage() {
     setSelected(c);
     setLoadingCheckins(true);
     setCheckins([]);
+    setClientProfile(null);
     const res = await fetch(`/api/trainer/checkins?clientId=${encodeURIComponent(c.id)}`);
     if (res.ok) {
       const data = await res.json();
       setCheckins(data.checkins || []);
+      setClientProfile(data.client?.profile || null);
     }
     setLoadingCheckins(false);
+    // Viewing marks them seen server-side — refresh badges.
+    await loadClients();
+    await loadUnseen();
+  }
+
+  async function saveNote(ci: CheckIn) {
+    setSavingNote(ci.id);
+    const note = noteDraft[ci.id] ?? ci.trainerNote ?? "";
+    const res = await fetch("/api/trainer/checkins", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checkinId: ci.id, note }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setCheckins((list) => list.map((x) => (x.id === ci.id ? { ...x, trainerNote: d.checkin.trainerNote } : x)));
+    }
+    setSavingNote(null);
   }
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: "clients", label: "Clients" },
+    { id: "clients", label: "Clients", badge: unseenCheckins },
     { id: "messages", label: "Messages", badge: unread },
     { id: "programs", label: "Programs" },
     { id: "files", label: "Files" },
@@ -185,6 +223,11 @@ export default function TrainersPage() {
                               <div className="flex items-center gap-3 mt-2 text-[10px] uppercase tracking-wider">
                                 <span className="text-electric font-display">{c.checkinCount} check-ins</span>
                                 <span className="text-bone/40">Last: {fmt(c.lastCheckinAt)}</span>
+                                {c.unseenCheckins ? (
+                                  <span className="bg-electric text-ink font-display px-2 py-0.5 rounded-full">
+                                    {c.unseenCheckins} new
+                                  </span>
+                                ) : null}
                               </div>
                             </button>
                           </li>
@@ -206,6 +249,35 @@ export default function TrainersPage() {
                           </h2>
                           <span className="text-xs text-bone/50">{selected.email}</span>
                         </div>
+                        {clientProfile && (
+                          <div className="mt-6 border border-electric/30 bg-electric/5 p-5">
+                            <p className="font-display uppercase tracking-wider text-electric text-sm mb-3">About this client</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                              {[
+                                ["Squat", clientProfile.squat],
+                                ["Bench", clientProfile.bench],
+                                ["Deadlift", clientProfile.deadlift],
+                                ["OHP", clientProfile.overheadPress],
+                                ["Diet", clientProfile.diet],
+                                ["Gym", clientProfile.gym],
+                                ["Workouts/wk", clientProfile.workoutsPerWeek],
+                                ["Activity", clientProfile.activityLevel],
+                                ["Resting HR", clientProfile.restingHeartRate],
+                                ["Calories", clientProfile.currentCalories],
+                              ]
+                                .filter(([, v]) => v)
+                                .map(([k, v]) => (
+                                  <div key={k as string}>
+                                    <p className="text-[10px] uppercase tracking-wider text-bone/50">{k}</p>
+                                    <p className="text-bone/90">{v as string}</p>
+                                  </div>
+                                ))}
+                            </div>
+                            {clientProfile.notes && (
+                              <p className="mt-3 text-sm text-bone/70 border-t border-bone/10 pt-3">{clientProfile.notes}</p>
+                            )}
+                          </div>
+                        )}
                         {loadingCheckins ? (
                           <p className="mt-8 font-display uppercase tracking-wider text-bone/50">Loading check-ins…</p>
                         ) : checkins.length === 0 ? (
@@ -240,6 +312,25 @@ export default function TrainersPage() {
                                     <span className="text-bone/90">{ci.struggles}</span>
                                   </p>
                                 )}
+                                <div className="mt-4 border-t border-bone/10 pt-4">
+                                  <p className="text-[10px] uppercase tracking-wider text-electric mb-2">
+                                    Private coach note
+                                  </p>
+                                  <textarea
+                                    value={noteDraft[ci.id] ?? ci.trainerNote ?? ""}
+                                    onChange={(e) => setNoteDraft((d) => ({ ...d, [ci.id]: e.target.value }))}
+                                    rows={2}
+                                    placeholder="Track adjustments, cues, next steps… (only you can see this)"
+                                    className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone text-sm focus:border-electric outline-none resize-none"
+                                  />
+                                  <button
+                                    onClick={() => saveNote(ci)}
+                                    disabled={savingNote === ci.id}
+                                    className="mt-2 font-display uppercase tracking-wider text-xs border border-electric text-electric px-4 py-2 hover:bg-electric hover:text-ink transition-colors disabled:opacity-50"
+                                  >
+                                    {savingNote === ci.id ? "Saving…" : "Save note"}
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>

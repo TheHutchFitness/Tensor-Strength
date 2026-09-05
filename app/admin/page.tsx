@@ -70,6 +70,19 @@ export default function AdminPage() {
     await loadCodes();
   }
 
+  async function createPreset(code: string, percentOff: number) {
+    setCreating(true);
+    const res = await fetch("/api/admin/coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, percentOff, duration: "forever" }),
+    });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || "Could not create preset code (it may already exist).");
+    await loadCodes();
+    setCreating(false);
+  }
+
   async function loadUsers() {
     const res = await fetch("/api/admin/users");
     if (res.ok) {
@@ -318,6 +331,41 @@ export default function AdminPage() {
                   a fully free code. Duration <span className="text-electric">once</span> = first payment only,
                   <span className="text-electric"> forever</span> = every payment, <span className="text-electric">repeating</span> = a set number of months.
                 </p>
+
+                {/* Preset coaching discounts */}
+                <div className="mt-6 border border-electric/40 bg-electric/5 p-5">
+                  <p className="font-display uppercase tracking-wider text-electric text-sm">
+                    Remote Coaching presets ($400/mo)
+                  </p>
+                  <p className="text-bone/60 text-xs mt-1 leading-relaxed">
+                    One-tap codes that apply <span className="text-electric">every month</span> (forever).
+                    First responder & student bring Remote Coaching to <span className="text-electric">$300</span> (25% off);
+                    military to <span className="text-electric">$350</span> (12.5% off).
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => createPreset("FIRSTRESPONDER", 25)}
+                      disabled={creating}
+                      className="font-display uppercase tracking-wider text-xs border border-electric text-electric px-4 py-2.5 hover:bg-electric hover:text-ink transition-colors disabled:opacity-50"
+                    >
+                      First Responder → $300
+                    </button>
+                    <button
+                      onClick={() => createPreset("STUDENT", 25)}
+                      disabled={creating}
+                      className="font-display uppercase tracking-wider text-xs border border-electric text-electric px-4 py-2.5 hover:bg-electric hover:text-ink transition-colors disabled:opacity-50"
+                    >
+                      Student → $300
+                    </button>
+                    <button
+                      onClick={() => createPreset("MILITARY", 12.5)}
+                      disabled={creating}
+                      className="font-display uppercase tracking-wider text-xs border border-electric text-electric px-4 py-2.5 hover:bg-electric hover:text-ink transition-colors disabled:opacity-50"
+                    >
+                      Military → $350
+                    </button>
+                  </div>
+                </div>
 
                 <form onSubmit={createCode} className="mt-6 grid sm:grid-cols-5 gap-3 items-end">
                   <label className="block sm:col-span-2">

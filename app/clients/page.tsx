@@ -15,7 +15,6 @@ import TawkTo, { TAWK_CONFIGURED } from "@/components/TawkTo";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
 
-type Status = "idle" | "submitting" | "success" | "error";
 type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string } | null;
 
 const resources: never[] = [];
@@ -24,7 +23,6 @@ export default function ClientPortalPage() {
   const [me, setMe] = useState<Me>(null);
   const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<Status>("idle");
   const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr">("macros");
 
   const chatReady = TAWK_CONFIGURED;
@@ -61,38 +59,6 @@ export default function ClientPortalPage() {
       alert(e?.message || "Unable to open billing portal.");
     }
   }
-
-  async function handleCheckIn(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setStatus("submitting");
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const payload = {
-      name: data.get("name"),
-      week: data.get("week"),
-      wins: data.get("wins"),
-      struggles: data.get("struggles"),
-      readiness: data.get("readiness"),
-      source: "Tensor Strength — Client Check-In",
-    };
-    try {
-      const res = await fetch("/api/checkins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Request failed");
-      setStatus("success");
-      form.reset();
-    } catch {
-      setStatus("error");
-    }
-  }
-
-  const inputCls =
-    "w-full bg-transparent border-b-2 border-bone/40 py-3 text-bone focus:border-electric outline-none";
-  const selectCls =
-    "w-full bg-ink/60 border-b-2 border-bone/40 py-3 text-bone focus:border-electric outline-none";
 
   return (
     <>
@@ -434,106 +400,7 @@ export default function ClientPortalPage() {
                 </div>
               </div>
 
-              {/* Weekly check-in */}
-              <div id="checkin" className="mt-14 border-t border-bone/10 pt-12 scroll-mt-24">
-                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
-                  Weekly Check-In
-                </p>
-                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
-                  How did the <span className="text-electric">week go?</span>
-                </h2>
-                <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
-                  Submit your check-in so Hutch can review your progress and adjust
-                  your program. Be honest — the work only works if it&apos;s real.
-                </p>
-
-                {status === "success" ? (
-                  <div className="mt-8 border-2 border-electric bg-ink/30 backdrop-blur-sm p-8 text-center">
-                    <p className="glow font-display uppercase text-xl text-electric">
-                      Check-in received.
-                    </p>
-                    <p className="mt-3 text-bone/80">
-                      Thanks for the update — I&apos;ll review it and get back to you.
-                    </p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleCheckIn} className="mt-8 grid gap-5">
-                    <label className="block">
-                      <span className="font-display uppercase tracking-wider text-xs text-bone/70">
-                        Name
-                      </span>
-                      <input name="name" required defaultValue={me?.username} className={inputCls + " mt-2"} />
-                    </label>
-
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <label className="block">
-                        <span className="font-display uppercase tracking-wider text-xs text-bone/70">
-                          Training week
-                        </span>
-                        <select name="week" className={selectCls + " mt-2"}>
-                          <option>Week 1</option>
-                          <option>Week 2</option>
-                          <option>Week 3</option>
-                          <option>Week 4</option>
-                          <option>Deload week</option>
-                          <option>Testing / max-out week</option>
-                          <option>Other</option>
-                        </select>
-                      </label>
-                      <label className="block">
-                        <span className="font-display uppercase tracking-wider text-xs text-bone/70">
-                          Recovery / readiness (1–10)
-                        </span>
-                        <select name="readiness" className={selectCls + " mt-2"}>
-                          <option>10 — fully charged</option>
-                          <option>8–9 — good to go</option>
-                          <option>6–7 — solid</option>
-                          <option>4–5 — dragging</option>
-                          <option>1–3 — beat up</option>
-                        </select>
-                      </label>
-                    </div>
-
-                    <label className="block">
-                      <span className="font-display uppercase tracking-wider text-xs text-bone/70">
-                        Wins &amp; PRs this week
-                      </span>
-                      <textarea
-                        name="wins"
-                        rows={3}
-                        placeholder="What went well? Any new PRs or milestones?"
-                        className={inputCls + " mt-2 resize-none"}
-                      />
-                    </label>
-
-                    <label className="block">
-                      <span className="font-display uppercase tracking-wider text-xs text-bone/70">
-                        Struggles, pain, or things to flag
-                      </span>
-                      <textarea
-                        name="struggles"
-                        rows={3}
-                        placeholder="Anything that felt off, nagging pain, missed sessions, life stress?"
-                        className={inputCls + " mt-2 resize-none"}
-                      />
-                    </label>
-
-                    <button
-                      type="submit"
-                      disabled={status === "submitting"}
-                      className="mt-2 bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
-                    >
-                      {status === "submitting" ? "Sending…" : "Submit Check-In"}
-                    </button>
-
-                    {status === "error" && (
-                      <p className="text-bone text-sm">
-                        Something went wrong sending your check-in. Try again in a moment.
-                      </p>
-                    )}
-                  </form>
-                )}
-              </div>
+              {/* Weekly check-in — moved to its own page (/clients/check-in) */}
             </div>
           )}
         </div>

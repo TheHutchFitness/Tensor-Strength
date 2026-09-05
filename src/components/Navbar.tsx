@@ -4,12 +4,9 @@ import { useEffect, useState } from "react";
 
 const links = [
   { href: "/#about", label: "About" },
-  { href: "/#professionals", label: "Professionals" },
   { href: "/#content", label: "Content" },
   { href: "/#programs", label: "Weekly Programs" },
   { href: "/#tools", label: "Free Tools" },
-  { href: "/#pricing", label: "Pricing" },
-  { href: "/apply", label: "Apply" },
 ];
 
 type Me = { username: string; role: string; portalAccess: boolean; isTrainer?: boolean } | null;

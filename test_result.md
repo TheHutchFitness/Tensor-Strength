@@ -391,8 +391,81 @@ backend_trainer_portal_v2:
 agent_communication:
     -agent: "main"
     -message: "PLEASE TEST TRAINER PORTAL PHASE 2 endpoints. Reuse cookie jar. Admin: 'The Hutch'/'Vzkfjf3n!3'. Setup: register trainer T (make isTrainer via admin), register client C1 (portalAccess=true, assignedTrainerId=T via admin), and client C2 (portalAccess true, NOT assigned to T). Tests: PROFILE: (a) as T, PUT /api/trainer/profile missing trainerType -> 400; (b) PUT with photo,bio,trainerType -> 200, completed=true, slug returned; (c) GET /api/professionals -> includes T's slug; (d) GET /api/professionals/<slug> -> 200; unknown slug -> 404; (e) as non-trainer C1, PUT /api/trainer/profile -> 403. PROGRAMS: (f) as T POST /api/trainer/programs {title:'W1', exercises:[{name:'Squat',sets:'3',reps:'5'}], clientId:C1.id} -> 200; (g) POST with clientId:C2.id (not assigned) -> 400; (h) POST {title:'All', clientId:null} -> 200 (broadcast); (i) as C1 GET /api/client/programs -> returns both the C1-specific and the broadcast program; (j) as C2 GET /api/client/programs -> returns neither (C2 not assigned to T); (k) DELETE /api/trainer/programs?id=<one> as T -> ok. MESSAGING: (l) as C1 POST /api/messages {toUserId:T.id, body:'hi'} -> 200; (m) as C2 POST /api/messages {toUserId:T.id, body:'hi'} -> 403 (not assigned); (n) as T GET /api/messages?withUserId=C1.id -> returns the message, marks read; (o) as T GET /api/messages/unread -> 0 after reading; before T reads, T's unread should be >=1; (p) as T GET /api/trainer/threads -> lists C1 with lastMessage. FILES: (q) as T POST /api/uploads/file with a small file (multipart form field 'file') -> 200 {url,name,size,mime}; (r) as T POST /api/trainer/files {name,url,size,mime,clientId:C1.id} -> 200; clientId:C2.id -> 400; clientId:null -> 200; (s) as C1 GET /api/client/files -> returns C1 + broadcast files; (t) DELETE /api/trainer/files?id= as T -> ok. AUTH GUARDS: every /api/trainer/* with no cookie or as non-trainer -> 403; /api/uploads/file with no cookie -> 401. Confirm no 500s and no _id/passwordHash leaks."
+    -agent: "main"
+    -message: "PLEASE TEST THE NEW CLIENT 'ABOUT ME' PROFILE ENDPOINTS. Admin: 'The Hutch'/'Vzkfjf3n!3'. Setup: register trainer T (admin PUT /api/admin/users {id:T.id, isTrainer:true}); register client C1 (admin PUT {id:C1.id, portalAccess:true} then PUT {id:C1.id, assignedTrainerId:T.id}). Tests: (1) As C1, GET /api/client/profile -> 200 with { profile: null } initially. (2) As C1, PUT /api/client/profile { squat:'315', bench:'225', deadlift:'405', overheadPress:'135', diet:'Keto', gym:'Iron House', workoutsPerWeek:'4', activityLevel:'Very active', restingHeartRate:'58', currentCalories:'2600', notes:'tweaky left shoulder' } -> 200, returns profile with those values. (3) As C1, GET /api/client/profile -> 200 returns the saved profile. (4) As C1, POST /api/checkins {week:'1', wins:'x', readiness:'8'} -> 200. (5) As T, GET /api/trainer/checkins?clientId=C1.id -> 200 and the response's client object includes a 'profile' field equal to C1's saved About Me profile (squat 315, diet Keto, etc.). (6) GET /api/client/profile with NO cookie -> 401. PUT /api/client/profile with NO cookie -> 401. (7) Confirm no 500 errors and no _id/passwordHash leaks."
+
+
+# ============ CHECK-IN NOTIFICATIONS + TRAINER NOTES ============
+backend_checkin_notifications:
+  - task: "Trainer check-in notifications (unseen counts) + notes (PATCH)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New check-in seen-tracking + trainer notes. GET /api/trainer/clients now returns unseenCheckins per client. New GET /api/trainer/checkins-unseen returns total unseen across the trainer's assigned clients (isTrainer/admin only; 0 otherwise). GET /api/trainer/checkins?clientId= now marks that client's check-ins seenByTrainer=true when viewed BY A TRAINER (admin viewing does NOT mark seen). New PATCH /api/trainer/checkins {checkinId, note} sets a private trainerNote (403 if the check-in's client isn't assigned to the trainer; 400 if checkinId missing; 404 if not found). trainerNote is returned in GET /api/trainer/checkins for the trainer but is NEVER returned to the client (client has no checkin GET; POST /api/checkins response has no trainerNote)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 11 test steps (24 assertions - 100% success rate). Comprehensive testing: (1) C1 POST /api/checkins twice returns 200, response correctly omits trainerNote field. (2) T GET /api/trainer/checkins-unseen returns count=2. (3) T GET /api/trainer/clients shows C1 with unseenCheckins=2 and checkinCount=2. (4) T GET /api/trainer/checkins?clientId=C1.id returns 200 with 2 check-ins. (5) T GET /api/trainer/checkins-unseen returns count=0 (viewing marked as seen). (6) T GET /api/trainer/clients shows C1 unseenCheckins=0. (7) T PATCH /api/trainer/checkins with note returns 200, trainerNote='Increase squat volume'. (8) T GET /api/trainer/checkins?clientId=C1.id shows check-in includes trainerNote. (9) PATCH with missing checkinId returns 400, nonexistent checkinId returns 404. (10) C2 POST check-in, T PATCH C2's check-in returns 403, T GET C2's check-ins returns 403 (not assigned). (11) GET /api/trainer/checkins-unseen with NO cookie returns 200 count=0 (not 500), as non-trainer returns 200 count=0. No 500 errors. No _id or passwordHash leaks."
+  - task: "Forum categories (POST/GET /api/forum/posts with category filtering)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "testing"
+        -comment: "✅ PASSED all 7 test steps (18 assertions - 100% success rate). Comprehensive testing: (12) POST /api/forum/posts with category='prs' returns 200, post.category='prs'. (13) POST with category='nutrition' returns 200, post.category='nutrition'. (14) POST without category returns 200, post.category='general' (default). (15) POST with invalid category='bogus' returns 200, post.category='general' (fallback). (16) GET /api/forum/posts?category=prs returns 200 with only prs posts (found 1). (17) GET /api/forum/posts?category=all returns 200 with all posts (4 total), GET /api/forum/posts (no category) returns 200 with all posts (4 total). (18) POST /api/forum/posts with NO cookie returns 401. Valid categories: general, faq, prs, nutrition, form-checks. No 500 errors. No _id or passwordHash leaks."
+
+agent_communication:
+    -agent: "main"
+    -message: "PLEASE TEST CHECK-IN NOTIFICATIONS + TRAINER NOTES. Reuse cookie jar. Admin: 'The Hutch'/'Vzkfjf3n!3'. Setup: register trainer T (admin sets isTrainer:true), client C1 (admin sets portalAccess:true AND assignedTrainerId:T.id). Steps: (1) As C1, POST /api/checkins {week:'1', wins:'w', struggles:'s', readiness:'8'} twice -> 200 each. (2) As T, GET /api/trainer/checkins-unseen -> count == 2. (3) As T, GET /api/trainer/clients -> the C1 entry has unseenCheckins==2 and checkinCount==2. (4) As T, GET /api/trainer/checkins?clientId=C1.id -> 200 with 2 checkins (newest first). (5) As T, GET /api/trainer/checkins-unseen -> now 0 (viewing marked them seen). (6) As T, GET /api/trainer/clients -> C1 unseenCheckins==0. (7) As T, PATCH /api/trainer/checkins {checkinId:<one C1 checkin id>, note:'Increase squat volume next block'} -> 200, checkin.trainerNote matches. (8) As T, GET /api/trainer/checkins?clientId=C1.id -> that checkin now includes trainerNote. (9) PATCH with missing checkinId -> 400; PATCH with random checkinId -> 404. (10) Register client C2 (portalAccess true, NOT assigned to T); as C2 POST a checkin; as T PATCH that checkin's id -> 403 (not their client); as T GET /api/trainer/checkins?clientId=C2.id -> 403. (11) GET /api/trainer/checkins-unseen with NO cookie or as a non-trainer -> count 0 (never 500). Confirm no 500s, no _id/passwordHash leaks, and that trainerNote is NOT present in the POST /api/checkins response body. NOTE: The Stripe webhook 'checkout.session.completed' access-grant path cannot be exercised headlessly — skip it."
+    -agent: "testing"
+    -message: "✅ ALL CHECK-IN NOTIFICATIONS + TRAINER NOTES + FORUM CATEGORIES TESTS PASSED (42/42 - 100% success rate). PART 1 - CHECK-IN NOTIFICATIONS (11 steps, 24 assertions): All tests passed including unseen count tracking, seen marking on view, trainer notes PATCH/GET, security checks (403 for unassigned clients, 404 for nonexistent check-ins, 400 for missing params), and confirmed POST /api/checkins response does NOT include trainerNote field. PART 2 - FORUM CATEGORIES (7 steps, 18 assertions): All tests passed including category assignment (prs, nutrition), default fallback to 'general' for missing/invalid categories, category filtering (GET ?category=prs returns only prs posts), GET ?category=all and GET with no category both return all posts, and 401 for unauthenticated POST. No 500 errors encountered. No _id or passwordHash leaks detected in any responses. All endpoints return correct status codes and proper JSON responses."
     -agent: "testing"
     -message: "✅ ALL TRAINER PORTAL BACKEND TESTS PASSED (14/14 - 100% success rate). Comprehensive testing completed covering all 13 test steps: (1) Admin login successful with correct credentials. (2) Member A and B registered with correct initial state (role=member, portalAccess=false, isTrainer=undefined). (3) Admin successfully sets member A as trainer (isTrainer=true). (4) Admin successfully assigns member B to trainer A (assignedTrainerId=A.id). (5) Attempting to assign to non-trainer returns 400 with proper error message. (6) Non-trainer member B correctly denied access to /api/trainer/clients (403). (7) Trainer A successfully retrieves client list containing member B with checkinCount and lastCheckinAt fields. (8) Member B granted portal access and successfully created check-in. (9) Trainer A successfully views member B's check-ins with proper response structure {client:{id,username,email}, checkins:[...]}. (10) Missing clientId query returns 400. (11) Trainer A correctly denied access to unassigned member C's check-ins (403). (12) Demoting trainer A (isTrainer=false) automatically unassigns member B (assignedTrainerId becomes null). (13) Unauthenticated request to /api/trainer/clients returns 403. No 500 errors encountered. No passwordHash or _id leaks detected in any responses. All endpoints return correct status codes and proper JSON responses."
     -agent: "testing"
     -message: "✅ ALL TRAINER PORTAL PHASE 2 BACKEND TESTS PASSED (26/26 - 100% success rate). Comprehensive testing completed covering all labeled steps (a-v): PROFILE (5 tests): (a) Missing fields correctly rejected with 400. (b) Complete profile saved with completed=true and slug generated. (c) Trainer found in public professionals list. (d) Individual profile retrieval works; 404 for non-existent slug. (e) Non-trainer correctly denied 403. PROGRAMS (6 tests): (f) Program created for assigned client. (g) Unassigned client correctly rejected with 400. (h) Broadcast program created with clientId=null. (i) C1 sees both C1-specific and broadcast programs. (j) C2 sees no programs (not assigned). (k) Trainer can list and delete programs. MESSAGING (5 tests): (l) C1 can message assigned trainer. (m) C2 correctly denied 403 (not assigned). (n) Unread count works correctly, messages mark as read. (o) Trainer threads list C1 with lastMessage. (p) Missing withUserId correctly rejected with 400. FILES (4 tests): (q) File upload returns url/name/size/mime. (r) Trainer files work for assigned client, reject unassigned, allow broadcast. (s) C1 sees C1-specific + broadcast files. (t) Trainer can list and delete files. AUTH GUARDS (2 tests): (u) All /trainer/* endpoints return 403 without auth; /uploads/file returns 401. (v) Non-trainer correctly denied 403 for trainer endpoints. NO 500 ERRORS. NO _id OR passwordHash LEAKS DETECTED."
+
+
+# ============ CLIENT "ABOUT ME" PROFILE ============
+backend_client_profile:
+  - task: "Client About Me profile (GET/PUT /api/client/profile)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET /api/client/profile returns {profile: user.clientProfile || null}. PUT /api/client/profile (auth required) accepts squat, bench, deadlift, overheadPress, diet, gym, workoutsPerWeek, activityLevel, restingHeartRate, currentCalories, notes - all stored as strings. Updates user.clientProfile. Returns saved profile. No portalAccess check (any authenticated user can save their profile). 401 if not authenticated."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 7 tests (100% success rate): (1) GET /api/client/profile initially returns 200 with {profile: null}. (2) PUT /api/client/profile with all fields (squat:'315', bench:'225', deadlift:'405', overheadPress:'135', diet:'Keto', gym:'Iron House', workoutsPerWeek:'4', activityLevel:'Very active', restingHeartRate:'58', currentCalories:'2600', notes:'tweaky left shoulder') returns 200 with profile containing all values. (3) GET /api/client/profile returns 200 with saved profile containing all fields. (4) Client C1 POST /api/checkins returns 200. (5) Trainer T GET /api/trainer/checkins?clientId=C1.id returns 200 with client object including 'profile' field containing C1's complete About Me profile (squat:315, diet:Keto, gym:Iron House, etc.). (6) GET /api/client/profile with NO cookie returns 401. (7) PUT /api/client/profile with NO cookie returns 401. No 500 errors encountered. No _id or passwordHash leaks detected."
+  - task: "Trainer views client profile in check-ins (GET /api/trainer/checkins includes profile)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET /api/trainer/checkins?clientId= response includes client object with {id, username, email, profile: client.clientProfile || null}. Allows trainer to see client's About Me profile when viewing their check-ins."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED: Verified in test step 5 that GET /api/trainer/checkins?clientId=C1.id returns 200 with client.profile containing all About Me fields (squat:315, bench:225, deadlift:405, overheadPress:135, diet:Keto, gym:Iron House, workoutsPerWeek:4, activityLevel:Very active, restingHeartRate:58, currentCalories:2600, notes:tweaky left shoulder). Profile is correctly included in the trainer's view of client check-ins."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL CLIENT 'ABOUT ME' PROFILE TESTS PASSED (7/7 - 100% success rate). Comprehensive testing completed: (1) GET /api/client/profile initially returns {profile: null}. (2) PUT /api/client/profile saves all 11 fields correctly (squat, bench, deadlift, overheadPress, diet, gym, workoutsPerWeek, activityLevel, restingHeartRate, currentCalories, notes). (3) GET /api/client/profile retrieves saved profile. (4) Client can submit check-in. (5) Trainer viewing client check-ins sees complete About Me profile in response (GET /api/trainer/checkins?clientId=C1.id includes client.profile with all fields). (6-7) Auth guards work correctly (401 without cookie for both GET and PUT). No 500 errors. No _id or passwordHash leaks detected. All requirements from review request met."
 

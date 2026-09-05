@@ -43,6 +43,27 @@ export default function Hero() {
             Get a Custom Program — $200 →
           </a>
 
+          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+            <a
+              href="#pricing"
+              className="font-display uppercase tracking-wider text-sm text-bone/80 border-b-2 border-electric hover:text-electric transition-colors"
+            >
+              View Pricing
+            </a>
+            <a
+              href="/apply"
+              className="font-display uppercase tracking-wider text-sm text-bone/80 border-b-2 border-bone/40 hover:text-electric hover:border-electric transition-colors"
+            >
+              Apply
+            </a>
+            <a
+              href="#professionals"
+              className="font-display uppercase tracking-wider text-sm text-bone/80 border-b-2 border-bone/40 hover:text-electric hover:border-electric transition-colors"
+            >
+              Professionals
+            </a>
+          </div>
+
           <dl className="mt-12 grid grid-cols-3 gap-6 max-w-xl border-t border-bone/20 pt-8">
             {[
               { n: "15+", l: "Years Experience" },

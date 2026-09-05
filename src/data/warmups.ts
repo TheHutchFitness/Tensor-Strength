@@ -322,4 +322,101 @@ export const warmups: Warmup[] = [
     coaching:
       "Max tension on every hold — don't just survive the time, own it. Squeeze the working muscles hard and breathe shallow through the holds. If position breaks, come out of it slightly rather than grinding in a bad position.",
   },
+
+  // ---------------- ADDED: General warm-ups ----------------
+  {
+    name: "Full-Body RAMP Warm-up",
+    category: "General Warm-up",
+    purpose: "A go-anywhere general warm-up that Raises temperature, Activates key muscles, Mobilises joints and Primes the nervous system before any session.",
+    duration: "6–8 min",
+    steps: [
+      "2 min easy cardio — bike, row, or brisk walk to raise your heart rate.",
+      "10 leg swings each leg (front-to-back and side-to-side).",
+      "10 arm circles forward + 10 back, then 10 band pull-aparts.",
+      "10 bodyweight squats — slow and full depth.",
+      "10 walking lunges with a torso twist.",
+      "10 scapular push-ups + 10 cat-cows for the spine.",
+    ],
+    coaching:
+      "Move through a full range and gradually build speed. You should feel warm and loose, not tired. Spend extra time on whatever you're about to train hard.",
+  },
+  {
+    name: "Lower-Body Mobility Flow",
+    category: "General Warm-up",
+    purpose: "Open the hips, ankles and knees before squats, lunges or running so you hit clean positions without fighting stiffness.",
+    duration: "5 min",
+    steps: [
+      "World's greatest stretch — 5 reps each side.",
+      "Deep squat hold with pry — 45 sec, gently push knees out with elbows.",
+      "Ankle rocks against a wall — 10 each side.",
+      "90/90 hip switches — 10 total.",
+      "Glute bridges — 15 reps, squeeze hard at the top.",
+    ],
+    coaching:
+      "Breathe into each position and relax into the stretch. This is about reaching your positions, not forcing them.",
+  },
+
+  // ---------------- ADDED: Plyometrics ----------------
+  {
+    name: "Lower-Body Power Circuit",
+    category: "Plyometrics",
+    purpose: "Build explosive leg power and rate of force development. Best done fresh, early in a session, when you can move fast.",
+    duration: "12–15 min",
+    steps: [
+      "Box jumps — 4 × 3, step down between reps, land soft and quiet.",
+      "Broad jumps — 4 × 3, explode forward and stick the landing.",
+      "Lateral bounds — 3 × 6 total, control each single-leg landing.",
+      "Depth jumps (low box) — 3 × 4, minimise ground contact time.",
+      "Rest 90 sec between sets — quality over quantity.",
+    ],
+    coaching:
+      "Every rep is maximal intent with a clean landing. Stop the set the moment jumps get slow or sloppy — this trains power, not conditioning.",
+  },
+  {
+    name: "Upper-Body & Core Power",
+    category: "Plyometrics",
+    purpose: "Develop upper-body and rotational power for pressing and athletic carryover.",
+    duration: "10–12 min",
+    steps: [
+      "Plyo push-ups — 4 × 4, push hard enough that the hands leave the floor.",
+      "Medicine-ball chest pass into a wall — 4 × 5, throw explosively.",
+      "Med-ball overhead slams — 4 × 6, drive from the core.",
+      "Rotational med-ball throws — 3 × 5 each side.",
+      "Rest 90 sec between sets.",
+    ],
+    coaching:
+      "Reset fully between reps and throw/press with maximum speed. Light implement, fast intent.",
+  },
+
+  // ---------------- ADDED: Isometrics ----------------
+  {
+    name: "Tendon-Strength Isometrics",
+    category: "Isometrics",
+    purpose: "Build joint and tendon resilience with long holds — great on deload weeks or for cranky knees, elbows and shoulders.",
+    duration: "10 min",
+    steps: [
+      "Spanish squat hold (band behind knees) — 3 × 30 sec.",
+      "Wall sit — 3 × 45 sec.",
+      "Isometric push-up hold (halfway down) — 3 × 20 sec.",
+      "Bar dead hang — 3 × max hold.",
+      "Rest 45–60 sec between holds.",
+    ],
+    coaching:
+      "Aim for hard, controlled tension. Isometrics build strength at the held angle and are gentle on the joints — perfect when you need to train around soreness.",
+  },
+  {
+    name: "Anti-Movement Core Holds",
+    category: "Isometrics",
+    purpose: "Bulletproof the trunk with anti-extension, anti-rotation and anti-lateral-flexion holds that transfer directly to heavy lifts.",
+    duration: "8–10 min",
+    steps: [
+      "RKC plank (max tension) — 3 × 20 sec.",
+      "Side plank — 3 × 30 sec each side.",
+      "Copenhagen plank (adductors) — 2 × 20 sec each side.",
+      "Hollow-body hold — 3 × 30 sec.",
+      "Rest 30–45 sec between holds.",
+    ],
+    coaching:
+      "Brace like you're about to be punched and keep breathing. Own the position — shorten the hold before letting form break.",
+  },
 ];

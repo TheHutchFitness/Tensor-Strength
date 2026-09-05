@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Navbar from "@/components/Navbar";
+import PortalHeader from "@/components/portal/PortalHeader";
 import Footer from "@/components/Footer";
 
 type Media = { url: string; type: "image" | "video" } | null;
@@ -10,12 +10,22 @@ type Post = {
   username: string;
   title: string;
   body: string;
+  category?: string;
   mediaUrl: string | null;
   mediaType: string | null;
   replyCount: number;
   likes?: string[];
   createdAt: string;
 };
+
+const CATEGORIES = [
+  { id: "general", label: "General Discussions" },
+  { id: "faq", label: "FAQ" },
+  { id: "prs", label: "PRs" },
+  { id: "nutrition", label: "Nutrition" },
+  { id: "form-checks", label: "Form Checks" },
+];
+const catLabel = (id?: string) => CATEGORIES.find((c) => c.id === (id || "general"))?.label || "General Discussions";
 type Reply = {
   id: string;
   username: string;
@@ -85,6 +95,8 @@ export default function ForumPage() {
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [category, setCategory] = useState("general");
+  const [activeCategory, setActiveCategory] = useState("all");
   const [media, setMedia] = useState<Media>(null);
   const [posting, setPosting] = useState(false);
 
@@ -153,6 +165,8 @@ export default function ForumPage() {
   }
 
   const filtered = posts.filter((p) => {
+    const cat = p.category || "general";
+    if (activeCategory !== "all" && cat !== activeCategory) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -177,11 +191,12 @@ export default function ForumPage() {
     const res = await fetch("/api/forum/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, mediaUrl: media?.url, mediaType: media?.type }),
+      body: JSON.stringify({ title, body, category, mediaUrl: media?.url, mediaType: media?.type }),
     });
     if (res.ok) {
       setTitle("");
       setBody("");
+      setCategory("general");
       setMedia(null);
       await loadPosts();
     }
@@ -210,7 +225,7 @@ export default function ForumPage() {
 
   return (
     <>
-      <Navbar />
+      <PortalHeader simple />
       <main className="text-bone min-h-screen">
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-24">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-5">
@@ -227,6 +242,24 @@ export default function ForumPage() {
                 photo or video on any post or reply.
               </p>
 
+              {/* Category nav */}
+              <div className="mt-8 flex flex-wrap gap-2 border-b border-bone/15 pb-3">
+                {[{ id: "all", label: "All" }, ...CATEGORIES].map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setActiveCategory(c.id)}
+                    className={
+                      "px-4 py-2 font-display uppercase tracking-wider text-xs transition-colors " +
+                      (activeCategory === c.id
+                        ? "bg-electric text-ink"
+                        : "text-bone/60 hover:text-electric border border-bone/20 hover:border-electric")
+                    }
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+
               {/* New post */}
               <form onSubmit={createPost} className="mt-8 border border-bone/15 bg-ink/30 p-6 grid gap-3">
                 <input
@@ -235,6 +268,18 @@ export default function ForumPage() {
                   placeholder="Title — e.g. 'Squat form check' or 'Elbow pain on bench?'"
                   className={inputCls}
                 />
+                <label className="grid gap-1">
+                  <span className="text-[10px] uppercase tracking-wider text-bone/50">Category — pick the best fit</span>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full bg-ink/60 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                </label>
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
@@ -277,7 +322,8 @@ export default function ForumPage() {
                             <div className="min-w-0">
                               <p className="font-display uppercase tracking-wider text-bone truncate">{p.title}</p>
                               <p className="text-xs text-bone/50 mt-1">
-                                by {p.username} · {new Date(p.createdAt).toLocaleDateString()}
+                                <span className="text-electric">{catLabel(p.category)}</span>
+                                {" · "}by {p.username} · {new Date(p.createdAt).toLocaleDateString()}
                               </p>
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
