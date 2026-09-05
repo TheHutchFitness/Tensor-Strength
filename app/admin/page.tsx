@@ -371,34 +371,44 @@ export default function AdminPage() {
                 {(demoStats.opens.length > 0 || demoStats.signups.length > 0) && (
                   <div className="mt-6 border border-bone/15 bg-ink/30 p-5">
                     <p className="font-display uppercase tracking-wider text-electric text-sm">What drives sign-ups</p>
-                    <div className="mt-4 grid sm:grid-cols-2 gap-6">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Tool demos opened</p>
-                        {demoStats.opens.length === 0 ? <p className="text-bone/40 text-sm">No demo opens yet.</p> : (
-                          <ul className="grid gap-1.5">
-                            {demoStats.opens.map((o: any) => (
-                              <li key={o.tool} className="flex justify-between text-sm border-b border-bone/10 pb-1">
-                                <span className="text-bone/80">{o.tool}</span>
-                                <span className="text-electric font-display">{o.opens}</span>
-                              </li>
+                    <p className="text-[10px] uppercase tracking-wider text-bone/40 mt-1">Demo opens → sign-ups → conversion, per tool</p>
+                    {(() => {
+                      const names = Array.from(new Set([...demoStats.opens.map((o: any) => o.tool), ...demoStats.signups.map((s: any) => s.tool)]));
+                      const opensOf = (n: string) => demoStats.opens.find((o: any) => o.tool === n)?.opens || 0;
+                      const signOf = (n: string) => demoStats.signups.find((s: any) => s.tool === n)?.count || 0;
+                      const rows = names.map((n) => ({ n, o: opensOf(n), s: signOf(n) })).sort((a, b) => b.o - a.o);
+                      const totO = rows.reduce((x, r) => x + r.o, 0);
+                      const totS = rows.reduce((x, r) => x + r.s, 0);
+                      return (
+                        <table className="mt-4 w-full text-sm">
+                          <thead>
+                            <tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15">
+                              <th className="text-left p-2 font-display">Tool</th>
+                              <th className="text-right p-2 font-display">Demo opens</th>
+                              <th className="text-right p-2 font-display">Sign-ups</th>
+                              <th className="text-right p-2 font-display">Conversion</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((r) => (
+                              <tr key={r.n} className="border-b border-bone/10">
+                                <td className="p-2 text-bone/85">{r.n}</td>
+                                <td className="p-2 text-right text-bone/70">{r.o}</td>
+                                <td className="p-2 text-right text-bone/70">{r.s}</td>
+                                <td className="p-2 text-right font-display text-electric">{r.o ? Math.round((r.s / r.o) * 100) + "%" : "—"}</td>
+                              </tr>
                             ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Sign-ups by last demo opened</p>
-                        {demoStats.signups.length === 0 ? <p className="text-bone/40 text-sm">No attributed sign-ups yet.</p> : (
-                          <ul className="grid gap-1.5">
-                            {demoStats.signups.map((s: any) => (
-                              <li key={s.tool} className="flex justify-between text-sm border-b border-bone/10 pb-1">
-                                <span className="text-bone/80">{s.tool}</span>
-                                <span className="text-electric font-display">{s.count}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </div>
+                            <tr className="border-t border-bone/20">
+                              <td className="p-2 font-display uppercase text-bone/80 text-xs">Total</td>
+                              <td className="p-2 text-right text-bone/80">{totO}</td>
+                              <td className="p-2 text-right text-bone/80">{totS}</td>
+                              <td className="p-2 text-right font-display text-electric">{totO ? Math.round((totS / totO) * 100) + "%" : "—"}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      );
+                    })()}
+                    <p className="mt-3 text-[10px] text-bone/40">Sign-ups are attributed to the last demo a member opened before creating their account.</p>
                   </div>
                 )}
 
