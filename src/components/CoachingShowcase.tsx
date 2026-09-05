@@ -11,6 +11,9 @@ const CLIPS = [
   { src: "/videos/coaching10.mp4", poster: "/videos/coaching10-poster.jpg", label: "Building Volume" },
   { src: "/videos/coaching11.mp4", poster: "/videos/coaching11-poster.jpg", label: "Explosive Power" },
   { src: "/videos/coaching12.mp4", poster: "/videos/coaching12-poster.jpg", label: "Dialing In Form" },
+  { src: "/videos/coaching13.mp4", poster: "/videos/coaching13-poster.jpg", label: "Squat — 555 lb" },
+  { src: "/videos/coaching14.mp4", poster: "/videos/coaching14-poster.jpg", label: "Bench — 290 lb" },
+  { src: "/videos/coaching15.mp4", poster: "/videos/coaching15-poster.jpg", label: "Deadlift — 560 lb" },
 ];
 
 export default function CoachingShowcase() {
