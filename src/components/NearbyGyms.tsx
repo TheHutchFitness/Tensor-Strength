@@ -28,37 +28,21 @@ export default function NearbyGyms() {
   const [state, setState] = useState<State>("idle");
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [radiusKm, setRadiusKm] = useState(15);
-  const [facility, setFacility] = useState<"gym" | "martial" | "climbing" | "complex">("gym");
+  const [facility, setFacility] = useState<"all" | "gym" | "martial" | "climbing" | "complex">("all");
 
   function buildQuery(lat: number, lon: number) {
     const r = radiusKm * 1000;
     const a = (sel: string) => `  node${sel}(around:${r},${lat},${lon});\n  way${sel}(around:${r},${lat},${lon});`;
+    const gym = [a('["leisure"="fitness_centre"]'), a('["amenity"="gym"]'), a('["sport"="fitness"]'), a('["club"="fitness"]')];
+    const martial = [a('["sport"~"martial_arts|boxing|judo|karate|taekwondo|kickboxing|mma|jiu_jitsu"]'), a('["leisure"="sports_centre"]["sport"~"martial_arts|boxing|judo|karate"]')];
+    const climbing = [a('["sport"="climbing"]'), a('["leisure"="climbing"]'), a('["leisure"="sports_centre"]["sport"="climbing"]')];
+    const complex = [a('["leisure"="sports_centre"]'), a('["leisure"="stadium"]'), a('["leisure"="sports_complex"]')];
     let lines: string[] = [];
-    if (facility === "gym") {
-      lines = [
-        a('["leisure"="fitness_centre"]'),
-        a('["amenity"="gym"]'),
-        a('["sport"="fitness"]'),
-        a('["club"="fitness"]'),
-      ];
-    } else if (facility === "martial") {
-      lines = [
-        a('["sport"~"martial_arts|boxing|judo|karate|taekwondo|kickboxing|mma|jiu_jitsu"]'),
-        a('["leisure"="sports_centre"]["sport"~"martial_arts|boxing|judo|karate"]'),
-      ];
-    } else if (facility === "climbing") {
-      lines = [
-        a('["sport"="climbing"]'),
-        a('["leisure"="climbing"]'),
-        a('["leisure"="sports_centre"]["sport"="climbing"]'),
-      ];
-    } else {
-      lines = [
-        a('["leisure"="sports_centre"]'),
-        a('["leisure"="stadium"]'),
-        a('["leisure"="sports_complex"]'),
-      ];
-    }
+    if (facility === "gym") lines = gym;
+    else if (facility === "martial") lines = martial;
+    else if (facility === "climbing") lines = climbing;
+    else if (facility === "complex") lines = complex;
+    else lines = [...gym, ...martial, ...climbing, ...complex];
     return `[out:json][timeout:25];\n(\n${lines.join("\n")}\n);\nout center 300;`;
   }
 
@@ -142,6 +126,7 @@ export default function NearbyGyms() {
         <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Type of facility</p>
         <div className="flex flex-wrap gap-2">
           {([
+            { id: "all", label: "All" },
             { id: "gym", label: "Regular Gyms" },
             { id: "martial", label: "Martial Arts" },
             { id: "climbing", label: "Rock Climbing" },

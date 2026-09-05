@@ -16,6 +16,18 @@ const TOOLS: Demo[] = [
 
 export default function HutchTouchPreview() {
   const [demo, setDemo] = useState<Demo | null>(null);
+
+  function openDemo(t: Demo) {
+    setDemo(t);
+    try {
+      localStorage.setItem("ts_last_demo", t.name);
+      fetch("/api/analytics/demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool: t.name }),
+      }).catch(() => {});
+    } catch {}
+  }
   // Show Week 1 "Session A" for Push / Pull / Legs as a taste of the full block.
   const samples = (["Push", "Pull", "Legs"] as const)
     .map((day) => hutchTouchSessions.find((s) => s.week === 1 && s.day === day && s.variant === "A"))

@@ -294,6 +294,7 @@ async function handleRoute(request, { params }) {
         passwordHash,
         role: 'member',
         portalAccess: false,
+        demoSource: (body.demoSource ? String(body.demoSource).slice(0, 80) : null),
         createdAt: new Date(),
       }
       await db.collection('users').insertOne(user)
@@ -382,6 +383,34 @@ async function handleRoute(request, { params }) {
       const token = await signToken({ id: user.id, role: user.role })
       const res = NextResponse.json({ user: publicUser(user) })
       return handleCORS(setAuthCookie(res, token))
+    }
+
+    // ---- Demo → signup attribution (public: which tool demo was opened) ----
+    if (route === '/analytics/demo' && method === 'POST') {
+      const b = await request.json().catch(() => ({}))
+      const tool = String(b.tool || '').slice(0, 80).trim()
+      if (tool) {
+        await db.collection('demo_analytics').updateOne(
+          { tool },
+          { $inc: { opens: 1 }, $set: { updatedAt: new Date() } },
+          { upsert: true }
+        )
+      }
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    if (route === '/admin/demo-analytics' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const opens = await db.collection('demo_analytics').find({}).sort({ opens: -1 }).toArray()
+      const signups = await db.collection('users').aggregate([
+        { $match: { demoSource: { $exists: true, $ne: null, $ne: '' } } },
+        { $group: { _id: '$demoSource', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray()
+      return handleCORS(NextResponse.json({
+        opens: opens.map(({ _id, ...r }) => r),
+        signups: signups.map((s) => ({ tool: s._id, count: s.count })),
+      }))
     }
 
     if (route === '/auth/logout' && method === 'POST') {

@@ -33,7 +33,7 @@ export default function LoginPage() {
       const payload =
         mode === "login"
           ? { username, password }
-          : { username, email, password };
+          : { username, email, password, demoSource: typeof window !== "undefined" ? localStorage.getItem("ts_last_demo") : null };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

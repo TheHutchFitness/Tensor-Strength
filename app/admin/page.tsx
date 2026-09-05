@@ -31,6 +31,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [codes, setCodes] = useState<any[]>([]);
+  const [demoStats, setDemoStats] = useState<{ opens: any[]; signups: any[] }>({ opens: [], signups: [] });
   const [form, setForm] = useState({ code: "", percentOff: "100", duration: "once", durationInMonths: "3" });
   const [creating, setCreating] = useState(false);
 
@@ -107,6 +108,7 @@ export default function AdminPage() {
       setAuthorized(true);
       await loadUsers();
       await loadCodes();
+      fetch("/api/admin/demo-analytics").then((r) => (r.ok ? r.json() : null)).then((d) => d && setDemoStats(d)).catch(() => {});
       setLoading(false);
     })();
   }, []);
@@ -364,6 +366,41 @@ export default function AdminPage() {
                   a fully free code. Duration <span className="text-electric">once</span> = first payment only,
                   <span className="text-electric"> forever</span> = every payment, <span className="text-electric">repeating</span> = a set number of months.
                 </p>
+
+                {/* Demo attribution stats */}
+                {(demoStats.opens.length > 0 || demoStats.signups.length > 0) && (
+                  <div className="mt-6 border border-bone/15 bg-ink/30 p-5">
+                    <p className="font-display uppercase tracking-wider text-electric text-sm">What drives sign-ups</p>
+                    <div className="mt-4 grid sm:grid-cols-2 gap-6">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Tool demos opened</p>
+                        {demoStats.opens.length === 0 ? <p className="text-bone/40 text-sm">No demo opens yet.</p> : (
+                          <ul className="grid gap-1.5">
+                            {demoStats.opens.map((o: any) => (
+                              <li key={o.tool} className="flex justify-between text-sm border-b border-bone/10 pb-1">
+                                <span className="text-bone/80">{o.tool}</span>
+                                <span className="text-electric font-display">{o.opens}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Sign-ups by last demo opened</p>
+                        {demoStats.signups.length === 0 ? <p className="text-bone/40 text-sm">No attributed sign-ups yet.</p> : (
+                          <ul className="grid gap-1.5">
+                            {demoStats.signups.map((s: any) => (
+                              <li key={s.tool} className="flex justify-between text-sm border-b border-bone/10 pb-1">
+                                <span className="text-bone/80">{s.tool}</span>
+                                <span className="text-electric font-display">{s.count}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Preset coaching discounts */}
                 <div className="mt-6 border border-electric/40 bg-electric/5 p-5">
