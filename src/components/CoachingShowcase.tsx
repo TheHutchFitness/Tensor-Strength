@@ -3,6 +3,10 @@ const CLIPS = [
   { src: "/videos/coaching2.mp4", poster: "/videos/coaching2-poster.jpg", label: "Strength Work" },
   { src: "/videos/coaching3.mp4", poster: "/videos/coaching3-poster.jpg", label: "Technique Cues" },
   { src: "/videos/coaching4.mp4", poster: "/videos/coaching4-poster.jpg", label: "In The Trenches" },
+  { src: "/videos/coaching5.mp4", poster: "/videos/coaching5-poster.jpg", label: "Progression Work" },
+  { src: "/videos/coaching6.mp4", poster: "/videos/coaching6-poster.jpg", label: "Accessory Focus" },
+  { src: "/videos/coaching7.mp4", poster: "/videos/coaching7-poster.jpg", label: "Heavy Singles" },
+  { src: "/videos/coaching8.mp4", poster: "/videos/coaching8-poster.jpg", label: "Form Under Load" },
 ];
 
 export default function CoachingShowcase() {
