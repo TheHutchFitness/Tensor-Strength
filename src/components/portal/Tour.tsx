@@ -10,7 +10,12 @@ export default function Tour({ id, steps }: { id: string; steps: Step[] }) {
 
   useEffect(() => {
     try {
-      if (!localStorage.getItem(`ts-tour-${id}`)) setOpen(true);
+      if (!localStorage.getItem(`ts-tour-${id}`)) {
+        setOpen(true);
+        // Mark this area's tour as seen as soon as it appears, so it only ever
+        // pops up on the first visit — even if the user navigates away.
+        localStorage.setItem(`ts-tour-${id}`, "1");
+      }
     } catch {}
   }, [id]);
 
