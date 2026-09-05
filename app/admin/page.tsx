@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { DEFAULT_CLIPS } from "@/components/CoachingShowcase";
 
 type User = {
   id: string;
@@ -34,6 +35,41 @@ export default function AdminPage() {
   const [demoStats, setDemoStats] = useState<{ opens: any[]; signups: any[] }>({ opens: [], signups: [] });
   const [form, setForm] = useState({ code: "", percentOff: "100", duration: "once", durationInMonths: "3" });
   const [creating, setCreating] = useState(false);
+
+  // Coaching video captions (editable)
+  const [clipLabels, setClipLabels] = useState<Record<string, string>>({});
+  const [savingClips, setSavingClips] = useState(false);
+  const [clipsSaved, setClipsSaved] = useState(false);
+
+  async function loadCoaching() {
+    const res = await fetch("/api/coaching-content");
+    if (res.ok) {
+      const d = await res.json();
+      setClipLabels(d.labels || {});
+    }
+  }
+
+  async function saveCoaching() {
+    setSavingClips(true);
+    setClipsSaved(false);
+    // merge defaults so any untouched clip is stored with its current label
+    const labels: Record<string, string> = {};
+    DEFAULT_CLIPS.forEach((c) => {
+      labels[c.src] = (clipLabels[c.src] ?? c.label).slice(0, 120);
+    });
+    const res = await fetch("/api/admin/coaching-content", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ labels }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setClipLabels(d.labels || labels);
+      setClipsSaved(true);
+      setTimeout(() => setClipsSaved(false), 2500);
+    }
+    setSavingClips(false);
+  }
 
   async function loadCodes() {
     const res = await fetch("/api/admin/coupons");
@@ -108,6 +144,7 @@ export default function AdminPage() {
       setAuthorized(true);
       await loadUsers();
       await loadCodes();
+      await loadCoaching();
       fetch("/api/admin/demo-analytics").then((r) => (r.ok ? r.json() : null)).then((d) => d && setDemoStats(d)).catch(() => {});
       setLoading(false);
     })();
@@ -556,6 +593,53 @@ export default function AdminPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              {/* Coaching video captions */}
+              <div className="mt-16">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-3">
+                  Coaching Videos
+                </p>
+                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight mb-2">
+                  Edit clip <span className="text-electric">captions.</span>
+                </h2>
+                <p className="text-bone/60 text-sm mb-6">
+                  Change the little title shown on each clip in the homepage highlight reel. Saves instantly for all visitors.
+                </p>
+
+                <div className="border border-bone/15 bg-ink/20 p-5">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {DEFAULT_CLIPS.map((c, i) => (
+                      <label key={c.src} className="block">
+                        <span className="text-[10px] uppercase tracking-wider text-bone/50">
+                          Clip {i + 1}
+                        </span>
+                        <input
+                          value={clipLabels[c.src] ?? c.label}
+                          onChange={(e) =>
+                            setClipLabels({ ...clipLabels, [c.src]: e.target.value })
+                          }
+                          maxLength={120}
+                          className="w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none font-display tracking-wider text-sm"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-5 flex items-center gap-4">
+                    <button
+                      onClick={saveCoaching}
+                      disabled={savingClips}
+                      className="bg-electric text-ink px-6 py-2.5 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60"
+                    >
+                      {savingClips ? "Saving…" : "Save Captions"}
+                    </button>
+                    {clipsSaved && (
+                      <span className="text-electric font-display uppercase tracking-wider text-xs">
+                        ✓ Saved
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </>

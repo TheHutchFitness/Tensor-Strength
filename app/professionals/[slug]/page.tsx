@@ -155,6 +155,48 @@ export default function ProfessionalPage() {
           </div>
         </section>
 
+        {/* Video testimonial */}
+        {p.videoTestimonial && (
+          <section className="py-20 md:py-28 border-t border-bone/10">
+            <div className="mx-auto max-w-6xl px-6">
+              <div className="max-w-2xl mb-12 mx-auto text-center">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
+                  In Their Words
+                </p>
+                <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
+                  Hear it <span className="text-electric">first-hand.</span>
+                </h2>
+              </div>
+              <div className="flex flex-col items-center">
+                <figure className="relative w-full max-w-[340px] aspect-[9/16] overflow-hidden border-4 border-electric bg-ink shadow-[0_0_40px_rgba(0,168,255,0.25)]">
+                  <video
+                    src={p.videoTestimonial.src}
+                    poster={p.videoTestimonial.poster}
+                    className="h-full w-full object-cover"
+                    controls
+                    playsInline
+                    preload="metadata"
+                    aria-label={`Video testimonial for ${p.name}`}
+                  />
+                </figure>
+                {(p.videoTestimonial.name || p.videoTestimonial.detail) && (
+                  <div className="mt-5 text-center">
+                    {p.videoTestimonial.name && (
+                      <p className="font-display uppercase tracking-wider text-bone">
+                        {p.videoTestimonial.name}
+                      </p>
+                    )}
+                    {p.videoTestimonial.detail && (
+                      <p className="text-sm text-electric mt-1">{p.videoTestimonial.detail}</p>
+                    )}
+                  </div>
+                )}
+                <p className="mt-3 text-xs text-bone/50">Tap to play with sound.</p>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Full testimonials */}
         {p.testimonials.length > 0 && (
           <section className="py-20 md:py-28 relative overflow-hidden border-t border-bone/10">

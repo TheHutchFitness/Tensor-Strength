@@ -565,3 +565,42 @@ agent_communication:
 
     -agent: "testing"
     -message: "✅ ALL ADMIN PASSWORD RESET + COACH MEAL TEMPLATES TESTS PASSED (17/17 - 100% success rate). Comprehensive testing completed covering all 15 numbered test steps from review request. PART 1 - ADMIN-ASSISTED PASSWORD RESET (6 tests): (1) Admin successfully resets C1's password to 'NewPass123' via PUT /api/admin/users. (2) C1 can login with NEW password (200). (3) C1's ORIGINAL password no longer works (401). (4) Admin PUT with password too short (<6 chars) returns 400 with proper error. (5) Non-admin attempting password reset returns 403. (6) PUT response doesn't leak passwordHash or _id. PART 2 - COACH MEAL TEMPLATES (11 tests): (7) Trainer creates meal for assigned client C1 with items, returns 200 with id + items. (8) Trainer creates broadcast meal (clientId=null), returns 200. (9) Trainer attempting to create meal for unassigned client C2 returns 400 with proper error. (10) Trainer POST without name returns 400. (11) C1 GET /api/client/meals returns BOTH C1-specific meal and broadcast meal (2 total). (12) C2 GET /api/client/meals returns empty array (not assigned to trainer). (13) Trainer can list meals (GET returns 2) and delete meal (DELETE returns {ok:true}). (14) Non-trainer POST /api/trainer/meals returns 403; GET /api/trainer/meals with NO cookie returns 403. (15) GET /api/client/meals with NO cookie returns safe response (200 with empty array, not 500). No 500 errors encountered. No _id or passwordHash leaks detected in any responses. All endpoints return correct status codes, proper JSON responses, and enforce correct authentication/authorization checks."
+
+    -agent: "main"
+    -message: "NEW — TEST COACHING-CONTENT ENDPOINTS (admin-editable video captions). (1) GET /api/coaching-content (PUBLIC, no auth) -> 200 JSON { labels(object), featuredLabel(null|string), featuredEnabled(bool) }. labels may start as {}. (2) PUT /api/admin/coaching-content with NO auth cookie -> 403. (3) Register+login a normal member, PUT with that cookie -> 403. (4) Login ADMIN ('The Hutch'/'Vzkfjf3n!3' via POST /api/auth/login {identifier,password}); PUT /api/admin/coaching-content body {labels:{'/videos/coaching1.mp4':'Test Sprint','/videos/coaching2.mp4':'Dips X'}} -> 200 ok:true, labels echoed. (5) GET /api/coaching-content again -> labels persist with saved values. (6) PUT a 300-char label -> stored value capped at 120 chars. (7) PUT with a non-string label value -> skipped, no 500. Confirm no 500s and no _id leaks. Do NOT re-test unrelated endpoints."
+
+
+# ============ COACHING CONTENT (admin-editable video captions) ============
+backend_coaching_content:
+  - task: "Coaching content - public GET (GET /api/coaching-content)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Public endpoint returns admin-editable video captions. Returns {labels (object), featuredLabel (null|string), featuredEnabled (boolean)}. No auth required."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED: GET /api/coaching-content with no auth returns 200 with JSON containing labels (object), featuredLabel (None), featuredEnabled (True). Public endpoint working correctly."
+  - task: "Coaching content - admin PUT (PUT /api/admin/coaching-content)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Admin-only endpoint to save video captions. Accepts labels object with string key/value pairs. Sanitizes: caps label values at 120 chars, keys at 200 chars. Skips non-string entries. Returns {ok:true, labels, featuredLabel, featuredEnabled}. 403 for non-admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 6 tests: (1) PUT with NO auth returns 403. (2) PUT as member (non-admin) returns 403. (3) Admin PUT with labels {'/videos/coaching1.mp4':'Test Sprint', '/videos/coaching2.mp4':'Dips X'} returns 200 with ok:true and labels echoed. (4) GET /api/coaching-content verifies labels persisted correctly. (5) PUT with 300-char label correctly caps at 120 chars (verified via GET). (6) PUT with non-string label value (123) correctly skips entry, no 500 error. No _id leaks detected."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL COACHING-CONTENT ENDPOINTS TESTS PASSED (7/7 - 100% success rate). Comprehensive testing completed covering all 7 test scenarios from review request: TEST 1: GET /api/coaching-content (PUBLIC, no auth) returns 200 with JSON containing labels (object), featuredLabel (None), featuredEnabled (True). TEST 2: PUT /api/admin/coaching-content with NO auth cookie returns 403 as expected. TEST 3: Registered fresh member and attempted PUT with member cookie, correctly returns 403 (not admin). TEST 4: Admin login successful (NOTE: login uses 'username' field, not 'identifier' field; username is 'the hutch' lowercase). Admin PUT /api/admin/coaching-content with labels {'/videos/coaching1.mp4':'Test Sprint', '/videos/coaching2.mp4':'Dips X'} returns 200 with ok:true and labels correctly saved. TEST 5: GET /api/coaching-content verifies labels persisted with saved values. TEST 6: Admin PUT with 300-char label correctly caps stored value at 120 chars (verified via GET). TEST 7: Admin PUT with non-string label value (integer 123) correctly skips that entry, returns 200 with no 500 error. SECURITY VERIFIED: No 500 errors encountered in any test. No MongoDB _id leaks detected in any responses. All endpoints return correct status codes and proper JSON responses. Admin-only access correctly enforced (403 for non-admin). Label sanitization working correctly (120-char cap, non-string entries skipped)."

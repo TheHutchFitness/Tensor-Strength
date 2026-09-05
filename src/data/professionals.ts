@@ -41,6 +41,12 @@ export type Professional = {
   credentials: string[];
   specialties: string[];
   testimonials: Testimonial[];
+  videoTestimonial?: {
+    src: string;
+    poster?: string;
+    name?: string;
+    detail?: string;
+  };
 };
 
 export const professionals: Professional[] = [
@@ -74,6 +80,12 @@ export const professionals: Professional[] = [
       "Return-from-Injury",
       "Older Adult Training",
     ],
+    videoTestimonial: {
+      src: "/videos/hutch-testimonial.mp4",
+      poster: "/videos/hutch-testimonial-poster.jpg",
+      name: "Jimmy McCullough",
+      detail: "@jimmymcculloughfitness",
+    },
     testimonials: [
       {
         quote:
