@@ -1,11 +1,45 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { professionals } from "@/data/professionals";
 
 // How many testimonials to feature per professional on the home page.
-// The full set lives on each professional's profile page.
 const FEATURED_TESTIMONIALS = 2;
+
+type DbPro = {
+  slug: string;
+  name: string;
+  title: string;
+  photo: string;
+  location: string;
+  shortBio: string;
+};
 
 export default function Professionals() {
   const founder = professionals[0];
+  const [dbPros, setDbPros] = useState<DbPro[]>([]);
+
+  useEffect(() => {
+    fetch("/api/professionals")
+      .then((r) => (r.ok ? r.json() : { professionals: [] }))
+      .then((d) => setDbPros(d.professionals || []))
+      .catch(() => setDbPros([]));
+  }, []);
+
+  const staticSlugs = new Set(professionals.map((p) => p.slug));
+  const extraPros = dbPros.filter((p) => !staticSlugs.has(p.slug));
+
+  const cards = [
+    ...professionals.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      title: p.title,
+      photo: p.photo,
+      location: p.location,
+      shortBio: p.shortBio,
+    })),
+    ...extraPros,
+  ];
 
   return (
     <section id="professionals" className="py-24 md:py-32 relative overflow-hidden">
@@ -28,20 +62,26 @@ export default function Professionals() {
           </p>
         </div>
 
-        {/* Professional cards — one per entry in the data file */}
+        {/* Professional cards */}
         <div className="mt-14 grid gap-6 md:grid-cols-2">
-          {professionals.map((p) => (
+          {cards.map((p) => (
             <a
               key={p.slug}
               href={`/professionals/${p.slug}`}
               className="group border-2 border-bone/15 hover:border-electric transition-colors bg-ink/30 backdrop-blur-sm overflow-hidden flex flex-col"
             >
               <div className="relative aspect-[4/3] overflow-hidden bg-ink">
-                <img
-                  src={p.photo}
-                  alt={p.name}
-                  className="h-full w-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
-                />
+                {p.photo ? (
+                  <img
+                    src={p.photo}
+                    alt={p.name}
+                    className="h-full w-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center font-display text-electric text-6xl">
+                    {p.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink to-transparent p-5">
                   <p className="font-display uppercase text-2xl text-bone font-700 leading-tight">
                     {p.name}
@@ -52,12 +92,10 @@ export default function Professionals() {
                 </div>
               </div>
               <div className="p-6 flex flex-col flex-1">
-                <p className="text-sm text-bone/60 uppercase tracking-wider">
-                  {p.location}
-                </p>
-                <p className="mt-3 text-bone/80 leading-relaxed text-sm flex-1">
-                  {p.shortBio}
-                </p>
+                {p.location && (
+                  <p className="text-sm text-bone/60 uppercase tracking-wider">{p.location}</p>
+                )}
+                <p className="mt-3 text-bone/80 leading-relaxed text-sm flex-1">{p.shortBio}</p>
                 <p className="mt-5 font-display uppercase tracking-wider text-sm text-electric group-hover:text-bone transition-colors">
                   View profile &amp; testimonials →
                 </p>
@@ -81,27 +119,17 @@ export default function Professionals() {
                   key={r.name}
                   className="border border-bone/15 bg-navy-deep/40 backdrop-blur-sm p-8 flex flex-col"
                 >
-                  <div className="text-electric font-display text-5xl leading-none mb-4">
-                    &ldquo;
-                  </div>
-                  <blockquote className="text-bone/90 leading-relaxed flex-1">
-                    {r.quote}
-                  </blockquote>
+                  <div className="text-electric font-display text-5xl leading-none mb-4">&ldquo;</div>
+                  <blockquote className="text-bone/90 leading-relaxed flex-1">{r.quote}</blockquote>
                   <figcaption className="mt-6 border-t border-bone/15 pt-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="font-display uppercase tracking-wider">
-                          {r.name}
-                        </p>
+                        <p className="font-display uppercase tracking-wider">{r.name}</p>
                         <p className="text-sm text-electric mt-1">{r.detail}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="font-display text-2xl text-electric font-700 leading-none">
-                          {r.highlight}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-wider text-bone/60 mt-1">
-                          {r.highlightLabel}
-                        </p>
+                        <p className="font-display text-2xl text-electric font-700 leading-none">{r.highlight}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-bone/60 mt-1">{r.highlightLabel}</p>
                       </div>
                     </div>
                   </figcaption>

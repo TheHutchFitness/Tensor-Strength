@@ -69,13 +69,43 @@ export default function WorkoutLog() {
     setHutchOpen(false);
   }
 
+  // Load a trainer-written program (handed off via localStorage from the portal).
+  function loadProgramSession(program: any) {
+    const list: SessionExercise[] = (program.exercises || []).map((ex: any) => {
+      const cue = [ex.sets && `${ex.sets} sets`, ex.reps && `${ex.reps} reps`, ex.load, ex.notes]
+        .filter(Boolean)
+        .join(" · ");
+      const nSets = Math.max(1, Math.min(10, parseInt(ex.sets, 10) || 1));
+      return {
+        id: uid(),
+        name: ex.name,
+        cue,
+        sets: Array.from({ length: nSets }, () => ({ id: uid(), weight: "", reps: "", rpe: "" })),
+      };
+    });
+    setSession(list);
+    setSessionTitle(program.title || "Trainer Program");
+    setSessionNotes(program.notes || "");
+    setActiveSplitId(null);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
   useEffect(() => {
     try {
       const w = localStorage.getItem(WORKOUT_KEY);
       if (w) setWorkouts(JSON.parse(w));
       const c = localStorage.getItem(CUSTOM_KEY);
       if (c) setCustomExercises(JSON.parse(c));
+      // If a trainer program was handed off from the portal, load it in.
+      const pending = localStorage.getItem("ts-pending-program");
+      if (pending) {
+        localStorage.removeItem("ts-pending-program");
+        loadProgramSession(JSON.parse(pending));
+      }
     } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const library: Exercise[] = useMemo(

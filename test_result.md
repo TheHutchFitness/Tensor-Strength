@@ -327,6 +327,72 @@ backend_trainers:
 agent_communication:
     -agent: "main"
     -message: "PLEASE TEST THE NEW TRAINER PORTAL BACKEND (all /api routes, httpOnly cookie ts_token, persist cookies). Admin login: identifier 'The Hutch' password 'Vzkfjf3n!3'. Suggested flow: 1) Login as admin. 2) Register member A (trainerCandidate) and member B (client) via /api/auth/register. 3) As admin PUT /api/admin/users {id: A.id, isTrainer:true} -> A.isTrainer true. 4) As admin PUT /api/admin/users {id: B.id, assignedTrainerId: A.id} -> B.assignedTrainerId == A.id. 5) PUT with assignedTrainerId set to a NON-trainer user id -> expect 400. 6) As member B (non-trainer), GET /api/trainer/clients -> 403. 7) Login as A (the trainer), GET /api/trainer/clients -> 200, list contains B with checkinCount & lastCheckinAt fields. 8) As admin, grant B portalAccess=true, login B, POST /api/checkins {week:'1', wins:'x', struggles:'y', readiness:'8'} -> 200. 9) As trainer A, GET /api/trainer/checkins?clientId=B.id -> 200 with checkins array (>=1) and client info; no _id leaks. 10) GET /api/trainer/checkins without clientId -> 400. 11) Register member C, as trainer A GET /api/trainer/checkins?clientId=C.id (C not assigned to A) -> 403. 12) As admin PUT {id:A.id, isTrainer:false} -> should unassign B (B.assignedTrainerId becomes null); verify via GET /api/admin/users. 13) GET /api/trainer/clients with NO auth -> 403. Confirm no 500s and no _id/passwordHash leaks."
+
+
+# ============ TRAINER PORTAL PHASE 2 (profiles, programs, messaging, files) ============
+backend_trainer_portal_v2:
+  - task: "Trainer profile GET/PUT (/api/trainer/profile) + public professionals (/api/professionals, /api/professionals/:slug)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "PUT /trainer/profile requires isTrainer (403 else). Requires photo+bio+trainerType (400 else). On save sets profileCompleted=true and a unique slug. GET returns {profile, completed, slug}. Public GET /professionals returns only trainers with profileCompleted=true (mapped shape slug/name/title/photo/location/shortBio/bio[]/credentials[]/specialties[]). GET /professionals/:slug returns one or 404. No _id/passwordHash leaks."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests (a-e): (a) PUT /trainer/profile with missing fields correctly returns 400 with error 'Photo, bio and trainer type are required.' (b) PUT with complete data (photo, bio with newlines, trainerType, certifications, specialties) returns 200 with completed=true and slug generated. (c) GET /professionals returns array including trainer's slug. (d) GET /professionals/<slug> returns 200 with professional object; GET /professionals/does-not-exist returns 404. (e) Non-trainer attempting PUT /trainer/profile correctly returns 403. No _id or passwordHash leaks detected."
+  - task: "Trainer programs + client programs (/api/trainer/programs, /api/client/programs)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "POST /trainer/programs (isTrainer) creates program {title required, exercises[], clientId optional=broadcast}. clientId must belong to trainer else 400. GET /trainer/programs lists own. DELETE /trainer/programs?id= deletes own. GET /client/programs (portalAccess) returns programs where trainerId==assignedTrainerId AND (clientId==me OR null). Non-trainer POST -> 403."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests (f-k): (f) POST /trainer/programs with clientId=C1.id returns 200, program created with exercises. (g) POST with clientId=C2.id (not assigned) correctly returns 400 with error 'That client is not assigned to you.' (h) POST with clientId=null returns 200, broadcast program created. (i) C1 GET /client/programs returns 2 programs (C1-specific 'W1' + broadcast 'AllClients'). (j) C2 GET /client/programs returns empty array (not assigned to trainer). (k) GET /trainer/programs lists 2 programs; DELETE one returns {ok:true}. No _id leaks detected."
+  - task: "Messaging (/api/messages, /api/messages/unread, /api/trainer/threads, /api/client/trainer)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "POST /messages {toUserId, body|mediaUrl} only allowed between an assigned trainer<->client pair (403 else). GET /messages?withUserId= returns thread asc and marks messages TO me as read. GET /messages/unread returns count of unread addressed to me. GET /trainer/threads (isTrainer) lists assigned clients w/ lastMessage + unread. GET /client/trainer returns assigned trainer public info or null. No _id leaks."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests (l-p): (l) C1 POST /messages to trainer returns 200, message created. (m) C2 POST /messages to trainer correctly returns 403 with error 'You can only message your assigned trainer/client.' (n) Trainer GET /messages/unread returns count=1 before reading; GET /messages?withUserId=C1.id returns 1 message and marks as read; GET /messages/unread returns count=0 after reading. (o) GET /trainer/threads returns C1 with lastMessage populated {body:'hi coach', senderRole:'client', createdAt, mediaType:null}. (p) GET /messages without withUserId correctly returns 400 with error 'withUserId is required'. No _id leaks detected."
+  - task: "File uploads + trainer files (/api/uploads/file, /api/trainer/files, /api/client/files)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "POST /uploads/file (auth) accepts a file <=50MB, writes to public/uploads, returns {url,name,size,mime}. POST /trainer/files (isTrainer) saves {name,url,size,mime,clientId optional} (clientId must belong to trainer else 400). GET /trainer/files lists own. DELETE /trainer/files?id=. GET /client/files (portalAccess) returns files where trainerId==assignedTrainerId AND (clientId==me OR null)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all tests (q-t): (q) POST /uploads/file with multipart form (test.pdf) returns 200 with {url, name, size, mime}. (r) POST /trainer/files with clientId=C1.id returns 200; with clientId=C2.id (not assigned) correctly returns 400 with error 'That client is not assigned to you.'; with clientId=null returns 200 (broadcast file). (s) C1 GET /client/files returns 2 files (C1-specific 'plan.pdf' + broadcast 'broadcast.pdf'). (t) GET /trainer/files lists 2 files; DELETE one returns {ok:true}. No _id leaks detected."
+
+agent_communication:
+    -agent: "main"
+    -message: "PLEASE TEST TRAINER PORTAL PHASE 2 endpoints. Reuse cookie jar. Admin: 'The Hutch'/'Vzkfjf3n!3'. Setup: register trainer T (make isTrainer via admin), register client C1 (portalAccess=true, assignedTrainerId=T via admin), and client C2 (portalAccess true, NOT assigned to T). Tests: PROFILE: (a) as T, PUT /api/trainer/profile missing trainerType -> 400; (b) PUT with photo,bio,trainerType -> 200, completed=true, slug returned; (c) GET /api/professionals -> includes T's slug; (d) GET /api/professionals/<slug> -> 200; unknown slug -> 404; (e) as non-trainer C1, PUT /api/trainer/profile -> 403. PROGRAMS: (f) as T POST /api/trainer/programs {title:'W1', exercises:[{name:'Squat',sets:'3',reps:'5'}], clientId:C1.id} -> 200; (g) POST with clientId:C2.id (not assigned) -> 400; (h) POST {title:'All', clientId:null} -> 200 (broadcast); (i) as C1 GET /api/client/programs -> returns both the C1-specific and the broadcast program; (j) as C2 GET /api/client/programs -> returns neither (C2 not assigned to T); (k) DELETE /api/trainer/programs?id=<one> as T -> ok. MESSAGING: (l) as C1 POST /api/messages {toUserId:T.id, body:'hi'} -> 200; (m) as C2 POST /api/messages {toUserId:T.id, body:'hi'} -> 403 (not assigned); (n) as T GET /api/messages?withUserId=C1.id -> returns the message, marks read; (o) as T GET /api/messages/unread -> 0 after reading; before T reads, T's unread should be >=1; (p) as T GET /api/trainer/threads -> lists C1 with lastMessage. FILES: (q) as T POST /api/uploads/file with a small file (multipart form field 'file') -> 200 {url,name,size,mime}; (r) as T POST /api/trainer/files {name,url,size,mime,clientId:C1.id} -> 200; clientId:C2.id -> 400; clientId:null -> 200; (s) as C1 GET /api/client/files -> returns C1 + broadcast files; (t) DELETE /api/trainer/files?id= as T -> ok. AUTH GUARDS: every /api/trainer/* with no cookie or as non-trainer -> 403; /api/uploads/file with no cookie -> 401. Confirm no 500s and no _id/passwordHash leaks."
     -agent: "testing"
     -message: "✅ ALL TRAINER PORTAL BACKEND TESTS PASSED (14/14 - 100% success rate). Comprehensive testing completed covering all 13 test steps: (1) Admin login successful with correct credentials. (2) Member A and B registered with correct initial state (role=member, portalAccess=false, isTrainer=undefined). (3) Admin successfully sets member A as trainer (isTrainer=true). (4) Admin successfully assigns member B to trainer A (assignedTrainerId=A.id). (5) Attempting to assign to non-trainer returns 400 with proper error message. (6) Non-trainer member B correctly denied access to /api/trainer/clients (403). (7) Trainer A successfully retrieves client list containing member B with checkinCount and lastCheckinAt fields. (8) Member B granted portal access and successfully created check-in. (9) Trainer A successfully views member B's check-ins with proper response structure {client:{id,username,email}, checkins:[...]}. (10) Missing clientId query returns 400. (11) Trainer A correctly denied access to unassigned member C's check-ins (403). (12) Demoting trainer A (isTrainer=false) automatically unassigns member B (assignedTrainerId becomes null). (13) Unauthenticated request to /api/trainer/clients returns 403. No 500 errors encountered. No passwordHash or _id leaks detected in any responses. All endpoints return correct status codes and proper JSON responses."
+    -agent: "testing"
+    -message: "✅ ALL TRAINER PORTAL PHASE 2 BACKEND TESTS PASSED (26/26 - 100% success rate). Comprehensive testing completed covering all labeled steps (a-v): PROFILE (5 tests): (a) Missing fields correctly rejected with 400. (b) Complete profile saved with completed=true and slug generated. (c) Trainer found in public professionals list. (d) Individual profile retrieval works; 404 for non-existent slug. (e) Non-trainer correctly denied 403. PROGRAMS (6 tests): (f) Program created for assigned client. (g) Unassigned client correctly rejected with 400. (h) Broadcast program created with clientId=null. (i) C1 sees both C1-specific and broadcast programs. (j) C2 sees no programs (not assigned). (k) Trainer can list and delete programs. MESSAGING (5 tests): (l) C1 can message assigned trainer. (m) C2 correctly denied 403 (not assigned). (n) Unread count works correctly, messages mark as read. (o) Trainer threads list C1 with lastMessage. (p) Missing withUserId correctly rejected with 400. FILES (4 tests): (q) File upload returns url/name/size/mime. (r) Trainer files work for assigned client, reject unassigned, allow broadcast. (s) C1 sees C1-specific + broadcast files. (t) Trainer can list and delete files. AUTH GUARDS (2 tests): (u) All /trainer/* endpoints return 403 without auth; /uploads/file returns 401. (v) Non-trainer correctly denied 403 for trainer endpoints. NO 500 ERRORS. NO _id OR passwordHash LEAKS DETECTED."
 

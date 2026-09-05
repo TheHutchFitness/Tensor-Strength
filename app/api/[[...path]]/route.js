@@ -10,14 +10,25 @@ import path from 'path'
 // MongoDB connection
 let client
 let db
+let connectPromise
 
 async function connectToMongo() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
+  if (db) return db
+  if (!connectPromise) {
+    connectPromise = (async () => {
+      client = new MongoClient(process.env.MONGO_URL)
+      await client.connect()
+      db = client.db(process.env.DB_NAME)
+      return db
+    })().catch((e) => {
+      // Reset so a later request can retry a fresh connection.
+      connectPromise = undefined
+      client = undefined
+      db = undefined
+      throw e
+    })
   }
-  return db
+  return connectPromise
 }
 
 const COOKIE_NAME = 'ts_token'
@@ -44,6 +55,33 @@ function publicUser(u) {
   if (!u) return null
   const { _id, passwordHash, ...rest } = u
   return rest
+}
+
+function slugify(s) {
+  return String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'trainer'
+}
+
+// Public-facing trainer profile shape (used on homepage + profile pages).
+function publicTrainerProfile(u) {
+  if (!u) return null
+  const p = u.trainerProfile || {}
+  return {
+    slug: u.slug || slugify(u.username),
+    name: p.displayName || u.username,
+    title: p.trainerType || 'Coach',
+    photo: p.photo || '',
+    location: p.location || '',
+    shortBio: p.shortBio || (p.bio ? String(p.bio).slice(0, 160) : ''),
+    bio: p.bio ? String(p.bio).split('\n').map((x) => x.trim()).filter(Boolean) : [],
+    credentials: Array.isArray(p.certifications) ? p.certifications : [],
+    specialties: Array.isArray(p.specialties) ? p.specialties : [],
+    testimonials: [],
+  }
 }
 
 // Ensure a single admin account exists (seeded from env)
@@ -443,6 +481,381 @@ async function handleRoute(request, { params }) {
         checkins: clean,
       }))
     }
+
+    // ---- Trainer profile: get / save (first-entry onboarding) ----
+    if (route === '/trainer/profile' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      return handleCORS(NextResponse.json({
+        profile: user.trainerProfile || null,
+        completed: !!user.profileCompleted,
+        slug: user.slug || null,
+      }))
+    }
+
+    if (route === '/trainer/profile' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const photo = (body.photo || '').trim()
+      const bio = (body.bio || '').trim()
+      const trainerType = (body.trainerType || '').trim()
+      if (!photo || !bio || !trainerType) {
+        return handleCORS(NextResponse.json({ error: 'Photo, bio and trainer type are required.' }, { status: 400 }))
+      }
+      const certifications = Array.isArray(body.certifications)
+        ? body.certifications.map((c) => String(c).trim()).filter(Boolean)
+        : []
+      const specialties = Array.isArray(body.specialties)
+        ? body.specialties.map((c) => String(c).trim()).filter(Boolean)
+        : []
+      const trainerProfile = {
+        displayName: (body.displayName || user.username || '').trim() || user.username,
+        photo,
+        bio,
+        shortBio: (body.shortBio || bio).slice(0, 200),
+        trainerType,
+        location: (body.location || '').trim(),
+        certifications,
+        specialties,
+      }
+      // Generate a unique slug once.
+      let slug = user.slug
+      if (!slug) {
+        const base = slugify(trainerProfile.displayName || user.username)
+        slug = base
+        let n = 1
+        while (await db.collection('users').findOne({ slug, id: { $ne: user.id } })) {
+          slug = base + '-' + (++n)
+        }
+      }
+      await db.collection('users').updateOne(
+        { id: user.id },
+        { $set: { trainerProfile, profileCompleted: true, slug } }
+      )
+      return handleCORS(NextResponse.json({ profile: trainerProfile, completed: true, slug }))
+    }
+
+    // ---- Public professionals (trainers who completed a profile) ----
+    if (route === '/professionals' && method === 'GET') {
+      const list = await db.collection('users')
+        .find({ isTrainer: true, profileCompleted: true })
+        .sort({ createdAt: 1 })
+        .toArray()
+      return handleCORS(NextResponse.json({ professionals: list.map(publicTrainerProfile) }))
+    }
+    if (path[0] === 'professionals' && path.length === 2 && method === 'GET') {
+      const t = await db.collection('users').findOne({ slug: path[1], isTrainer: true, profileCompleted: true })
+      if (!t) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+      return handleCORS(NextResponse.json({ professional: publicTrainerProfile(t) }))
+    }
+
+    // ---- Programs: trainer creates, client reads ----
+    if (route === '/trainer/programs' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const title = (body.title || '').trim()
+      if (!title) return handleCORS(NextResponse.json({ error: 'A program title is required.' }, { status: 400 }))
+      const exercises = Array.isArray(body.exercises)
+        ? body.exercises
+            .map((e) => ({
+              name: String(e.name || '').trim(),
+              cue: String(e.cue || '').trim(),
+              sets: String(e.sets || '').trim(),
+              reps: String(e.reps || '').trim(),
+              load: String(e.load || '').trim(),
+              notes: String(e.notes || '').trim(),
+            }))
+            .filter((e) => e.name)
+        : []
+      // clientId null => broadcast to all of this trainer's clients
+      let clientId = body.clientId || null
+      if (clientId) {
+        const c = await db.collection('users').findOne({ id: clientId })
+        if (!c || c.assignedTrainerId !== user.id) {
+          return handleCORS(NextResponse.json({ error: 'That client is not assigned to you.' }, { status: 400 }))
+        }
+      }
+      const program = {
+        id: uuidv4(),
+        trainerId: user.id,
+        trainerName: user.username,
+        clientId,
+        title,
+        notes: (body.notes || '').trim(),
+        exercises,
+        createdAt: new Date(),
+      }
+      await db.collection('programs').insertOne(program)
+      const { _id, ...clean } = program
+      return handleCORS(NextResponse.json(clean))
+    }
+
+    if (route === '/trainer/programs' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const list = await db.collection('programs')
+        .find({ trainerId: user.id })
+        .sort({ createdAt: -1 })
+        .toArray()
+      return handleCORS(NextResponse.json({ programs: list.map(({ _id, ...r }) => r) }))
+    }
+
+    if (route === '/trainer/programs' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      await db.collection('programs').deleteOne({ id, trainerId: user.id })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    if (route === '/client/programs' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      if (!user.assignedTrainerId) return handleCORS(NextResponse.json({ programs: [] }))
+      const list = await db.collection('programs')
+        .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
+        .sort({ createdAt: -1 })
+        .toArray()
+      return handleCORS(NextResponse.json({ programs: list.map(({ _id, ...r }) => r) }))
+    }
+
+    // ---- Client gets their assigned trainer (for messaging UI) ----
+    if (route === '/client/trainer' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      if (!user.assignedTrainerId) return handleCORS(NextResponse.json({ trainer: null }))
+      const t = await db.collection('users').findOne({ id: user.assignedTrainerId })
+      if (!t) return handleCORS(NextResponse.json({ trainer: null }))
+      return handleCORS(NextResponse.json({
+        trainer: {
+          id: t.id,
+          name: t.trainerProfile?.displayName || t.username,
+          photo: t.trainerProfile?.photo || '',
+          trainerType: t.trainerProfile?.trainerType || 'Coach',
+        },
+      }))
+    }
+
+    // ---- Messaging (client <-> assigned trainer) ----
+    if (route === '/messages' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const toUserId = body.toUserId
+      const text = (body.body || '').trim()
+      if (!toUserId || (!text && !body.mediaUrl)) {
+        return handleCORS(NextResponse.json({ error: 'A recipient and a message or media are required.' }, { status: 400 }))
+      }
+      const other = await db.collection('users').findOne({ id: toUserId })
+      if (!other) return handleCORS(NextResponse.json({ error: 'Recipient not found.' }, { status: 404 }))
+      // Determine trainer/client pair and validate the assignment relationship.
+      let trainerId, clientId, senderRole
+      if (user.isTrainer && other.assignedTrainerId === user.id) {
+        trainerId = user.id; clientId = other.id; senderRole = 'trainer'
+      } else if (other.isTrainer && user.assignedTrainerId === other.id) {
+        trainerId = other.id; clientId = user.id; senderRole = 'client'
+      } else {
+        return handleCORS(NextResponse.json({ error: 'You can only message your assigned trainer/client.' }, { status: 403 }))
+      }
+      const msg = {
+        id: uuidv4(),
+        trainerId,
+        clientId,
+        senderId: user.id,
+        senderRole,
+        body: text,
+        mediaUrl: body.mediaUrl || null,
+        mediaType: body.mediaType || null,
+        read: false,
+        createdAt: new Date(),
+      }
+      await db.collection('messages').insertOne(msg)
+      const { _id, ...clean } = msg
+      return handleCORS(NextResponse.json(clean))
+    }
+
+    if (route === '/messages' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const withUserId = request.nextUrl.searchParams.get('withUserId')
+      if (!withUserId) return handleCORS(NextResponse.json({ error: 'withUserId is required' }, { status: 400 }))
+      const other = await db.collection('users').findOne({ id: withUserId })
+      if (!other) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+      let trainerId, clientId
+      if (user.isTrainer && other.assignedTrainerId === user.id) { trainerId = user.id; clientId = other.id }
+      else if (other.isTrainer && user.assignedTrainerId === other.id) { trainerId = other.id; clientId = user.id }
+      else return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const list = await db.collection('messages')
+        .find({ trainerId, clientId })
+        .sort({ createdAt: 1 })
+        .limit(1000)
+        .toArray()
+      // Mark messages addressed TO the current user as read.
+      await db.collection('messages').updateMany(
+        { trainerId, clientId, senderId: { $ne: user.id }, read: false },
+        { $set: { read: true } }
+      )
+      return handleCORS(NextResponse.json({ messages: list.map(({ _id, ...r }) => r) }))
+    }
+
+    // Unread count for the current user (notification badge).
+    if (route === '/messages/unread' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ count: 0 }))
+      const count = await db.collection('messages').countDocuments({
+        read: false,
+        senderId: { $ne: user.id },
+        $or: [
+          { trainerId: user.id },
+          { clientId: user.id },
+        ],
+      })
+      return handleCORS(NextResponse.json({ count }))
+    }
+
+    // Trainer's message threads (one per assigned client, with unread counts).
+    if (route === '/trainer/threads' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).toArray()
+      const threads = await Promise.all(clients.map(async (c) => {
+        const last = await db.collection('messages')
+          .find({ trainerId: user.id, clientId: c.id })
+          .sort({ createdAt: -1 }).limit(1).toArray()
+        const unread = await db.collection('messages').countDocuments({
+          trainerId: user.id, clientId: c.id, senderId: { $ne: user.id }, read: false,
+        })
+        return {
+          clientId: c.id,
+          username: c.username,
+          email: c.email,
+          lastMessage: last[0] ? { body: last[0].body, senderRole: last[0].senderRole, createdAt: last[0].createdAt, mediaType: last[0].mediaType } : null,
+          unread,
+        }
+      }))
+      threads.sort((a, b) => {
+        const ta = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0
+        const tb = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0
+        return tb - ta
+      })
+      return handleCORS(NextResponse.json({ threads }))
+    }
+
+    // ---- Generic file upload (PDFs, docs, images, video) — 50MB cap ----
+    if (route === '/uploads/file' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      try {
+        const form = await request.formData()
+        const file = form.get('file')
+        if (!file || typeof file === 'string') {
+          return handleCORS(NextResponse.json({ error: 'No file provided' }, { status: 400 }))
+        }
+        const size = file.size || 0
+        if (size > 50 * 1024 * 1024) {
+          return handleCORS(NextResponse.json({ error: 'File too large (max 50MB).' }, { status: 400 }))
+        }
+        const mime = file.type || 'application/octet-stream'
+        const origName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
+        const dotExt = origName.includes('.') ? origName.split('.').pop() : 'bin'
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const dir = process.cwd() + '/public/uploads'
+        await mkdir(dir, { recursive: true })
+        const filename = uuidv4() + '.' + dotExt
+        await writeFile(dir + '/' + filename, buffer)
+        return handleCORS(NextResponse.json({ url: '/uploads/' + filename, name: origName, size, mime }))
+      } catch (e) {
+        console.error('File upload error:', e)
+        return handleCORS(NextResponse.json({ error: 'Upload failed' }, { status: 500 }))
+      }
+    }
+
+    // ---- Trainer files (drop files for clients) ----
+    if (route === '/trainer/files' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      if (!body.url || !body.name) {
+        return handleCORS(NextResponse.json({ error: 'A file url and name are required.' }, { status: 400 }))
+      }
+      let clientId = body.clientId || null
+      if (clientId) {
+        const c = await db.collection('users').findOne({ id: clientId })
+        if (!c || c.assignedTrainerId !== user.id) {
+          return handleCORS(NextResponse.json({ error: 'That client is not assigned to you.' }, { status: 400 }))
+        }
+      }
+      const doc = {
+        id: uuidv4(),
+        trainerId: user.id,
+        trainerName: user.username,
+        clientId,
+        name: body.name,
+        url: body.url,
+        size: body.size || 0,
+        mime: body.mime || '',
+        createdAt: new Date(),
+      }
+      await db.collection('trainerFiles').insertOne(doc)
+      const { _id, ...clean } = doc
+      return handleCORS(NextResponse.json(clean))
+    }
+
+    if (route === '/trainer/files' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const list = await db.collection('trainerFiles')
+        .find({ trainerId: user.id })
+        .sort({ createdAt: -1 })
+        .toArray()
+      return handleCORS(NextResponse.json({ files: list.map(({ _id, ...r }) => r) }))
+    }
+
+    if (route === '/trainer/files' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      await db.collection('trainerFiles').deleteOne({ id, trainerId: user.id })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    if (route === '/client/files' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      if (!user.assignedTrainerId) return handleCORS(NextResponse.json({ files: [] }))
+      const list = await db.collection('trainerFiles')
+        .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
+        .sort({ createdAt: -1 })
+        .toArray()
+      return handleCORS(NextResponse.json({ files: list.map(({ _id, ...r }) => r) }))
+    }
+
 
     // ---------------- PAYMENTS (Stripe via Emergent proxy) ----------------
     // Public list of purchasable packages (display only; amounts enforced server-side).

@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
+import PortalHeader from "@/components/portal/PortalHeader";
 import Footer from "@/components/Footer";
 import MacroCalculator from "@/components/tools/MacroCalculator";
 import OneRepMaxCalculator from "@/components/tools/OneRepMaxCalculator";
 import WilksDotsCalculator from "@/components/tools/WilksDotsCalculator";
 import PRTracker from "@/components/tools/PRTracker";
-import WorkoutLog from "@/components/tools/WorkoutLog";
-import ExerciseLibrary from "@/components/ExerciseLibrary";
-import WarmupLibrary from "@/components/WarmupLibrary";
+import ClientCoaching from "@/components/portal/ClientCoaching";
 import WeeklyPrograms from "@/components/WeeklyPrograms";
 import HutchTouch from "@/components/HutchTouch";
 import PRSubmit from "@/components/PRSubmit";
@@ -18,7 +16,7 @@ import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
 
 type Status = "idle" | "submitting" | "success" | "error";
-type Me = { username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string } | null;
+type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string } | null;
 
 const resources: never[] = [];
 
@@ -27,7 +25,7 @@ export default function ClientPortalPage() {
   const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Status>("idle");
-  const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr" | "log">("log");
+  const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr">("macros");
 
   const chatReady = TAWK_CONFIGURED;
 
@@ -98,7 +96,7 @@ export default function ClientPortalPage() {
 
   return (
     <>
-      <Navbar />
+      <PortalHeader />
       <main className="text-bone min-h-screen">
         <div className="mx-auto max-w-4xl px-6 py-20 md:py-28">
           {loading ? (
@@ -369,6 +367,20 @@ export default function ClientPortalPage() {
               {/* Client tools */}
               <div className="mt-14 border-t border-bone/10 pt-12">
                 <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
+                  Your Coaching
+                </p>
+                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
+                  Straight from your <span className="text-electric">coach.</span>
+                </h2>
+                <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
+                  Your assigned trainer&apos;s programs, files and a direct line to
+                  message them — all in one place.
+                </p>
+                {me?.id && <ClientCoaching meId={me.id} />}
+              </div>
+
+              <div id="tools" className="mt-14 border-t border-bone/10 pt-12 scroll-mt-24">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                   Client Tools
                 </p>
                 <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
@@ -381,8 +393,19 @@ export default function ClientPortalPage() {
                 </p>
 
                 <div className="flex flex-wrap gap-2 mb-6 mt-8 border-b border-bone/15 pb-2">
+                  <a
+                    href="/clients/workout-log"
+                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
+                  >
+                    Workout Tracker →
+                  </a>
+                  <a
+                    href="/clients/nutrition"
+                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
+                  >
+                    Nutrition Tracker →
+                  </a>
                   {([
-                    { id: "log", label: "Workout Log" },
                     { id: "macros", label: "Macro Calculator" },
                     { id: "1rm", label: "1-Rep Max" },
                     { id: "wilks", label: "Wilks & DOTS" },
@@ -404,7 +427,6 @@ export default function ClientPortalPage() {
                 </div>
 
                 <div className="bg-ink/20 border border-bone/10 p-6 md:p-10">
-                  {tool === "log" && <WorkoutLog />}
                   {tool === "macros" && <MacroCalculator />}
                   {tool === "1rm" && <OneRepMaxCalculator />}
                   {tool === "wilks" && <WilksDotsCalculator />}
@@ -412,43 +434,8 @@ export default function ClientPortalPage() {
                 </div>
               </div>
 
-              {/* Exercise library */}
-              <div className="mt-14 border-t border-bone/10 pt-12">
-                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
-                  Exercise Library
-                </p>
-                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
-                  Move <span className="text-electric">right.</span>
-                </h2>
-                <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
-                  How to do the main lifts properly — and why each one earns its place
-                  in your program. Tap any exercise for the full breakdown.
-                </p>
-                <div className="mt-8">
-                  <ExerciseLibrary />
-                </div>
-              </div>
-
-              {/* Warmups & conditioning */}
-              <div className="mt-14 border-t border-bone/10 pt-12">
-                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
-                  Warmups &amp; Conditioning
-                </p>
-                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
-                  Prime the <span className="text-electric">engine.</span>
-                </h2>
-                <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
-                  General warm-ups, plyometric primers and power sessions, isometric
-                  holds, and full no-equipment workouts for when you can&apos;t get
-                  to a gym. Tap any routine for the full breakdown.
-                </p>
-                <div className="mt-8">
-                  <WarmupLibrary />
-                </div>
-              </div>
-
               {/* Weekly check-in */}
-              <div className="mt-14 border-t border-bone/10 pt-12">
+              <div id="checkin" className="mt-14 border-t border-bone/10 pt-12 scroll-mt-24">
                 <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                   Weekly Check-In
                 </p>
