@@ -193,6 +193,21 @@ export default function LoginPage() {
           </a>{" "}
           — no sign-up needed.
         </p>
+
+        <div className="mt-6 border-t border-bone/10 pt-5 text-center">
+          <p className="text-sm text-bone/60 leading-relaxed">
+            In-person training is only available at{" "}
+            <a
+              href="https://thefiteffectparis.ca"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors font-display uppercase tracking-wider"
+            >
+              The Fit Effect
+            </a>{" "}
+            in Paris, Ontario.
+          </p>
+        </div>
       </div>
     </main>
   );

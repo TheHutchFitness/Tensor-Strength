@@ -34,12 +34,12 @@ export default function FitEffectCard() {
               70 Hartley Ave, Paris · 24/7 · Classes · Weights · Cardio
             </p>
             <a
-              href="https://thefiteffectparis.ca"
+              href="https://thefiteffectparis.ca/memberships/"
               target="_blank"
               rel="noopener noreferrer"
               className="mt-8 inline-block bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
             >
-              Visit The Fit Effect →
+              Start your free 2‑week trial →
             </a>
           </div>
         </div>
