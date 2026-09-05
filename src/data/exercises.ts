@@ -19,6 +19,7 @@
 export type Exercise = {
   name: string;
   category: string;
+  level: "Beginner" | "Intermediate" | "Advanced";
   muscles: string;
   howTo: string[];
   why: string;
@@ -28,6 +29,7 @@ export type Exercise = {
 export const exercises: Exercise[] = [
   {
     name: "Back Squat",
+    level: "Intermediate",
     category: "Squat",
     muscles: "Quads, glutes, adductors, core",
     howTo: [
@@ -47,6 +49,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Bench Press",
+    level: "Intermediate",
     category: "Press",
     muscles: "Chest, front delts, triceps",
     howTo: [
@@ -66,6 +69,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Deadlift (Conventional)",
+    level: "Intermediate",
     category: "Hinge",
     muscles: "Posterior chain — hamstrings, glutes, back, traps",
     howTo: [
@@ -85,6 +89,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Overhead Press",
+    level: "Intermediate",
     category: "Press",
     muscles: "Shoulders, upper chest, triceps, core",
     howTo: [
@@ -104,6 +109,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Barbell Row",
+    level: "Intermediate",
     category: "Pull",
     muscles: "Lats, rhomboids, mid-back, rear delts, biceps",
     howTo: [
@@ -123,6 +129,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Romanian Deadlift",
+    level: "Intermediate",
     category: "Hinge",
     muscles: "Hamstrings, glutes, back",
     howTo: [
@@ -142,6 +149,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Pull-Up",
+    level: "Intermediate",
     category: "Pull",
     muscles: "Lats, biceps, upper back, core",
     howTo: [
@@ -161,6 +169,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Hip Thrust",
+    level: "Beginner",
     category: "Hinge",
     muscles: "Glutes, hamstrings",
     howTo: [
@@ -180,6 +189,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Front Squat",
+    level: "Advanced",
     category: "Squat",
     muscles: "Quads, upper back, core, glutes",
     howTo: [
@@ -199,6 +209,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Sumo Deadlift",
+    level: "Intermediate",
     category: "Hinge",
     muscles: "Glutes, adductors, quads, back, traps",
     howTo: [
@@ -218,6 +229,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Close-Grip Bench Press",
+    level: "Intermediate",
     category: "Press",
     muscles: "Triceps, chest, front delts",
     howTo: [
@@ -237,6 +249,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Power Clean",
+    level: "Advanced",
     category: "Olympic",
     muscles: "Full posterior chain, traps, quads, explosive power",
     howTo: [
@@ -256,6 +269,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Clean & Jerk",
+    level: "Advanced",
     category: "Olympic",
     muscles: "Full body — legs, back, shoulders, explosive power",
     howTo: [
@@ -275,6 +289,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Snatch (Power Snatch)",
+    level: "Advanced",
     category: "Olympic",
     muscles: "Full body — posterior chain, shoulders, explosive power",
     howTo: [
@@ -294,6 +309,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Push Press",
+    level: "Intermediate",
     category: "Olympic",
     muscles: "Shoulders, triceps, legs, core",
     howTo: [
@@ -313,6 +329,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Farmer's Carry",
+    level: "Beginner",
     category: "Strongman",
     muscles: "Grip, traps, core, upper back, legs",
     howTo: [
@@ -332,6 +349,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Log Press",
+    level: "Advanced",
     category: "Strongman",
     muscles: "Shoulders, triceps, chest, legs, core",
     howTo: [
@@ -351,6 +369,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Atlas Stone Lift",
+    level: "Advanced",
     category: "Strongman",
     muscles: "Full posterior chain, biceps, core, hips",
     howTo: [
@@ -370,6 +389,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Yoke Walk",
+    level: "Advanced",
     category: "Strongman",
     muscles: "Core, traps, legs, whole-body stability",
     howTo: [
@@ -389,6 +409,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Dumbbell Bicep Curl",
+    level: "Beginner",
     category: "Accessory",
     muscles: "Biceps, forearms",
     howTo: [
@@ -408,6 +429,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Triceps Dip",
+    level: "Intermediate",
     category: "Accessory",
     muscles: "Triceps, chest, front delts",
     howTo: [
@@ -427,6 +449,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Walking Lunge",
+    level: "Beginner",
     category: "Accessory",
     muscles: "Quads, glutes, hamstrings, core",
     howTo: [
@@ -446,6 +469,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Bulgarian Split Squat",
+    level: "Intermediate",
     category: "Accessory",
     muscles: "Quads, glutes, hamstrings, core",
     howTo: [
@@ -465,6 +489,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Dumbbell Lateral Raise",
+    level: "Beginner",
     category: "Accessory",
     muscles: "Side delts (shoulders)",
     howTo: [
@@ -484,6 +509,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Face Pull",
+    level: "Beginner",
     category: "Accessory",
     muscles: "Rear delts, upper back, rotator cuff",
     howTo: [
@@ -503,6 +529,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Plank",
+    level: "Beginner",
     category: "Core",
     muscles: "Abs, deep core, shoulders, glutes",
     howTo: [
@@ -522,6 +549,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Hanging Leg Raise",
+    level: "Advanced",
     category: "Core",
     muscles: "Lower abs, hip flexors, grip",
     howTo: [
@@ -541,6 +569,7 @@ export const exercises: Exercise[] = [
   },
   {
     name: "Ab Wheel Rollout",
+    level: "Advanced",
     category: "Core",
     muscles: "Abs, deep core, lats, shoulders",
     howTo: [
@@ -556,6 +585,814 @@ export const exercises: Exercise[] = [
       "Letting the hips pike back up instead of controlling the return with the abs.",
       "Using the arms/shoulders to pull back instead of the core.",
       "Rushing the reps instead of slow, controlled extension and return.",
+    ],
+  },
+
+  // ===================== MORE SQUATS =====================
+  {
+    name: "Goblet Squat",
+    category: "Squat",
+    level: "Beginner",
+    muscles: "Quads, glutes, core",
+    howTo: [
+      "Hold a dumbbell or kettlebell vertically against your chest, cupping the top with both hands, elbows tucked in.",
+      "Stand with feet a little wider than shoulder-width, toes slightly out. Brace your core.",
+      "Sit straight down between your hips, keeping your chest tall and elbows inside your knees.",
+      "Descend until your thighs are at least parallel, letting your elbows brush the inside of your knees.",
+      "Drive through the mid-foot to stand tall, keeping the weight glued to your chest the whole time.",
+    ],
+    why: "The best squat for learning the pattern. The front-loaded weight forces an upright torso and teaches depth, bracing, and knee tracking with almost no lower-back risk — the perfect on-ramp to barbell squatting.",
+    mistakes: [
+      "Letting the chest cave forward or the weight drift off the body.",
+      "Heels lifting off the floor at the bottom.",
+      "Knees caving inward instead of pushing out toward the elbows.",
+      "Cutting depth short instead of sitting all the way down.",
+    ],
+  },
+  {
+    name: "Box Squat",
+    category: "Squat",
+    level: "Intermediate",
+    muscles: "Glutes, hamstrings, quads, posterior chain",
+    howTo: [
+      "Set a box or bench behind you so that sitting on it puts you at (or just below) parallel.",
+      "Unrack the bar as a normal back squat and step back over the box, feet slightly wider than usual.",
+      "Sit back onto the box by pushing the hips rearward — shins stay more vertical than a normal squat.",
+      "Settle briefly on the box without fully relaxing or rocking, keeping the core braced and back tight.",
+      "Drive hard through the whole foot and stand up, extending hips and knees together.",
+    ],
+    why: "Teaches sitting back into the hips and builds explosive strength off a dead stop out of the hole. It's a reliable way to groove consistent depth and hammer the posterior chain, popular in powerlifting.",
+    mistakes: [
+      "Crashing down or rocking backward on the box.",
+      "Fully relaxing on the box and losing core tension.",
+      "Letting the knees shoot forward instead of sitting the hips back.",
+      "Rounding the lower back when sitting or standing.",
+    ],
+  },
+  {
+    name: "Pause Squat",
+    category: "Squat",
+    level: "Advanced",
+    muscles: "Quads, glutes, core",
+    howTo: [
+      "Set up and descend exactly like a back (or front) squat to full depth.",
+      "At the bottom, hold a dead-stop pause for 2–3 seconds while staying fully braced and upright.",
+      "Do not relax or sink — keep tension everywhere and resist any forward collapse.",
+      "After the pause, drive up explosively out of the hole to a tall lockout.",
+      "Reset your breath and brace before the next rep.",
+    ],
+    why: "Kills the bounce and builds raw strength out of the weakest position of the squat. The pause exposes any leak in your bracing or position and forces the quads and core to work harder — a proven strength and technique builder.",
+    mistakes: [
+      "Relaxing or sinking during the pause instead of staying tight.",
+      "Bouncing out of the bottom rather than starting from a dead stop.",
+      "Letting the chest fall forward during the hold.",
+      "Rushing the pause — count it out honestly.",
+    ],
+  },
+  {
+    name: "Overhead Squat",
+    category: "Squat",
+    level: "Advanced",
+    muscles: "Full body — quads, shoulders, core, upper back",
+    howTo: [
+      "Take a wide (snatch) grip and press or jerk the bar to a locked-out position directly overhead.",
+      "Set your feet shoulder-width, toes slightly out, and actively push up into the bar with straight arms.",
+      "Brace hard and squat straight down, keeping the bar stacked over the mid-foot and the torso as upright as possible.",
+      "Descend to full depth while the arms stay locked and the shoulders stay active.",
+      "Drive up through the mid-foot to stand, keeping the bar balanced overhead the entire time.",
+    ],
+    why: "The ultimate test of mobility, stability, and full-body coordination. It builds bulletproof shoulders and core control and directly reinforces the receiving position of the snatch. Few lifts expose weaknesses as honestly.",
+    mistakes: [
+      "Bar drifting forward instead of staying over the mid-foot.",
+      "Soft, bent arms instead of a locked, active-shoulder overhead position.",
+      "Chest collapsing forward out of the bottom.",
+      "Loading too heavy before the mobility is there.",
+    ],
+  },
+  {
+    name: "Zercher Squat",
+    category: "Squat",
+    level: "Advanced",
+    muscles: "Quads, glutes, upper back, core, biceps",
+    howTo: [
+      "Cradle the bar in the crook of your elbows, hands clasped together in front of your chest (use a pad for comfort).",
+      "Stand with feet shoulder-width, toes slightly out, and brace the core hard.",
+      "Squat straight down, keeping the elbows up and the torso as upright as possible — let the knees travel forward.",
+      "Descend to full depth with the bar staying tight to the body.",
+      "Drive up through the mid-foot, keeping the chest and elbows high, to a tall finish.",
+    ],
+    why: "A brutal quad, upper-back, and core builder. Holding the load in front demands huge trunk strength and teaches an upright torso. It's also very knee- and hip-friendly and carries over to strongman and grappling strength.",
+    mistakes: [
+      "Elbows dropping so the torso folds forward.",
+      "Not using a pad and quitting due to arm discomfort instead of building tolerance.",
+      "Rounding the upper back under the load.",
+      "Cutting depth because of the awkward position.",
+    ],
+  },
+  {
+    name: "Hack Squat (Machine)",
+    category: "Squat",
+    level: "Beginner",
+    muscles: "Quads, glutes",
+    howTo: [
+      "Set your shoulders and back against the machine pads, feet shoulder-width on the platform.",
+      "Disengage the safety handles and brace your core against the back pad.",
+      "Lower under control by bending the knees until your thighs reach at least parallel.",
+      "Keep your whole foot planted and your back flat against the pad throughout.",
+      "Drive through the mid-foot to press the platform back up, stopping just short of locking the knees.",
+    ],
+    why: "A machine that lets you overload the quads safely with the back fully supported — ideal for building leg size and pushing close to failure without balance or bracing being the limiter. A great accessory to free-weight squats.",
+    mistakes: [
+      "Letting the hips round off the back pad at the bottom.",
+      "Bouncing out of the bottom instead of controlling the descent.",
+      "Placing feet too low, hammering the knees; or too high, cutting quads out.",
+      "Slamming the knees into full lockout at the top.",
+    ],
+  },
+  {
+    name: "Leg Press",
+    category: "Squat",
+    level: "Beginner",
+    muscles: "Quads, glutes, hamstrings",
+    howTo: [
+      "Sit in the machine with your back and hips flat against the pad, feet shoulder-width on the platform.",
+      "Release the safeties and lower the platform under control by bending the knees toward your chest.",
+      "Go as deep as you can while keeping your hips and lower back flat on the pad — no rounding.",
+      "Keep the whole foot planted and knees tracking over the toes.",
+      "Press through the mid-foot to extend the legs, stopping just short of locking the knees.",
+    ],
+    why: "Lets you load the legs heavily with a supported spine — perfect for adding quad and glute volume and training close to failure without the stability demands of a barbell squat. A staple for building leg size.",
+    mistakes: [
+      "Going so deep the lower back and hips round off the pad (huge risk).",
+      "Locking the knees hard at the top.",
+      "Placing feet too narrow so the knees cave in.",
+      "Bouncing the platform instead of a controlled tempo.",
+    ],
+  },
+  {
+    name: "Safety Bar Squat",
+    category: "Squat",
+    level: "Intermediate",
+    muscles: "Quads, glutes, upper back, core",
+    howTo: [
+      "Duck under the safety squat bar, settling the padded yoke on your shoulders and gripping the handles in front.",
+      "Unrack and step back into a shoulder-width stance, toes slightly out, core braced.",
+      "Squat straight down, fighting the bar's tendency to push you forward by driving your upper back up.",
+      "Descend to full depth with an upright a torso as you can hold.",
+      "Drive through the mid-foot to stand, keeping the chest and upper back tall.",
+    ],
+    why: "The forward-cambered bar and shoulder pads make it easy on the wrists, elbows, and shoulders while forcing the upper back and core to work overtime. Great for lifters with shoulder issues and for building brutal trunk strength.",
+    mistakes: [
+      "Letting the bar tip you forward into a good-morning.",
+      "Rounding the upper back instead of driving it up.",
+      "Cutting depth because the bar pushes you forward.",
+      "Loosening the grip on the handles and losing upper-back tightness.",
+    ],
+  },
+  {
+    name: "Landmine Squat",
+    category: "Squat",
+    level: "Beginner",
+    muscles: "Quads, glutes, core",
+    howTo: [
+      "Anchor one end of a barbell in a landmine (or corner). Hold the free end at your chest with both hands.",
+      "Stand with feet shoulder-width, toes slightly out, and brace the core.",
+      "Sit straight down, keeping the chest tall — the bar's arc naturally helps you stay upright.",
+      "Descend to at least parallel, keeping the knees tracking over the toes.",
+      "Drive through the mid-foot to stand, keeping the bar tight to your chest.",
+    ],
+    why: "A joint-friendly, easy-to-learn squat variation. The arc of the landmine assists balance and an upright torso, making it perfect for beginners or anyone squatting around injuries while still loading the quads and glutes well.",
+    mistakes: [
+      "Letting the weight pull the chest down and forward.",
+      "Heels rising at the bottom.",
+      "Knees caving in instead of tracking out.",
+      "Standing too far from the anchor, changing the intended path.",
+    ],
+  },
+  {
+    name: "Belt Squat",
+    category: "Squat",
+    level: "Intermediate",
+    muscles: "Quads, glutes, hamstrings",
+    howTo: [
+      "Attach the load to a dip belt around your hips using a belt-squat machine or a platform setup.",
+      "Stand tall with feet shoulder-width, holding light handles or uprights for balance only.",
+      "Brace the core and squat straight down, letting the weight pull from the hips rather than the spine.",
+      "Descend to full depth with an upright torso.",
+      "Drive through the mid-foot to stand tall, keeping the movement smooth.",
+    ],
+    why: "Loads the legs heavily while completely unloading the spine — ideal for adding squat volume, training around back issues, or accumulating leg work without axial fatigue. A favourite for high-volume quad and glute training.",
+    mistakes: [
+      "Leaning hard on the handles instead of using them only for balance.",
+      "Cutting depth short.",
+      "Knees caving inward.",
+      "Rushing reps instead of controlling the descent.",
+    ],
+  },
+
+  // ===================== MORE PRESSES =====================
+  {
+    name: "Incline Bench Press",
+    category: "Press",
+    level: "Intermediate",
+    muscles: "Upper chest, front delts, triceps",
+    howTo: [
+      "Set an adjustable bench to roughly 30–45°. Lie back with eyes under the bar, feet planted, shoulder blades pinned.",
+      "Grip slightly wider than shoulder-width and unrack over your upper chest.",
+      "Lower the bar under control to just below your collarbone / upper chest, elbows tucked around 45°.",
+      "Touch lightly, then drive the bar up and slightly back toward the rack to lockout.",
+      "Keep the upper back tight and hips on the bench throughout.",
+    ],
+    why: "Biases the upper chest and front delts that the flat bench under-trains, building a fuller, more balanced chest and stronger overhead-pressing carryover. A key variation for well-rounded pressing strength.",
+    mistakes: [
+      "Setting the incline too high so it becomes a shoulder press.",
+      "Bouncing the bar off the chest.",
+      "Flaring the elbows to 90°.",
+      "Lifting the hips off the bench to cheat the weight.",
+    ],
+  },
+  {
+    name: "Dumbbell Bench Press",
+    category: "Press",
+    level: "Beginner",
+    muscles: "Chest, front delts, triceps",
+    howTo: [
+      "Sit on a flat bench with a dumbbell on each thigh, then lie back kicking the weights up to lockout over your chest.",
+      "Pin your shoulder blades down and back, feet planted, palms facing forward.",
+      "Lower the dumbbells under control to chest level, letting them travel a touch wider than a barbell for a bigger stretch.",
+      "Keep the elbows tucked around 45°, wrists stacked over elbows.",
+      "Press the dumbbells up and slightly together to lockout, squeezing the chest.",
+    ],
+    why: "The bigger range of motion and independent arms build the chest more completely than a barbell, fix side-to-side imbalances, and are gentler on the shoulders. An excellent primary or accessory press.",
+    mistakes: [
+      "Letting the dumbbells drift out of control or clang together.",
+      "Losing upper-back tightness so the shoulders roll forward.",
+      "Over-lowering into a painful shoulder stretch.",
+      "Pressing unevenly with one arm ahead of the other.",
+    ],
+  },
+  {
+    name: "Dumbbell Shoulder Press",
+    category: "Press",
+    level: "Beginner",
+    muscles: "Shoulders, triceps, upper chest",
+    howTo: [
+      "Sit tall on an upright bench (or stand) with a dumbbell in each hand at shoulder height, palms facing forward.",
+      "Brace the core and keep the ribs down — don't arch the lower back.",
+      "Press both dumbbells straight up until the arms lock out overhead, weights nearly touching.",
+      "Keep the wrists stacked over the elbows throughout.",
+      "Lower under control back to shoulder height and reset.",
+    ],
+    why: "Builds balanced shoulder strength and size with a natural range of motion that's easier on the joints than a barbell. Independent arms iron out imbalances and it's a great teacher for overhead pressing mechanics.",
+    mistakes: [
+      "Arching the lower back to heave the weight up.",
+      "Clanging the dumbbells together or pressing them in an arc out front.",
+      "Half-repping and not locking out overhead.",
+      "Letting the elbows flare so far back the shoulders get stressed.",
+    ],
+  },
+  {
+    name: "Push-Up",
+    category: "Press",
+    level: "Beginner",
+    muscles: "Chest, front delts, triceps, core",
+    howTo: [
+      "Set your hands slightly wider than shoulder-width, body in a straight line from head to heels.",
+      "Brace the core and squeeze the glutes so the hips don't sag or pike.",
+      "Lower under control until your chest is just above the floor, elbows tracking back at about 45°.",
+      "Keep the whole body rigid — no sagging middle.",
+      "Press back up to full lockout, pushing the floor away and finishing with a slight shoulder-blade spread.",
+    ],
+    why: "The foundational bodyweight press. It builds chest, shoulder, and triceps strength while training the core to stay rigid — a scalable movement that carries over to bench pressing and overall upper-body control.",
+    mistakes: [
+      "Letting the hips sag or pike instead of a straight line.",
+      "Flaring the elbows straight out to 90°.",
+      "Half-repping — not lowering the chest to the floor.",
+      "Craning the neck down instead of keeping it neutral.",
+    ],
+  },
+  {
+    name: "Arnold Press",
+    category: "Press",
+    level: "Intermediate",
+    muscles: "Shoulders (all three heads), triceps",
+    howTo: [
+      "Sit tall holding dumbbells in front of your shoulders, palms facing you, elbows in.",
+      "As you press up, rotate the dumbbells so your palms face forward by the time your arms extend.",
+      "Lock out overhead with the weights stacked over the shoulders.",
+      "Reverse the motion on the way down — rotate the palms back toward you as you lower to the start.",
+      "Keep the core braced and ribs down throughout.",
+    ],
+    why: "The rotation hits all three heads of the shoulder through a big range, building well-rounded delt strength and size. A great variation to break plateaus and add shoulder detail beyond a straight press.",
+    mistakes: [
+      "Rushing the rotation instead of a smooth, controlled turn.",
+      "Arching the lower back to press the weight up.",
+      "Using too much weight and losing the rotation pattern.",
+      "Not locking out fully overhead.",
+    ],
+  },
+  {
+    name: "Floor Press",
+    category: "Press",
+    level: "Intermediate",
+    muscles: "Chest, triceps, front delts",
+    howTo: [
+      "Lie on the floor under a rack (or with dumbbells), knees bent or legs straight, shoulder blades pinned.",
+      "Unrack or press the weight to lockout over your chest with a slightly-wider-than-shoulder grip.",
+      "Lower under control until your upper arms/triceps touch the floor — elbows tucked around 45°.",
+      "Pause briefly on the floor without relaxing or bouncing.",
+      "Drive the weight back up to lockout, leading with the triceps.",
+    ],
+    why: "The floor stops the range at the elbows, taking the shoulders out of the deep stretch and overloading the lockout and triceps. Great for building bench-press lockout strength and pressing around shoulder issues.",
+    mistakes: [
+      "Bouncing the elbows off the floor to rebound the weight.",
+      "Flaring the elbows wide.",
+      "Losing upper-back tightness between reps.",
+      "Relaxing fully at the bottom instead of a controlled dead-stop pause.",
+    ],
+  },
+  {
+    name: "Landmine Press",
+    category: "Press",
+    level: "Intermediate",
+    muscles: "Shoulders, upper chest, triceps, core",
+    howTo: [
+      "Anchor one end of a barbell in a landmine. Hold the free end at one shoulder in a staggered or tall-kneeling stance.",
+      "Brace the core and keep the ribs down.",
+      "Press the bar up and slightly forward along its natural arc until the arm locks out.",
+      "Keep the shoulder blade moving with the arm — don't shrug.",
+      "Lower under control back to the shoulder and repeat, then switch sides.",
+    ],
+    why: "A shoulder-friendly pressing angle that builds the front delts and upper chest while heavily challenging the core for anti-rotation. Ideal for lifters who find straight overhead pressing uncomfortable.",
+    mistakes: [
+      "Leaning back and turning it into an incline press.",
+      "Letting the torso twist toward the working arm.",
+      "Shrugging the shoulder up to the ear.",
+      "Not locking the arm out at the top.",
+    ],
+  },
+  {
+    name: "Z Press",
+    category: "Press",
+    level: "Advanced",
+    muscles: "Shoulders, triceps, core, upper back",
+    howTo: [
+      "Sit on the floor with your legs straight out in front, bar (or dumbbells) at your shoulders.",
+      "Sit as tall as possible — brace the core hard and stay upright with no back support.",
+      "Press the weight straight overhead to a full lockout, bar stacked over the shoulders.",
+      "Keep the legs and torso still — no leaning back or using the legs.",
+      "Lower under control to the shoulders and reset your posture before the next rep.",
+    ],
+    why: "Removes all leg drive and back support, forcing the shoulders, triceps, and especially the core to do everything. It brutally exposes and fixes weak overhead position and mobility — a favourite of strongman and strength athletes.",
+    mistakes: [
+      "Leaning back to fake extra range.",
+      "Rounding the lower back instead of sitting tall.",
+      "Bending the knees or using the legs to help.",
+      "Loading too heavy before the mobility and core strength are there.",
+    ],
+  },
+  {
+    name: "Pin Press",
+    category: "Press",
+    level: "Advanced",
+    muscles: "Triceps, chest, front delts",
+    howTo: [
+      "Set the safety pins in a rack at a chosen height above your chest while lying on a bench.",
+      "Set up like a bench press — shoulder blades pinned, feet planted, tight upper back.",
+      "Start with the bar resting dead on the pins (no eccentric), grip slightly wider than shoulders.",
+      "Drive the bar off the pins explosively to lockout.",
+      "Lower back to the pins, let it settle fully, then press again from a dead stop.",
+    ],
+    why: "Training from a dead stop at a specific height builds strength through sticking points and develops explosive starting strength for the bench. Removing the stretch-reflex forces the muscles to do all the work.",
+    mistakes: [
+      "Bouncing or heaving off the pins instead of a true dead-stop start.",
+      "Losing upper-back tightness while the bar rests on the pins.",
+      "Flaring the elbows wide.",
+      "Setting pins at a height that strains the shoulders.",
+    ],
+  },
+  {
+    name: "Decline Bench Press",
+    category: "Press",
+    level: "Intermediate",
+    muscles: "Lower chest, triceps, front delts",
+    howTo: [
+      "Set a bench to a slight decline and lock your legs in. Lie back with shoulder blades pinned.",
+      "Grip slightly wider than shoulder-width and unrack over your lower chest.",
+      "Lower the bar under control to your lower chest, elbows tucked around 45°.",
+      "Touch lightly, then press the bar back up to lockout over the lower chest.",
+      "Keep the upper back tight and avoid letting the bar drift toward the face.",
+    ],
+    why: "Targets the lower chest and lets many lifters press heavier through a shorter range with less shoulder stress than flat bench. A useful variation for building chest thickness and pressing volume.",
+    mistakes: [
+      "Letting the bar drift up toward the throat/face.",
+      "Bouncing the bar off the chest.",
+      "Flaring the elbows wide.",
+      "Not securing the legs, losing a stable base.",
+    ],
+  },
+
+  // ===================== MORE HINGES =====================
+  {
+    name: "Trap Bar Deadlift",
+    category: "Hinge",
+    level: "Beginner",
+    muscles: "Glutes, quads, hamstrings, back, traps",
+    howTo: [
+      "Step inside a trap (hex) bar, feet hip-width, and grip the neutral handles at your sides.",
+      "Drop the hips, chest up, shins fairly vertical, and take the slack out of the bar.",
+      "Brace hard and push the floor away, standing up by extending hips and knees together.",
+      "Lock out tall — hips through, shoulders back (not shrugged).",
+      "Lower under control by hinging back and letting the knees rebend.",
+    ],
+    why: "The most beginner-friendly deadlift. The neutral handles and centered load keep the torso more upright and the lower back safer, making it ideal for learning to pull heavy and for athletic power development.",
+    mistakes: [
+      "Rounding the lower back.",
+      "Hips shooting up first, turning it into a stiff-leg pull.",
+      "Jerking the bar instead of taking the slack out first.",
+      "Shrugging or hyperextending at the lockout.",
+    ],
+  },
+  {
+    name: "Rack Pull",
+    category: "Hinge",
+    level: "Intermediate",
+    muscles: "Back, traps, glutes, hamstrings",
+    howTo: [
+      "Set the safety pins in a rack so the bar starts around knee height (or just below).",
+      "Set up like a deadlift with the bar over mid-foot, shins close, chest up, lats tight.",
+      "Take the slack out, brace, and pull the bar up the last portion of the deadlift to a tall lockout.",
+      "Keep the bar dragging up the thighs; lock out hips and knees, shoulders back.",
+      "Lower under control back to the pins and reset each rep.",
+    ],
+    why: "Lets you overload the top half of the deadlift with heavier weight than you can pull from the floor, building a powerful lockout, thick traps and back, and confidence handling big loads. Great for busting deadlift sticking points.",
+    mistakes: [
+      "Rounding the back when overloaded.",
+      "Hyperextending and leaning way back at lockout.",
+      "Letting the bar drift away from the legs.",
+      "Bouncing the bar off the pins.",
+    ],
+  },
+  {
+    name: "Stiff-Leg Deadlift",
+    category: "Hinge",
+    level: "Intermediate",
+    muscles: "Hamstrings, glutes, lower back",
+    howTo: [
+      "Set up with the bar over mid-foot, feet hip-width, and grip just outside the knees.",
+      "Keep the knees only slightly bent and fixed — much straighter than a conventional deadlift.",
+      "Hinge at the hips and lower the bar down your legs, feeling a strong hamstring stretch.",
+      "Keep the back flat and the bar close to the legs the entire descent.",
+      "Drive the hips forward to stand tall, squeezing the glutes at the top.",
+    ],
+    why: "Emphasizes the hamstrings and glutes through a long stretch with straighter legs than an RDL, building posterior-chain strength and hamstring resilience. A powerful hypertrophy and deadlift-assistance movement.",
+    mistakes: [
+      "Bending the knees too much, turning it into a regular deadlift.",
+      "Rounding the lower back to chase depth.",
+      "Letting the bar drift away from the legs.",
+      "Bouncing at the bottom instead of controlling the stretch.",
+    ],
+  },
+  {
+    name: "Good Morning",
+    category: "Hinge",
+    level: "Advanced",
+    muscles: "Hamstrings, glutes, lower back, spinal erectors",
+    howTo: [
+      "Set the bar on your upper back like a squat. Unrack and step back, feet shoulder-width.",
+      "Soften the knees slightly and brace the core hard.",
+      "Hinge at the hips, pushing them back and letting the torso tip forward with a flat back.",
+      "Lower until you feel a strong hamstring stretch (roughly torso parallel, depending on mobility).",
+      "Drive the hips forward to stand tall, keeping the back flat the whole time.",
+    ],
+    why: "Directly strengthens the hip hinge, hamstrings, glutes, and spinal erectors — carrying over to a stronger squat and deadlift. It builds the posterior chain and teaches a powerful, safe hinge under load.",
+    mistakes: [
+      "Rounding the lower back (start very light to groove the pattern).",
+      "Turning it into a squat by bending the knees too much.",
+      "Going too heavy before the pattern is solid.",
+      "Hyperextending the lower back at the top.",
+    ],
+  },
+  {
+    name: "Single-Leg Romanian Deadlift",
+    category: "Hinge",
+    level: "Intermediate",
+    muscles: "Hamstrings, glutes, core, balance",
+    howTo: [
+      "Stand on one leg holding a dumbbell or kettlebell in the opposite hand, soft knee on the standing leg.",
+      "Hinge at the hip, letting the free leg extend straight back as a counterbalance.",
+      "Lower the weight toward the floor along the standing leg, keeping hips square and back flat.",
+      "Stop at a strong hamstring stretch, then drive the standing-leg hip forward to stand tall.",
+      "Complete all reps on one side, then switch.",
+    ],
+    why: "Builds single-leg hamstring and glute strength, hip stability, and balance while exposing and fixing left-right imbalances. Excellent for athleticism, injury resilience, and posterior-chain control.",
+    mistakes: [
+      "Letting the hips rotate open instead of staying square.",
+      "Rounding the back to reach lower.",
+      "Bending the standing knee too much (turns into a squat).",
+      "Rushing and losing balance instead of controlled reps.",
+    ],
+  },
+  {
+    name: "Kettlebell Swing",
+    category: "Hinge",
+    level: "Beginner",
+    muscles: "Glutes, hamstrings, core, back",
+    howTo: [
+      "Stand with feet shoulder-width, a kettlebell about a foot in front of you.",
+      "Hinge at the hips and hike the bell back between your legs like a football snap.",
+      "Explosively drive the hips forward — the snap of the hips propels the bell up to about chest height.",
+      "Keep the arms relaxed; they just guide the bell. Don't lift with the shoulders.",
+      "Let the bell fall back down, absorb it by hinging, and immediately repeat in a rhythm.",
+    ],
+    why: "The best entry to explosive hip-hinge power and conditioning. It teaches a snappy, powerful hip extension, builds the glutes and hamstrings, and trains the posterior chain endurance — all with a single light-to-moderate bell.",
+    mistakes: [
+      "Squatting the bell up and down instead of hinging.",
+      "Using the arms/shoulders to lift the bell instead of the hips.",
+      "Rounding the lower back at the bottom.",
+      "Overarching or leaning back at the top of the swing.",
+    ],
+  },
+  {
+    name: "Snatch-Grip Deadlift",
+    category: "Hinge",
+    level: "Advanced",
+    muscles: "Upper back, traps, hamstrings, glutes, grip",
+    howTo: [
+      "Take a very wide (snatch) grip on the bar, hands out near the collars, hook grip if possible.",
+      "Set up over the bar with hips lower and chest up — the wide grip increases the range of motion.",
+      "Take the slack out, brace, and push the floor away, keeping the bar close and back flat.",
+      "Stand up by extending hips and knees together to a tall lockout.",
+      "Lower under control, maintaining the flat back and close bar path.",
+    ],
+    why: "The wide grip and lower start build the upper back, traps, and posterior chain through a longer range while hammering grip strength. A favourite assistance lift for building deadlift and pulling power.",
+    mistakes: [
+      "Rounding the upper back due to the increased range.",
+      "Hips rising first into a stiff-leg pull.",
+      "Grip failing before the legs — train grip or use straps for volume.",
+      "Letting the bar drift forward off the body.",
+    ],
+  },
+  {
+    name: "Back Extension",
+    category: "Hinge",
+    level: "Beginner",
+    muscles: "Glutes, hamstrings, lower back",
+    howTo: [
+      "Set up in a 45° or horizontal back-extension bench with the pad just below your hip crease.",
+      "Cross your arms or hold a plate at your chest, and brace the core.",
+      "Hinge at the hips and lower your torso down under control.",
+      "Drive the hips into the pad and raise your torso until your body forms a straight line — no hyperextension.",
+      "Squeeze the glutes at the top, then lower again with control.",
+    ],
+    why: "A low-risk way to build and strengthen the entire posterior chain — glutes, hamstrings, and spinal erectors. Great for lower-back health, deadlift assistance, and adding posterior-chain volume without heavy spinal loading.",
+    mistakes: [
+      "Yanking up and hyperextending the lower back at the top.",
+      "Rounding the back on the way down instead of hinging.",
+      "Using momentum instead of a controlled tempo.",
+      "Setting the pad too high or too low on the hips.",
+    ],
+  },
+  {
+    name: "Glute-Ham Raise",
+    category: "Hinge",
+    level: "Advanced",
+    muscles: "Hamstrings, glutes, calves, lower back",
+    howTo: [
+      "Set up in a GHD/GHR machine with feet anchored against the plate and thighs on the pad.",
+      "Start with your body upright, torso and thighs in line, core braced.",
+      "Lower your torso forward by extending at the knees, keeping the hips and back straight.",
+      "Go as low as you can control, then pull yourself back up by driving the heels into the plate and contracting the hamstrings.",
+      "Finish upright with the glutes squeezed; keep the whole movement smooth.",
+    ],
+    why: "One of the most effective hamstring builders — it trains the hamstrings at both the knee and hip, building serious strength and resilience against strains. A staple for sprinters and strength athletes.",
+    mistakes: [
+      "Bending at the hips instead of keeping a straight line from knees to head.",
+      "Using momentum to fling back up.",
+      "Only doing the easy top portion instead of the full range.",
+      "Rounding the lower back under load.",
+    ],
+  },
+  {
+    name: "Deficit Deadlift",
+    category: "Hinge",
+    level: "Advanced",
+    muscles: "Hamstrings, glutes, back, quads",
+    howTo: [
+      "Stand on a 1–3 inch platform so the bar starts lower than normal, increasing the range of motion.",
+      "Set up like a conventional deadlift: bar over mid-foot, shins close, chest up, lats tight.",
+      "Take the slack out, brace hard, and push the floor away from the deeper start position.",
+      "Stand up by extending hips and knees together to a tall lockout.",
+      "Lower under control back to the platform, keeping the back flat.",
+    ],
+    why: "The increased range builds strength and speed off the floor — the most common deadlift sticking point — while adding work for the hamstrings and quads. A proven way to build a more powerful pull from the bottom.",
+    mistakes: [
+      "Rounding the back due to the deeper starting position.",
+      "Standing on too high a deficit before you have the mobility.",
+      "Hips rising first off the floor.",
+      "Jerking the bar instead of taking the slack out.",
+    ],
+  },
+
+  // ===================== MORE PULLS =====================
+  {
+    name: "Lat Pulldown",
+    category: "Pull",
+    level: "Beginner",
+    muscles: "Lats, biceps, upper back",
+    howTo: [
+      "Sit at the machine and set the thigh pad snug. Grip the bar slightly wider than shoulder-width, palms forward.",
+      "Sit tall with a slight lean back, chest up, and brace the core.",
+      "Pull the bar down to your upper chest by driving the elbows down and back.",
+      "Squeeze the shoulder blades down and together at the bottom.",
+      "Control the bar all the way back up to a full stretch without letting the shoulders shrug up.",
+    ],
+    why: "The best machine builder for the lats and a great stepping stone to pull-ups. It develops vertical pulling strength and back width with adjustable load, letting beginners build the strength to eventually do bodyweight chin-ups.",
+    mistakes: [
+      "Leaning way back and heaving the bar down with momentum.",
+      "Pulling the bar behind the neck (stresses the shoulders).",
+      "Using the arms instead of driving the elbows down.",
+      "Letting the shoulders shrug up at the top instead of a full controlled stretch.",
+    ],
+  },
+  {
+    name: "Seated Cable Row",
+    category: "Pull",
+    level: "Beginner",
+    muscles: "Mid-back, lats, rhomboids, biceps",
+    howTo: [
+      "Sit at the cable row with feet braced, knees slightly bent, and grab the handle with arms extended.",
+      "Sit tall with a flat back and chest up — a slight lean is fine but don't round.",
+      "Pull the handle to your lower ribs / belly by driving the elbows straight back.",
+      "Squeeze the shoulder blades together at the end of the pull.",
+      "Return under control to a full stretch, keeping the torso still.",
+    ],
+    why: "A staple horizontal pull that builds mid-back thickness and pulling strength with constant cable tension. Great for posture, shoulder health, and balancing out all the pressing you do.",
+    mistakes: [
+      "Rocking the torso back and forth to move the weight.",
+      "Rounding the lower back at the stretch.",
+      "Shrugging the shoulders instead of driving the elbows back.",
+      "Cutting the range short at either end.",
+    ],
+  },
+  {
+    name: "Chin-Up",
+    category: "Pull",
+    level: "Intermediate",
+    muscles: "Lats, biceps, upper back, core",
+    howTo: [
+      "Grip the bar shoulder-width with your palms facing you (supinated).",
+      "Start from a dead hang with straight arms and active shoulders.",
+      "Pull by driving the elbows down toward your ribs, leading with the chest toward the bar.",
+      "Get your chin over the bar, then lower under control all the way to a full hang.",
+      "Keep the reps strict — no kipping or swinging.",
+    ],
+    why: "A biceps-friendly vertical pull that many lifters find stronger than the pull-up. It builds the lats, biceps, and grip and is one of the best tests of relative upper-body pulling strength.",
+    mistakes: [
+      "Kipping or swinging to get over the bar.",
+      "Not locking out the arms at the bottom.",
+      "Pulling with just the arms instead of driving the elbows down.",
+      "Shrugging the shoulders into the ears.",
+    ],
+  },
+  {
+    name: "One-Arm Dumbbell Row",
+    category: "Pull",
+    level: "Beginner",
+    muscles: "Lats, mid-back, rhomboids, biceps",
+    howTo: [
+      "Place one knee and hand on a bench, the other foot on the floor, back flat and roughly parallel to the ground.",
+      "Let the dumbbell hang straight down from the working arm with the shoulder relaxed forward.",
+      "Row the dumbbell to your hip/lower rib by driving the elbow back and up.",
+      "Squeeze the shoulder blade at the top, keeping the torso still and square.",
+      "Lower under control to a full stretch and repeat, then switch sides.",
+    ],
+    why: "The big range of motion and single-arm focus build the lats and mid-back while fixing left-right imbalances. The braced position keeps the lower back safe, making it a great, accessible back builder for everyone.",
+    mistakes: [
+      "Twisting/rotating the torso to yank the weight up.",
+      "Shrugging the shoulder instead of driving the elbow back.",
+      "Using momentum instead of a controlled pull.",
+      "Rounding the back instead of keeping it flat.",
+    ],
+  },
+  {
+    name: "T-Bar Row",
+    category: "Pull",
+    level: "Intermediate",
+    muscles: "Mid-back, lats, rhomboids, biceps",
+    howTo: [
+      "Straddle the T-bar (or landmine) with a V-handle around the bar, hinge to a flat-back bent-over position.",
+      "Let the weight hang with arms straight and a strong braced torso.",
+      "Row the handle to your lower chest / stomach by driving the elbows back.",
+      "Squeeze the shoulder blades together at the top.",
+      "Lower under control to a full stretch, keeping the torso angle constant.",
+    ],
+    why: "Lets you load the mid-back heavily with a supported, stable position — building serious back thickness and pulling strength. A powerful mass-builder that bridges the barbell row and machine rows.",
+    mistakes: [
+      "Standing up / raising the torso to heave the weight (turns it into a shrug).",
+      "Rounding the lower back under load.",
+      "Yanking with the arms instead of driving the elbows.",
+      "Piling on so much weight the range collapses.",
+    ],
+  },
+  {
+    name: "Pendlay Row",
+    category: "Pull",
+    level: "Advanced",
+    muscles: "Mid-back, lats, traps, biceps",
+    howTo: [
+      "Set up over the bar like a deadlift but hinge to a torso roughly parallel to the floor, flat back.",
+      "Grip just outside the knees; the bar rests on the floor between reps (dead stop).",
+      "Explosively row the bar to your lower chest / upper stomach, keeping the torso rigid and parallel.",
+      "Squeeze the shoulder blades hard at the top.",
+      "Lower the bar back to the floor under control and reset each rep from a dead stop.",
+    ],
+    why: "The strict, dead-stop, parallel-torso row builds explosive back strength and thickness with no cheating. Because each rep starts from the floor, it develops powerful pulling strength prized by strength athletes.",
+    mistakes: [
+      "Raising the torso above parallel to help pull the bar.",
+      "Rounding the lower back in the bent-over position.",
+      "Bouncing the bar off the floor instead of a controlled dead stop.",
+      "Using the hips/momentum instead of a strict row.",
+    ],
+  },
+  {
+    name: "Chest-Supported Row",
+    category: "Pull",
+    level: "Beginner",
+    muscles: "Mid-back, rhomboids, rear delts, lats",
+    howTo: [
+      "Set an incline bench and lie face-down with your chest on the pad, a dumbbell in each hand hanging down.",
+      "Let the arms hang straight, shoulders relaxed forward, feet braced.",
+      "Row the dumbbells up by driving the elbows back and squeezing the shoulder blades together.",
+      "Pause and squeeze at the top with the elbows near your ribs.",
+      "Lower under control to a full stretch and repeat.",
+    ],
+    why: "The chest support removes all lower-back and momentum involvement, isolating the mid-back and rear delts for clean, safe growth. Perfect for building back detail and posture with zero cheating.",
+    mistakes: [
+      "Peeling the chest off the pad to cheat the weight up.",
+      "Shrugging instead of squeezing the shoulder blades.",
+      "Using momentum from the legs or hips.",
+      "Cutting the range short at the bottom stretch.",
+    ],
+  },
+  {
+    name: "Inverted Row",
+    category: "Pull",
+    level: "Beginner",
+    muscles: "Mid-back, lats, biceps, core",
+    howTo: [
+      "Set a bar in a rack (or use rings) at about hip height. Lie underneath and grip slightly wider than shoulders.",
+      "Hang with arms straight, body in a straight line, heels on the floor, core and glutes braced.",
+      "Pull your chest to the bar by driving the elbows back, keeping the body rigid.",
+      "Squeeze the shoulder blades together at the top.",
+      "Lower under control to full arm extension without letting the hips sag.",
+    ],
+    why: "A scalable bodyweight horizontal pull — raise or lower the bar to change difficulty. It builds the mid-back and biceps, reinforces a braced core, and is a great counter to push-ups and a stepping stone to harder pulling.",
+    mistakes: [
+      "Letting the hips sag or pike instead of a straight line.",
+      "Not pulling the chest all the way to the bar.",
+      "Shrugging the shoulders instead of driving the elbows back.",
+      "Using a jerky kip instead of controlled reps.",
+    ],
+  },
+  {
+    name: "Meadows Row",
+    category: "Pull",
+    level: "Intermediate",
+    muscles: "Lats, upper back, rear delts, biceps",
+    howTo: [
+      "Anchor one end of a barbell in a landmine. Stand perpendicular to the bar and grip the loaded end with one hand (overhand).",
+      "Stagger your stance, hinge over with a flat back, and let the bar hang with the arm extended.",
+      "Row the bar up and back by driving the elbow high, letting the shoulder stretch at the bottom.",
+      "Squeeze at the top with the elbow up and back.",
+      "Lower under control to a full stretch and repeat, then switch sides.",
+    ],
+    why: "The landmine angle gives a unique stretch and strong contraction on the lats and upper back, building back width and detail. A great single-arm variation to bring up a lagging back.",
+    mistakes: [
+      "Twisting the torso to heave the weight up.",
+      "Standing too upright instead of staying hinged over.",
+      "Using momentum instead of a controlled pull and stretch.",
+      "Rounding the lower back.",
+    ],
+  },
+  {
+    name: "Straight-Arm Pulldown",
+    category: "Pull",
+    level: "Beginner",
+    muscles: "Lats, teres major, core",
+    howTo: [
+      "Stand facing a high cable with a bar or rope, arms nearly straight out in front at shoulder height.",
+      "Hinge forward slightly, brace the core, and keep a soft fixed bend in the elbows.",
+      "Pull the bar down in an arc to your thighs using the lats — keep the arms nearly straight the whole time.",
+      "Squeeze the lats hard at the bottom.",
+      "Return under control back up to the stretched start without letting the shoulders shrug.",
+    ],
+    why: "Isolates the lats without the biceps taking over, teaching you to feel and contract the lats — which improves every other pulling movement. A great finisher for back width and mind-muscle connection.",
+    mistakes: [
+      "Bending the elbows and turning it into a triceps pushdown.",
+      "Using body momentum to swing the weight down.",
+      "Shrugging the shoulders instead of driving with the lats.",
+      "Cutting the top stretch short.",
     ],
   },
 ];

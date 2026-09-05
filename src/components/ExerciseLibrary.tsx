@@ -1,28 +1,65 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { exercises } from "@/data/exercises";
 
 // All categories present in the data, plus "All" for no filter.
 const categories = ["All", ...Array.from(new Set(exercises.map((e) => e.category)))];
 
+const FAVES_KEY = "ts_exercise_faves";
+
+const levelStyles: Record<string, string> = {
+  Beginner: "text-emerald-400 border-emerald-400/40",
+  Intermediate: "text-amber-400 border-amber-400/40",
+  Advanced: "text-rose-400 border-rose-400/40",
+};
+
 export default function ExerciseLibrary() {
   const [filter, setFilter] = useState<string>("All");
   const [query, setQuery] = useState<string>("");
   const [openName, setOpenName] = useState<string | null>(null);
+  const [faves, setFaves] = useState<string[]>([]);
+  const [onlyFaves, setOnlyFaves] = useState<boolean>(false);
+
+  // Load favourites from localStorage on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FAVES_KEY);
+      if (raw) setFaves(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const toggleFave = (name: string) => {
+    setFaves((prev) => {
+      const next = prev.includes(name)
+        ? prev.filter((n) => n !== name)
+        : [...prev, name];
+      try {
+        localStorage.setItem(FAVES_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return exercises.filter((e) => {
+    const list = exercises.filter((e) => {
       const matchesCategory = filter === "All" || e.category === filter;
       const matchesQuery =
         q === "" ||
         e.name.toLowerCase().includes(q) ||
         e.muscles.toLowerCase().includes(q) ||
         e.category.toLowerCase().includes(q);
-      return matchesCategory && matchesQuery;
+      const matchesFave = !onlyFaves || faves.includes(e.name);
+      return matchesCategory && matchesQuery && matchesFave;
     });
-  }, [filter, query]);
+    // Pin favourites to the top, otherwise keep original order.
+    return [...list].sort((a, b) => {
+      const af = faves.includes(a.name) ? 0 : 1;
+      const bf = faves.includes(b.name) ? 0 : 1;
+      return af - bf;
+    });
+  }, [filter, query, faves, onlyFaves]);
 
   return (
     <div>
@@ -46,8 +83,20 @@ export default function ExerciseLibrary() {
         )}
       </div>
 
-      {/* Category filter chips */}
+      {/* Category filter chips + favourites toggle */}
       <div className="flex flex-wrap gap-2 mb-6">
+        <button
+          onClick={() => setOnlyFaves((v) => !v)}
+          className={
+            "px-4 py-2 font-display uppercase tracking-wider text-xs transition-colors flex items-center gap-1.5 " +
+            (onlyFaves
+              ? "bg-electric text-ink"
+              : "text-bone/60 hover:text-electric border border-bone/20 hover:border-electric")
+          }
+        >
+          <span className={onlyFaves ? "text-ink" : "text-electric"}>★</span>
+          Favourites{faves.length ? ` (${faves.length})` : ""}
+        </button>
         {categories.map((c) => (
           <button
             key={c}
@@ -73,35 +122,61 @@ export default function ExerciseLibrary() {
       <ul className="grid gap-3">
         {filtered.length === 0 && (
           <li className="border border-bone/15 bg-ink/30 px-5 py-8 text-center text-sm text-bone/50">
-            No exercises match your search. Try a different name, muscle or category.
+            {onlyFaves
+              ? "No favourites yet. Tap the ★ on any lift to pin it here."
+              : "No exercises match your search. Try a different name, muscle or category."}
           </li>
         )}
         {filtered.map((ex) => {
           const isOpen = openName === ex.name;
+          const isFave = faves.includes(ex.name);
           return (
             <li key={ex.name} className="border border-bone/15 bg-ink/30 backdrop-blur-sm">
-              <button
-                onClick={() => setOpenName(isOpen ? null : ex.name)}
-                className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:border-electric transition-colors"
-                aria-expanded={isOpen}
-              >
-                <span className="min-w-0">
-                  <span className="font-display uppercase tracking-wider text-bone block">
-                    {ex.name}
+              <div className="w-full flex items-center gap-2 px-5 py-4">
+                {/* Favourite star */}
+                <button
+                  onClick={() => toggleFave(ex.name)}
+                  aria-label={isFave ? "Remove from favourites" : "Add to favourites"}
+                  aria-pressed={isFave}
+                  className={
+                    "shrink-0 text-xl leading-none transition-colors " +
+                    (isFave ? "text-electric" : "text-bone/30 hover:text-electric")
+                  }
+                >
+                  {isFave ? "★" : "☆"}
+                </button>
+
+                <button
+                  onClick={() => setOpenName(isOpen ? null : ex.name)}
+                  className="flex-1 min-w-0 flex items-center justify-between gap-4 text-left"
+                  aria-expanded={isOpen}
+                >
+                  <span className="min-w-0">
+                    <span className="font-display uppercase tracking-wider text-bone block">
+                      {ex.name}
+                    </span>
+                    <span className="text-xs text-bone/60 mt-1 block">
+                      {ex.muscles}
+                    </span>
                   </span>
-                  <span className="text-xs text-bone/60 mt-1 block">
-                    {ex.muscles}
+                  <span className="shrink-0 flex items-center gap-2">
+                    <span
+                      className={
+                        "font-display uppercase tracking-wider text-[10px] px-2 py-1 border " +
+                        (levelStyles[ex.level] || "text-bone/60 border-bone/30")
+                      }
+                    >
+                      {ex.level}
+                    </span>
+                    <span className="hidden sm:inline font-display uppercase tracking-wider text-[10px] text-electric border border-electric/40 px-2 py-1">
+                      {ex.category}
+                    </span>
+                    <span className="font-display text-electric text-xl">
+                      {isOpen ? "−" : "+"}
+                    </span>
                   </span>
-                </span>
-                <span className="shrink-0 flex items-center gap-3">
-                  <span className="font-display uppercase tracking-wider text-[10px] text-electric border border-electric/40 px-2 py-1">
-                    {ex.category}
-                  </span>
-                  <span className="font-display text-electric text-xl">
-                    {isOpen ? "−" : "+"}
-                  </span>
-                </span>
-              </button>
+                </button>
+              </div>
 
               {isOpen && (
                 <div className="px-5 pb-5 grid gap-5 border-t border-bone/10 pt-5">
