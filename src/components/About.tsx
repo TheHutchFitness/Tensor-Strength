@@ -32,11 +32,13 @@ export default function About() {
           <div className="relative aspect-[4/5] border-4 border-electric overflow-hidden bg-ink">
             <video
               src="/videos/coach.mp4"
+              poster="/videos/coach-poster.jpg"
               className="h-full w-full object-cover"
               autoPlay
               muted
               loop
               playsInline
+              preload="metadata"
               controls={false}
               aria-label="Tensor Strength training"
             />
