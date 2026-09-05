@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import Announcement from "@/components/Announcement";
 import Hero from "@/components/Hero";
 import About from "@/components/About";
+import CoachingShowcase from "@/components/CoachingShowcase";
 import Professionals from "@/components/Professionals";
 import PRBoard from "@/components/PRBoard";
 import HutchTouch from "@/components/HutchTouch";
@@ -24,6 +25,7 @@ export default function Home() {
       <main>
         <Hero />
         <About />
+        <CoachingShowcase />
         <Professionals />
         <PRBoard />
         <HutchTouch mode="public" />
