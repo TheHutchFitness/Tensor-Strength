@@ -244,6 +244,14 @@ export default function NutritionTracker() {
   const [customSupps, setCustomSupps] = useState<string[]>([]);
   const [newSupp, setNewSupp] = useState("");
   const [savedMeals, setSavedMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
+  const [coachMeals, setCoachMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/client/meals")
+      .then((r) => (r.ok ? r.json() : { meals: [] }))
+      .then((d) => setCoachMeals(d.meals || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     try {
@@ -377,6 +385,21 @@ export default function NutritionTracker() {
     localStorage.setItem("ts-saved-meals", JSON.stringify(next));
   }
 
+  // Weekly summary (last 7 days) computed from the local log.
+  const weekly = useMemo(() => {
+    let cal = 0, p = 0, c = 0, f = 0, days = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(date);
+      d.setDate(d.getDate() - i);
+      const dl = allLogs[dateKey(d)];
+      if (!dl) continue;
+      let dc = 0, dp = 0, dcarb = 0, df = 0, any = false;
+      (Object.keys(dl) as Meal[]).forEach((m) => dl[m].forEach((e) => { dc += e.cal; dp += e.p; dcarb += e.c; df += e.f; any = true; }));
+      if (any) { cal += dc; p += dp; c += dcarb; f += df; days++; }
+    }
+    return days ? { days, cal: Math.round(cal / days), p: Math.round(p / days), c: Math.round(c / days), f: Math.round(f / days) } : null;
+  }, [allLogs, date]);
+
   const totals = useMemo(() => {
     const t = { cal: 0, p: 0, c: 0, f: 0 };
     (Object.keys(day) as Meal[]).forEach((m) => day[m].forEach((e) => {
@@ -499,6 +522,23 @@ export default function NutritionTracker() {
         </div>
       </div>
 
+      {/* Weekly summary */}
+      {weekly && (
+        <div className="border border-bone/15 bg-ink/20 p-5">
+          <p className="font-display uppercase tracking-wider text-bone/60 text-xs mb-3">
+            This week — daily averages ({weekly.days} {weekly.days === 1 ? "day" : "days"} logged)
+          </p>
+          <div className="grid grid-cols-4 gap-3 text-center">
+            {[["Calories", weekly.cal], ["Protein", weekly.p + "g"], ["Carbs", weekly.c + "g"], ["Fat", weekly.f + "g"]].map(([l, v]) => (
+              <div key={l as string} className="border border-bone/10 bg-ink/30 p-3">
+                <p className="font-display text-2xl text-electric font-700">{v}</p>
+                <p className="text-[10px] uppercase tracking-wider text-bone/50 mt-1">{l}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Meals */}
       <div className="grid gap-4">
         {MEALS.map((meal) => (
@@ -577,7 +617,23 @@ export default function NutritionTracker() {
                   )}
                 </div>
 
-                {/* Search + cuisine */}
+                {/* Coach meal templates */}
+                {coachMeals.length > 0 && (
+                  <div className="mb-3 border-b border-bone/10 pb-3">
+                    <span className="text-[10px] uppercase tracking-wider text-electric">From your coach — one‑tap add</span>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {coachMeals.map((cm) => {
+                        const cals = Math.round((cm.items || []).reduce((s, i) => s + i.cal, 0));
+                        return (
+                          <button key={cm.id} onClick={() => applyMeal(meal.id, cm)} className="text-xs border border-electric/40 text-electric px-2.5 py-1.5 hover:bg-electric hover:text-ink transition-colors">
+                            + {cm.name} <span className="opacity-70">· {cals} cal</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search foods…" className={inputCls + " mb-2"} />
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {CUISINES.map((c) => (

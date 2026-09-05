@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Footer from "@/components/Footer";
+import HutchTouchPreview from "@/components/HutchTouchPreview";
 
 export const metadata: Metadata = {
   title: "Free Programs — Tensor Strength",
@@ -151,6 +152,11 @@ export default function FreeProgramsPage() {
                 </a>
               </div>
             </div>
+          </div>
+        </section>
+        <section className="relative overflow-hidden pb-20">
+          <div className="relative mx-auto max-w-6xl px-6">
+            <HutchTouchPreview />
           </div>
         </section>
       </main>

@@ -27,6 +27,40 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
 export default function NearbyGyms() {
   const [state, setState] = useState<State>("idle");
   const [gyms, setGyms] = useState<Gym[]>([]);
+  const [radiusKm, setRadiusKm] = useState(15);
+  const [facility, setFacility] = useState<"gym" | "martial" | "climbing" | "complex">("gym");
+
+  function buildQuery(lat: number, lon: number) {
+    const r = radiusKm * 1000;
+    const a = (sel: string) => `  node${sel}(around:${r},${lat},${lon});\n  way${sel}(around:${r},${lat},${lon});`;
+    let lines: string[] = [];
+    if (facility === "gym") {
+      lines = [
+        a('["leisure"="fitness_centre"]'),
+        a('["amenity"="gym"]'),
+        a('["sport"="fitness"]'),
+        a('["club"="fitness"]'),
+      ];
+    } else if (facility === "martial") {
+      lines = [
+        a('["sport"~"martial_arts|boxing|judo|karate|taekwondo|kickboxing|mma|jiu_jitsu"]'),
+        a('["leisure"="sports_centre"]["sport"~"martial_arts|boxing|judo|karate"]'),
+      ];
+    } else if (facility === "climbing") {
+      lines = [
+        a('["sport"="climbing"]'),
+        a('["leisure"="climbing"]'),
+        a('["leisure"="sports_centre"]["sport"="climbing"]'),
+      ];
+    } else {
+      lines = [
+        a('["leisure"="sports_centre"]'),
+        a('["leisure"="stadium"]'),
+        a('["leisure"="sports_complex"]'),
+      ];
+    }
+    return `[out:json][timeout:25];\n(\n${lines.join("\n")}\n);\nout center 300;`;
+  }
 
   async function findGyms() {
     if (!navigator.geolocation) {
@@ -38,19 +72,7 @@ export default function NearbyGyms() {
       async (pos) => {
         const { latitude: lat, longitude: lon } = pos.coords;
         setState("searching");
-        const query = `[out:json][timeout:25];
-(
-  node["leisure"="fitness_centre"](around:30000,${lat},${lon});
-  way["leisure"="fitness_centre"](around:30000,${lat},${lon});
-  node["amenity"="gym"](around:30000,${lat},${lon});
-  way["amenity"="gym"](around:30000,${lat},${lon});
-  node["sport"="fitness"](around:30000,${lat},${lon});
-  way["sport"="fitness"](around:30000,${lat},${lon});
-  node["leisure"="sports_centre"](around:30000,${lat},${lon});
-  way["leisure"="sports_centre"](around:30000,${lat},${lon});
-  node["club"="sport"](around:30000,${lat},${lon});
-);
-out center 300;`;
+        const query = buildQuery(lat, lon);
         try {
           const res = await fetch("https://overpass-api.de/api/interpreter", {
             method: "POST",
@@ -81,6 +103,7 @@ out center 300;`;
             })
             .filter((g: Gym | null): g is Gym => {
               if (!g) return false;
+              if (g.distanceKm > radiusKm) return false;
               const key = g.name.toLowerCase() + Math.round(g.distanceKm * 10);
               if (seen.has(key)) return false;
               seen.add(key);
@@ -114,6 +137,49 @@ out center 300;`;
         We only use your location to build the list — nothing is stored.
       </p>
 
+      {/* Facility type */}
+      <div className="mt-6">
+        <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Type of facility</p>
+        <div className="flex flex-wrap gap-2">
+          {([
+            { id: "gym", label: "Regular Gyms" },
+            { id: "martial", label: "Martial Arts" },
+            { id: "climbing", label: "Rock Climbing" },
+            { id: "complex", label: "Sports Complexes" },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setFacility(t.id)}
+              className={
+                "px-3 py-2 font-display uppercase tracking-wider text-xs transition-colors " +
+                (facility === t.id ? "bg-electric text-ink" : "text-bone/60 border border-bone/20 hover:border-electric hover:text-electric")
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Distance */}
+      <div className="mt-4">
+        <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Search distance</p>
+        <div className="flex flex-wrap gap-2">
+          {[5, 10, 15, 20, 25].map((km) => (
+            <button
+              key={km}
+              onClick={() => setRadiusKm(km)}
+              className={
+                "px-3 py-2 font-display uppercase tracking-wider text-xs transition-colors " +
+                (radiusKm === km ? "bg-electric text-ink" : "text-bone/60 border border-bone/20 hover:border-electric hover:text-electric")
+              }
+            >
+              {km} km
+            </button>
+          ))}
+        </div>
+      </div>
+
       <button
         onClick={findGyms}
         disabled={busy}
@@ -122,10 +188,10 @@ out center 300;`;
         {state === "locating"
           ? "Getting your location…"
           : state === "searching"
-          ? "Finding gyms…"
+          ? "Finding places…"
           : gyms.length
           ? "Search again"
-          : "Find gyms near me"}
+          : "Find places near me"}
       </button>
 
       {state === "denied" && (
@@ -141,7 +207,7 @@ out center 300;`;
       )}
       {state === "done" && gyms.length === 0 && (
         <p className="mt-5 text-sm text-bone/60">
-          No gyms found within ~30&nbsp;km. Try again from a different spot.
+          No places found within ~{radiusKm}&nbsp;km. Try a wider distance or a different spot.
         </p>
       )}
 

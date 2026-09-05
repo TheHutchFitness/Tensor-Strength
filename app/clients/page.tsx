@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PortalHeader from "@/components/portal/PortalHeader";
+import Tour from "@/components/portal/Tour";
 import Footer from "@/components/Footer";
 import MacroCalculator from "@/components/tools/MacroCalculator";
 import OneRepMaxCalculator from "@/components/tools/OneRepMaxCalculator";
@@ -63,6 +64,14 @@ export default function ClientPortalPage() {
   return (
     <>
       <PortalHeader />
+      <Tour
+        id="welcome"
+        steps={[
+          { title: "Welcome to Tensor Strength", body: "You're in. This is your Client Portal — your programs, tools and a direct line to your coach all live here." },
+          { title: "Your coaching", body: "If a coach is assigned to you, their programs, files and a chat thread show up under Your Coaching." },
+          { title: "Train & fuel", body: "Use the Workout Tracker to log sessions and the Nutrition Tracker to hit your macros. Check in weekly so your coach can adjust." },
+        ]}
+      />
       <main className="text-bone min-h-screen">
         <div className="mx-auto max-w-4xl px-6 py-20 md:py-28">
           {loading ? (

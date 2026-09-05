@@ -505,3 +505,40 @@ backend_nutrition_sync:
 agent_communication:
     -agent: "testing"
     -message: "✅ ALL NUTRITION-SYNC BACKEND TESTS PASSED (11/11 - 100% success rate). Comprehensive testing completed covering all 10 numbered test steps from review request: (1) C1 PUT /api/client/nutrition with valid data returns 200 {ok:true}. (2) C1 PUT again for SAME date with different cal value returns 200 (upsert works correctly, overwrites not duplicates). (3) C1 PUT with NO date returns 400. (4) PUT with NO cookie returns 401. (5) T GET /api/trainer/client-nutrition?clientId=C1&date=2026-01-15 returns 200 with day.totals.cal==2400 (upserted value), day.goal, day.supplements==['Creatine','Vitamin D3'], and recent array. (6) C1 PUT another day (2026-01-16), T GET without date param returns 200 with recent array containing BOTH dates (2026-01-15 and 2026-01-16) sorted most recent first. (7) T GET without clientId returns 400. (8) T GET for C2 (not assigned to T) returns 403. (9) C1 (non-trainer) GET returns 403. (10) GET with NO cookie returns 403. (11) No 500 errors encountered. No _id or passwordHash leaks detected in any responses. All endpoints return correct status codes and proper JSON responses with correct data validation, authentication, and authorization checks."
+
+
+
+# ============ ADMIN PASSWORD RESET + COACH MEAL TEMPLATES ============
+backend_password_reset_meals:
+  - task: "Admin-assisted password reset (PUT /api/admin/users with newPassword)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Extended admin PUT /api/admin/users to accept newPassword field. Admin can reset any member's password without email flow. Validates password length (6+ chars, returns 400 if too short). Updates passwordHash via bcrypt. Non-admin requests return 403. Response never leaks passwordHash or _id."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 6 tests (100% success rate): (1) Admin PUT /api/admin/users {id:C1.id, newPassword:'NewPass123'} returns 200. (2) Login with NEW password succeeds (200). (3) Login with ORIGINAL password returns 401 (old password no longer works). (4) Admin PUT with newPassword='abc' (too short) returns 400 with error 'Password must be at least 6 characters.' (5) Non-admin (C2) PUT /api/admin/users {id:C1.id, newPassword:'Hacked123'} returns 403. (6) PUT response doesn't leak passwordHash or _id. No 500 errors encountered."
+  - task: "Coach meal templates (POST/GET/DELETE /api/trainer/meals, GET /api/client/meals)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New meal template system. POST /api/trainer/meals (isTrainer only) creates meal with name (required), items array [{name,label,cal,p,c,f}], clientId (optional, null=broadcast to all assigned clients). Validates clientId belongs to trainer (400 if not). GET /api/trainer/meals lists trainer's meals. DELETE /api/trainer/meals?id= deletes own meal. GET /api/client/meals (portalAccess required) returns meals where trainerId==assignedTrainerId AND (clientId==me OR null). Returns empty array if no auth (not 500). Non-trainer POST returns 403."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 11 tests (100% success rate): (7) Trainer T POST /api/trainer/meals {name:'Post-workout shake', clientId:C1.id, items:[{name:'Whey',label:'1 scoop',cal:120,p:24,c:3,f:1},{name:'Banana',label:'1',cal:105,p:1,c:27,f:0}]} returns 200 with id + items (2 items). (8) T POST {name:'Team Breakfast', clientId:null, items:[{name:'Oats',cal:150,p:5,c:27,f:3}]} returns 200 (broadcast meal). (9) T POST {name:'X', clientId:C2.id} returns 400 with error 'That client is not assigned to you.' (C2 not assigned to T). (10) T POST {clientId:C1.id} (no name) returns 400. (11) C1 GET /api/client/meals returns 200 with 2 meals: 'Post-workout shake' (C1-specific) and 'Team Breakfast' (broadcast). (12) C2 GET /api/client/meals returns 200 with 0 meals (C2 not assigned to T). (13a) T GET /api/trainer/meals returns 200 with 2 meals. (13b) T DELETE /api/trainer/meals?id=<meal_id> returns 200 {ok:true}. (14) C1 (non-trainer) POST /api/trainer/meals returns 403. (14b) GET /api/trainer/meals with NO cookie returns 403. (15) GET /api/client/meals with NO cookie returns 200 with empty meals array (not 500). No _id leaks detected in any responses."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL ADMIN PASSWORD RESET + COACH MEAL TEMPLATES TESTS PASSED (17/17 - 100% success rate). Comprehensive testing completed covering all 15 numbered test steps from review request. PART 1 - ADMIN-ASSISTED PASSWORD RESET (6 tests): (1) Admin successfully resets C1's password to 'NewPass123' via PUT /api/admin/users. (2) C1 can login with NEW password (200). (3) C1's ORIGINAL password no longer works (401). (4) Admin PUT with password too short (<6 chars) returns 400 with proper error. (5) Non-admin attempting password reset returns 403. (6) PUT response doesn't leak passwordHash or _id. PART 2 - COACH MEAL TEMPLATES (11 tests): (7) Trainer creates meal for assigned client C1 with items, returns 200 with id + items. (8) Trainer creates broadcast meal (clientId=null), returns 200. (9) Trainer attempting to create meal for unassigned client C2 returns 400 with proper error. (10) Trainer POST without name returns 400. (11) C1 GET /api/client/meals returns BOTH C1-specific meal and broadcast meal (2 total). (12) C2 GET /api/client/meals returns empty array (not assigned to trainer). (13) Trainer can list meals (GET returns 2) and delete meal (DELETE returns {ok:true}). (14) Non-trainer POST /api/trainer/meals returns 403; GET /api/trainer/meals with NO cookie returns 403. (15) GET /api/client/meals with NO cookie returns safe response (200 with empty array, not 500). No 500 errors encountered. No _id or passwordHash leaks detected in any responses. All endpoints return correct status codes, proper JSON responses, and enforce correct authentication/authorization checks."

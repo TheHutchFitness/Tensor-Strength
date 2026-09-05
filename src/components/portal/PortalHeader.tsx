@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 const NAV = [
   { href: "/clients/about", label: "About Me" },
   { href: "/forum", label: "Forum" },
@@ -11,6 +13,10 @@ const NAV = [
 
 export default function PortalHeader({ simple = false }: { simple?: boolean }) {
   const items = simple ? [{ href: "/clients", label: "Client Portal" }] : NAV;
+  const [me, setMe] = useState<{ username?: string; picture?: string } | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => setMe(d?.user || null)).catch(() => {});
+  }, []);
   return (
     <header className="sticky top-0 z-50 bg-ink/90 backdrop-blur text-bone border-b-2 border-electric">
       <div className="mx-auto max-w-6xl px-6 py-3 flex items-center justify-between gap-4">
@@ -43,6 +49,9 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
         >
           ← Main
         </a>
+        {me?.picture ? (
+          <img src={me.picture} alt={me.username || ""} title={me.username || ""} className="shrink-0 h-8 w-8 rounded-full object-cover border border-electric" />
+        ) : null}
       </div>
     </header>
   );

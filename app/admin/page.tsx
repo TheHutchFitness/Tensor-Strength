@@ -12,6 +12,7 @@ type User = {
   portalAccess: boolean;
   isTrainer?: boolean;
   assignedTrainerId?: string | null;
+  picture?: string;
   accessType?: string;
   subscriptionStatus?: string;
   createdAt: string;
@@ -109,6 +110,24 @@ export default function AdminPage() {
       setLoading(false);
     })();
   }, []);
+
+  async function resetPassword(u: User) {
+    const pw = window.prompt(`Set a new password for ${u.username} (6+ characters):`);
+    if (!pw) return;
+    if (pw.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return;
+    }
+    setBusyId(u.id);
+    const res = await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, newPassword: pw }),
+    });
+    setBusyId(null);
+    if (res.ok) alert(`Password updated for ${u.username}.`);
+    else alert("Could not update password.");
+  }
 
   async function togglePortal(u: User) {
     setBusyId(u.id);
@@ -226,7 +245,14 @@ export default function AdminPage() {
                     )}
                     {members.map((u) => (
                       <tr key={u.id} className="border-t border-bone/10">
-                        <td className="p-4 text-bone/90 font-display uppercase tracking-wider">{u.username}</td>
+                        <td className="p-4 text-bone/90 font-display uppercase tracking-wider">
+                          <span className="inline-flex items-center gap-2">
+                            {u.picture ? (
+                              <img src={u.picture} alt="" className="h-6 w-6 rounded-full object-cover" />
+                            ) : null}
+                            {u.username}
+                          </span>
+                        </td>
                         <td className="p-4 text-bone/70">{u.email}</td>
                         <td className="p-4 text-bone/70 text-xs">
                           {u.portalAccess
@@ -303,6 +329,13 @@ export default function AdminPage() {
                             className="font-display uppercase tracking-wider text-xs border border-electric text-electric px-4 py-2 hover:bg-electric hover:text-ink transition-colors disabled:opacity-50"
                           >
                             {u.portalAccess ? "Revoke" : "Grant"}
+                          </button>
+                          <button
+                            onClick={() => resetPassword(u)}
+                            disabled={busyId === u.id}
+                            className="ml-2 font-display uppercase tracking-wider text-xs border border-bone/20 text-bone/60 px-4 py-2 hover:border-electric hover:text-electric transition-colors disabled:opacity-50"
+                          >
+                            Reset PW
                           </button>
                           <button
                             onClick={() => removeUser(u)}

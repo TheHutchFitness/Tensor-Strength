@@ -118,6 +118,16 @@ export default function Pricing() {
             ongoing remote coaching, or in-person at The Fit Effect. Every paid option
             unlocks the Client Portal — coaching is added on top when you want a coach.
           </p>
+          <div className="mt-6 inline-block border border-electric/40 bg-electric/5 px-5 py-3">
+            <p className="font-display uppercase tracking-wider text-electric text-sm">
+              Military, first responder &amp; student discounts
+            </p>
+            <p className="text-bone/70 text-sm mt-1">
+              Remote Coaching is <span className="text-electric">$350/mo</span> for military,
+              and <span className="text-electric">$300/mo</span> for first responders &amp; students.
+              Ask for your code before checkout.
+            </p>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

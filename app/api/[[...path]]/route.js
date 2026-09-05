@@ -448,6 +448,13 @@ async function handleRoute(request, { params }) {
         }
         update.assignedTrainerId = tid
       }
+      // Admin-set a new password for a member (no email flow needed).
+      if (typeof body.newPassword === 'string' && body.newPassword.length > 0) {
+        if (body.newPassword.length < 6) {
+          return handleCORS(NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 }))
+        }
+        update.passwordHash = await bcrypt.hash(body.newPassword, 10)
+      }
       await db.collection('users').updateOne({ id: body.id }, { $set: update })
       const updated = await db.collection('users').findOne({ id: body.id })
       return handleCORS(NextResponse.json({ user: publicUser(updated) }))
@@ -750,6 +757,60 @@ async function handleRoute(request, { params }) {
         .toArray()
       return handleCORS(NextResponse.json({ programs: list.map(({ _id, ...r }) => r) }))
     }
+
+    // ---- Coach meal templates (trainer pushes ready-to-log meals) ----
+    if (route === '/trainer/meals' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const b = await request.json()
+      const name = (b.name || '').trim()
+      if (!name) return handleCORS(NextResponse.json({ error: 'A meal name is required.' }, { status: 400 }))
+      const items = Array.isArray(b.items)
+        ? b.items.map((i) => ({
+            name: String(i.name || '').trim(),
+            label: String(i.label || '').trim(),
+            cal: Number(i.cal) || 0,
+            p: Number(i.p) || 0,
+            c: Number(i.c) || 0,
+            f: Number(i.f) || 0,
+          })).filter((i) => i.name)
+        : []
+      let clientId = b.clientId || null
+      if (clientId) {
+        const c = await db.collection('users').findOne({ id: clientId })
+        if (!c || c.assignedTrainerId !== user.id) {
+          return handleCORS(NextResponse.json({ error: 'That client is not assigned to you.' }, { status: 400 }))
+        }
+      }
+      const meal = { id: uuidv4(), trainerId: user.id, trainerName: user.username, clientId, name, items, createdAt: new Date() }
+      await db.collection('coach_meals').insertOne(meal)
+      const { _id, ...clean } = meal
+      return handleCORS(NextResponse.json(clean))
+    }
+    if (route === '/trainer/meals' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const list = await db.collection('coach_meals').find({ trainerId: user.id }).sort({ createdAt: -1 }).toArray()
+      return handleCORS(NextResponse.json({ meals: list.map(({ _id, ...r }) => r) }))
+    }
+    if (route === '/trainer/meals' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.isTrainer) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      await db.collection('coach_meals').deleteOne({ id, trainerId: user.id })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    if (route === '/client/meals' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) return handleCORS(NextResponse.json({ meals: [] }))
+      if (!user.assignedTrainerId) return handleCORS(NextResponse.json({ meals: [] }))
+      const list = await db.collection('coach_meals')
+        .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
+        .sort({ createdAt: -1 }).toArray()
+      return handleCORS(NextResponse.json({ meals: list.map(({ _id, ...r }) => r) }))
+    }
+
 
     // ---- Client "About Me" profile (for trainer use) ----
     if (route === '/client/profile' && method === 'GET') {

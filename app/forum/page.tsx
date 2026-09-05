@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PortalHeader from "@/components/portal/PortalHeader";
+import Tour from "@/components/portal/Tour";
 import Footer from "@/components/Footer";
 
 type Media = { url: string; type: "image" | "video" } | null;
@@ -226,6 +227,14 @@ export default function ForumPage() {
   return (
     <>
       <PortalHeader simple />
+      <Tour
+        id="forum"
+        steps={[
+          { title: "Welcome to the Forum", body: "This is the community. Ask questions, share wins, and get form checks from coaches and other members." },
+          { title: "Pick a category", body: "When you post, choose the best category — General, FAQ, PRs, Nutrition or Form Checks — and attach a photo or video if it helps." },
+          { title: "Be cool", body: "Keep it supportive and on-topic. Like posts that help you and jump in when you can help someone else." },
+        ]}
+      />
       <main className="text-bone min-h-screen">
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-24">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-5">

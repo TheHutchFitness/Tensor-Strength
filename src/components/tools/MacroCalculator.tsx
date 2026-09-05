@@ -34,6 +34,7 @@ export default function MacroCalculator() {
   const [unit, setUnit] = useState<"lb" | "kg">("lb");
   const [activity, setActivity] = useState<Activity>("moderate");
   const [goal, setGoal] = useState<Goal>("maintain");
+  const [saved, setSaved] = useState(false);
   const [result, setResult] = useState<null | {
     calories: number;
     protein: number;
@@ -163,6 +164,25 @@ export default function MacroCalculator() {
             <p className="mt-6 text-xs text-bone/40 leading-relaxed">
               Estimates based on Mifflin-St Jeor. Protein set at ~1g per lb bodyweight,
               fat at 25% of calories, carbs fill the rest. Adjust to your real-world results.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.setItem(
+                    "ts-nutrition-goal",
+                    JSON.stringify({ calories: result.calories, protein: result.protein, carbs: result.carbs, fat: result.fat })
+                  );
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 2500);
+                } catch {}
+              }}
+              className="mt-5 w-full bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
+            >
+              {saved ? "✓ Saved as tracker goals" : "Use as my tracker goals →"}
+            </button>
+            <p className="mt-2 text-[10px] uppercase tracking-wider text-bone/40 text-center">
+              Sets your Nutrition Tracker daily targets on this device.
             </p>
           </>
         ) : (

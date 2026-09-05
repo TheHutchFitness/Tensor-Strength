@@ -8,6 +8,7 @@ import HutchTouch from "@/components/HutchTouch";
 import Content from "@/components/Content";
 import WeeklyPrograms from "@/components/WeeklyPrograms";
 import Tools from "@/components/Tools";
+import FitEffectCard from "@/components/FitEffectCard";
 import ProgramFinder from "@/components/ProgramFinder";
 import Pricing from "@/components/Pricing";
 import CustomProgram from "@/components/CustomProgram";
@@ -29,6 +30,7 @@ export default function Home() {
         <Content />
         <WeeklyPrograms mode="public" />
         <Tools />
+        <FitEffectCard />
         <ProgramFinder />
         <Pricing />
         <CustomProgram />
