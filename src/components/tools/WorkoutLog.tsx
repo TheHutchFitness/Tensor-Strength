@@ -362,6 +362,18 @@ export default function WorkoutLog() {
     if (currentTemplateId === id) setCurrentTemplateId(null);
   }
 
+  // Load a previously saved workout into the builder (values included) so it
+  // can be reused / turned into a template — handy if they forgot to save one.
+  function loadWorkoutAsTemplate(w: Workout) {
+    setSession(cloneExercises(w.exercises));
+    setSessionTitle(w.title || "");
+    setSessionNotes("");
+    setSessionDate(new Date().toLocaleDateString());
+    setCurrentTemplateId(null);
+    setActiveSplitId(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   const setCell =
     "bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-center focus:border-electric outline-none w-full";
 
@@ -692,6 +704,13 @@ export default function WorkoutLog() {
                   </button>
                   {open && (
                     <div className="px-4 pb-4">
+                      <button
+                        onClick={() => loadWorkoutAsTemplate(w)}
+                        title="Load this workout into the builder to reuse or save as a template"
+                        className="mb-3 border border-electric text-electric px-4 py-2 font-display uppercase tracking-wider text-[11px] hover:bg-electric hover:text-ink transition-colors"
+                      >
+                        ↻ Load &amp; reuse
+                      </button>
                       <ul className="grid gap-2">
                         {w.exercises.map((ex) => (
                           <li key={ex.id} className="text-sm">
