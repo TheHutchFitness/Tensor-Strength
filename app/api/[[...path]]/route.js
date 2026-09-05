@@ -320,6 +320,70 @@ async function handleRoute(request, { params }) {
       return handleCORS(setAuthCookie(res, token))
     }
 
+    // Emergent-managed Google sign-in: exchange the one-time session_id for the
+    // Google identity, then find-or-create the local user and issue our ts_token.
+    if (route === '/auth/emergent' && method === 'POST') {
+      const body = await request.json().catch(() => ({}))
+      const sessionId = (body.session_id || '').trim()
+      if (!sessionId || sessionId.length > 512) {
+        return handleCORS(NextResponse.json({ error: 'Invalid session_id' }, { status: 400 }))
+      }
+      let data
+      try {
+        const upstream = await fetch(
+          'https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data',
+          { method: 'GET', headers: { 'X-Session-ID': sessionId }, cache: 'no-store' }
+        )
+        if (!upstream.ok) {
+          return handleCORS(NextResponse.json({ error: 'Google sign-in was rejected. Please try again.' }, { status: 401 }))
+        }
+        data = await upstream.json()
+      } catch (e) {
+        console.error('Emergent session exchange failed:', e)
+        return handleCORS(NextResponse.json({ error: 'Could not reach the sign-in service.' }, { status: 502 }))
+      }
+      const email = String(data.email || '').trim().toLowerCase()
+      const name = String(data.name || '').trim()
+      const picture = String(data.picture || '').trim()
+      if (!email) {
+        return handleCORS(NextResponse.json({ error: 'Google did not return an email.' }, { status: 502 }))
+      }
+      let user = await db.collection('users').findOne({ email })
+      if (!user) {
+        // Derive a unique, valid username from the Google name / email.
+        let base = slugify(name || email.split('@')[0]).replace(/-/g, '')
+        if (base.length < 3) base = 'user' + base
+        let username = base
+        let n = 1
+        while (await db.collection('users').findOne({ username })) {
+          username = base + ++n
+        }
+        user = {
+          id: uuidv4(),
+          username,
+          email,
+          passwordHash: null,        // social-only account
+          role: 'member',
+          portalAccess: false,
+          isTrainer: false,
+          authProvider: 'google',
+          picture,
+          createdAt: new Date(),
+        }
+        await db.collection('users').insertOne(user)
+      } else {
+        // Keep provider metadata fresh; never overwrite role/portalAccess/isTrainer.
+        await db.collection('users').updateOne(
+          { id: user.id },
+          { $set: { authProvider: user.authProvider || 'google', picture: picture || user.picture || '', lastLoginAt: new Date() } }
+        )
+        user = await db.collection('users').findOne({ id: user.id })
+      }
+      const token = await signToken({ id: user.id, role: user.role })
+      const res = NextResponse.json({ user: publicUser(user) })
+      return handleCORS(setAuthCookie(res, token))
+    }
+
     if (route === '/auth/logout' && method === 'POST') {
       const res = NextResponse.json({ ok: true })
       res.cookies.set(COOKIE_NAME, '', { httpOnly: true, path: '/', maxAge: 0 })
