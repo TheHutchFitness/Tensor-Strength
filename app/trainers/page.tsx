@@ -57,6 +57,39 @@ export default function TrainersPage() {
   const [clientNutrition, setClientNutrition] = useState<any>(null);
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
+  const [assignFlash, setAssignFlash] = useState("");
+  const [assigning, setAssigning] = useState("");
+
+  const COACH_TEMPLATES: Record<string, string[]> = {
+    Push: ["Bench Press", "Overhead Press", "Incline Dumbbell Press", "Weighted Dips", "Lateral Raise", "Triceps Pushdown"],
+    Pull: ["Deadlift", "Barbell Row", "Pull-Up", "Lat Pulldown", "Face Pull", "Bicep Curl"],
+    Legs: ["Back Squat", "Romanian Deadlift", "Leg Press", "Walking Lunge", "Leg Curl", "Calf Raise"],
+    Upper: ["Bench Press", "Barbell Row", "Overhead Press", "Pull-Up", "Lateral Raise", "Bicep Curl"],
+    Lower: ["Back Squat", "Romanian Deadlift", "Bulgarian Split Squat", "Leg Press", "Leg Curl", "Calf Raise"],
+    "Full Body": ["Back Squat", "Bench Press", "Deadlift", "Overhead Press", "Barbell Row", "Plank"],
+  };
+
+  async function assignTemplate(clientId: string, splitName: string) {
+    setAssigning(splitName);
+    setAssignFlash("");
+    const exercises = (COACH_TEMPLATES[splitName] || []).map((name) => ({
+      name,
+      cue: "",
+      sets: [
+        { weight: "", reps: "8-12", rpe: "" },
+        { weight: "", reps: "8-12", rpe: "" },
+        { weight: "", reps: "8-12", rpe: "" },
+      ],
+    }));
+    const res = await fetch("/api/trainer/assign-template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, template: { name: `${splitName} (Coach)`, exercises } }),
+    });
+    setAssigning("");
+    setAssignFlash(res.ok ? `✓ Sent "${splitName}" to this client's tracker` : "Could not send template");
+    setTimeout(() => setAssignFlash(""), 3000);
+  }
 
   async function loadClients() {
     const res = await fetch("/api/trainer/clients");
@@ -334,6 +367,31 @@ export default function TrainersPage() {
                             )}
                           </div>
                         )}
+                        {/* Coach: push a ready-made template to this client */}
+                        <div className="mt-6 border border-electric/30 bg-ink/20 p-5">
+                          <p className="font-display uppercase tracking-wider text-electric text-sm mb-1">
+                            Send a workout template
+                          </p>
+                          <p className="text-bone/50 text-xs mb-3">
+                            Pushes a ready-made split straight into this client&apos;s tracker templates.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.keys(COACH_TEMPLATES).map((name) => (
+                              <button
+                                key={name}
+                                onClick={() => assignTemplate(selected.id, name)}
+                                disabled={assigning === name}
+                                className="border border-bone/25 text-bone/80 px-3 py-2 font-display uppercase tracking-wider text-[11px] hover:border-electric hover:text-electric transition-colors disabled:opacity-50"
+                              >
+                                {assigning === name ? "Sending…" : `+ ${name}`}
+                              </button>
+                            ))}
+                          </div>
+                          {assignFlash && (
+                            <p className="mt-3 font-display uppercase tracking-wider text-xs text-electric">{assignFlash}</p>
+                          )}
+                        </div>
+
                         {loadingCheckins ? (
                           <p className="mt-8 font-display uppercase tracking-wider text-bone/50">Loading check-ins…</p>
                         ) : checkins.length === 0 ? (

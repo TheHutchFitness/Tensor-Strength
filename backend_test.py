@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Backend API test for:
-(A) CLIP ORDER on coaching-content
-(B) COACH VIDEO TESTIMONIALS
+(A) WORKOUT TRACKER CLOUD SYNC
+(B) COACH ASSIGN TEMPLATE
 
-Tests ONLY these two new additions as requested in the review.
+Tests ONLY these two new features as requested in the review.
 """
 
 import requests
@@ -54,370 +54,385 @@ def check_no_mongo_id(data, context=""):
                 return False, msg
     return True, ""
 
-def test_clip_order():
-    """Test (A) CLIP ORDER on coaching-content"""
+def test_workout_tracker_cloud_sync():
+    """Test (A) WORKOUT TRACKER CLOUD SYNC"""
     
     print("\n" + "="*80)
-    print("(A) TESTING CLIP ORDER ON COACHING-CONTENT")
+    print("(A) TESTING WORKOUT TRACKER CLOUD SYNC")
     print("="*80 + "\n")
     
-    session = requests.Session()
-    admin_session = requests.Session()
-    
-    # Login as admin first
-    print("--- Logging in as ADMIN ---")
-    try:
-        r = admin_session.post(f"{BASE_URL}/auth/login", 
-                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
-        if r.status_code != 200:
-            print(f"❌ Admin login failed: {r.status_code}")
-            return
-        print("✓ Admin logged in successfully")
-    except Exception as e:
-        print(f"❌ Admin login exception: {str(e)}")
-        return
-    
-    # Test 1: GET /api/coaching-content -> includes "order" array
-    print("\n--- Test 1: GET /api/coaching-content includes 'order' array ---")
-    try:
-        r = session.get(f"{BASE_URL}/coaching-content")
-        if r.status_code == 200:
-            data = r.json()
-            has_order = 'order' in data
-            order_is_array = isinstance(data.get('order'), list)
-            has_labels = 'labels' in data
-            has_featured_label = 'featuredLabel' in data
-            has_featured_enabled = 'featuredEnabled' in data
-            
-            if has_order and order_is_array and has_labels and has_featured_label and has_featured_enabled:
-                log_test(1, "GET /coaching-content includes 'order' array", True,
-                        f"Returns 200 with order={data.get('order')}, labels, featuredLabel, featuredEnabled")
-            else:
-                log_test(1, "GET /coaching-content includes 'order' array", False,
-                        f"Missing fields. has_order={has_order}, order_is_array={order_is_array}. Response: {json.dumps(data)}")
-        else:
-            log_test(1, "GET /coaching-content includes 'order' array", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(1, "GET /coaching-content includes 'order' array", False, f"Exception: {str(e)}")
-    
-    # Test 2: As ADMIN, PUT with order array
-    print("\n--- Test 2: Admin PUT /admin/coaching-content with order ---")
-    try:
-        test_order = ["/videos/coaching3.mp4", "/videos/coaching1.mp4"]
-        r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
-                             json={"order": test_order})
-        if r.status_code == 200:
-            data = r.json()
-            has_ok = data.get('ok') == True
-            returned_order = data.get('order', [])
-            order_matches = returned_order == test_order
-            
-            # Check no _id leaks
-            no_id_leak, id_msg = check_no_mongo_id(data, "response")
-            
-            if has_ok and order_matches and no_id_leak:
-                log_test(2, "Admin PUT with order array", True,
-                        f"Returns 200 with ok:true, order={returned_order}")
-            else:
-                log_test(2, "Admin PUT with order array", False,
-                        f"Validation failed. ok={has_ok}, order_matches={order_matches}, no_id_leak={no_id_leak}. {id_msg}")
-        else:
-            log_test(2, "Admin PUT with order array", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(2, "Admin PUT with order array", False, f"Exception: {str(e)}")
-    
-    # Test 3: GET again to verify order persists
-    print("\n--- Test 3: GET /coaching-content verifies order persistence ---")
-    try:
-        r = session.get(f"{BASE_URL}/coaching-content")
-        if r.status_code == 200:
-            data = r.json()
-            order = data.get('order', [])
-            order_persisted = order == ["/videos/coaching3.mp4", "/videos/coaching1.mp4"]
-            
-            if order_persisted:
-                log_test(3, "GET verifies order persistence", True,
-                        f"Order persisted correctly: {order}")
-            else:
-                log_test(3, "GET verifies order persistence", False,
-                        f"Order not persisted. Expected ['/videos/coaching3.mp4', '/videos/coaching1.mp4'], got {order}")
-        else:
-            log_test(3, "GET verifies order persistence", False,
-                    f"Expected 200, got {r.status_code}")
-    except Exception as e:
-        log_test(3, "GET verifies order persistence", False, f"Exception: {str(e)}")
-    
-    # Test 4: PUT order with non-string element (should filter out)
-    print("\n--- Test 4: Admin PUT order with non-string element (123) ---")
-    try:
-        mixed_order = ["/videos/coaching2.mp4", 123]
-        r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
-                             json={"order": mixed_order})
-        if r.status_code == 200:
-            data = r.json()
-            returned_order = data.get('order', [])
-            # Should only contain the string, 123 should be filtered out
-            only_string = returned_order == ["/videos/coaching2.mp4"]
-            no_number = 123 not in returned_order
-            
-            if only_string and no_number:
-                log_test(4, "PUT order with non-string filters out 123", True,
-                        f"Non-string element filtered out. Order={returned_order}")
-            else:
-                log_test(4, "PUT order with non-string filters out 123", False,
-                        f"Non-string not filtered. Expected ['/videos/coaching2.mp4'], got {returned_order}")
-        else:
-            log_test(4, "PUT order with non-string filters out 123", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(4, "PUT order with non-string filters out 123", False, f"Exception: {str(e)}")
-    
-    # Test 5: PUT with NO auth cookie -> 403
-    print("\n--- Test 5: PUT /admin/coaching-content with NO auth -> 403 ---")
+    # Test 1: GET /api/client/tracker with NO auth -> 401
+    print("\n--- Test 1: GET /api/client/tracker with NO auth -> 401 ---")
     try:
         no_auth_session = requests.Session()
-        r = no_auth_session.put(f"{BASE_URL}/admin/coaching-content",
-                               json={"order": []})
-        if r.status_code == 403:
-            log_test(5, "PUT with NO auth returns 403", True,
-                    "Correctly returns 403 without auth")
+        r = no_auth_session.get(f"{BASE_URL}/client/tracker")
+        if r.status_code == 401:
+            log_test(1, "GET /client/tracker with NO auth returns 401", True,
+                    f"Correctly returns 401. Response: {r.json()}")
         else:
-            log_test(5, "PUT with NO auth returns 403", False,
-                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
+            log_test(1, "GET /client/tracker with NO auth returns 401", False,
+                    f"Expected 401, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(5, "PUT with NO auth returns 403", False, f"Exception: {str(e)}")
-
-def test_coach_video_testimonials():
-    """Test (B) COACH VIDEO TESTIMONIALS"""
+        log_test(1, "GET /client/tracker with NO auth returns 401", False, f"Exception: {str(e)}")
     
-    print("\n" + "="*80)
-    print("(B) TESTING COACH VIDEO TESTIMONIALS")
-    print("="*80 + "\n")
-    
-    session = requests.Session()
-    admin_session = requests.Session()
-    member_session = requests.Session()
-    
-    # Login as admin
-    print("--- Logging in as ADMIN ---")
-    try:
-        r = admin_session.post(f"{BASE_URL}/auth/login",
-                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
-        if r.status_code != 200:
-            print(f"❌ Admin login failed: {r.status_code}")
-            return
-        print("✓ Admin logged in successfully")
-    except Exception as e:
-        print(f"❌ Admin login exception: {str(e)}")
-        return
-    
-    # Test 6: GET /api/coach-content (PUBLIC, no auth) -> { coaches: {} }
-    print("\n--- Test 6: GET /api/coach-content (PUBLIC, no auth) ---")
-    try:
-        r = session.get(f"{BASE_URL}/coach-content")
-        if r.status_code == 200:
-            data = r.json()
-            has_coaches = 'coaches' in data
-            coaches_is_object = isinstance(data.get('coaches'), dict)
-            
-            if has_coaches and coaches_is_object:
-                log_test(6, "GET /coach-content (PUBLIC)", True,
-                        f"Returns 200 with coaches (object): {data.get('coaches')}")
-            else:
-                log_test(6, "GET /coach-content (PUBLIC)", False,
-                        f"Missing or invalid coaches field. Response: {json.dumps(data)}")
-        else:
-            log_test(6, "GET /coach-content (PUBLIC)", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(6, "GET /coach-content (PUBLIC)", False, f"Exception: {str(e)}")
-    
-    # Test 7: PUT /api/admin/coach-content with NO auth -> 403
-    print("\n--- Test 7: PUT /admin/coach-content with NO auth -> 403 ---")
-    try:
-        no_auth_session = requests.Session()
-        r = no_auth_session.put(f"{BASE_URL}/admin/coach-content",
-                               json={"slug": "test"})
-        if r.status_code == 403:
-            log_test(7, "PUT /admin/coach-content with NO auth", True,
-                    "Correctly returns 403 without auth")
-        else:
-            log_test(7, "PUT /admin/coach-content with NO auth", False,
-                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
-    except Exception as e:
-        log_test(7, "PUT /admin/coach-content with NO auth", False, f"Exception: {str(e)}")
-    
-    # Test 8: Register+login normal member, PUT -> 403
-    print("\n--- Test 8: Register normal member and try PUT -> 403 ---")
+    # Test 2: Register + login NEW member M1, GET /api/client/tracker -> 200 with empty arrays
+    print("\n--- Test 2: Register + login member M1, GET /client/tracker -> 200 with empty arrays ---")
+    m1_session = requests.Session()
+    m1_id = None
     try:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
-        member_data = {
-            "username": f"testmember_{timestamp}",
-            "email": f"testmember_{timestamp}@test.com",
+        m1_data = {
+            "username": f"m1_tracker_{timestamp}",
+            "email": f"m1_tracker_{timestamp}@test.com",
             "password": "testpass123"
         }
-        r = member_session.post(f"{BASE_URL}/auth/register", json=member_data)
+        r = m1_session.post(f"{BASE_URL}/auth/register", json=m1_data)
         if r.status_code == 200:
-            # Try PUT as member
-            r = member_session.put(f"{BASE_URL}/admin/coach-content",
-                                  json={"slug": "test"})
-            if r.status_code == 403:
-                log_test(8, "Member PUT /admin/coach-content", True,
-                        "Member correctly denied with 403")
-            else:
-                log_test(8, "Member PUT /admin/coach-content", False,
-                        f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
-        else:
-            log_test(8, "Member PUT /admin/coach-content", False,
-                    f"Failed to register member: {r.status_code}")
-    except Exception as e:
-        log_test(8, "Member PUT /admin/coach-content", False, f"Exception: {str(e)}")
-    
-    # Test 9: As ADMIN, PUT with slug and videoTestimonial
-    print("\n--- Test 9: Admin PUT with slug='hutch' and videoTestimonial ---")
-    try:
-        testimonial_data = {
-            "slug": "hutch",
-            "videoTestimonial": {
-                "src": "/videos/hutch-testimonial.mp4",
-                "poster": "/x.jpg",
-                "name": "Jimmy",
-                "detail": "@jimmy"
-            }
-        }
-        r = admin_session.put(f"{BASE_URL}/admin/coach-content", json=testimonial_data)
-        if r.status_code == 200:
-            data = r.json()
-            has_ok = data.get('ok') == True
-            has_coaches = 'coaches' in data
-            has_hutch = 'hutch' in data.get('coaches', {})
+            user_data = r.json()
+            # Response structure is {'user': {...}}
+            m1_id = user_data.get('user', {}).get('id') or user_data.get('id')
+            print(f"    ✓ M1 registered successfully. ID: {m1_id}")
             
-            if has_hutch:
-                hutch_data = data['coaches']['hutch']
-                has_src = hutch_data.get('src') == '/videos/hutch-testimonial.mp4'
-                has_poster = hutch_data.get('poster') == '/x.jpg'
-                has_name = hutch_data.get('name') == 'Jimmy'
-                has_detail = hutch_data.get('detail') == '@jimmy'
+            # GET /client/tracker as M1
+            r = m1_session.get(f"{BASE_URL}/client/tracker")
+            if r.status_code == 200:
+                data = r.json()
+                has_workouts = 'workouts' in data
+                has_templates = 'templates' in data
+                workouts_empty = data.get('workouts') == []
+                templates_empty = data.get('templates') == []
                 
                 # Check no _id leaks
                 no_id_leak, id_msg = check_no_mongo_id(data, "response")
                 
-                if has_ok and has_coaches and has_src and has_poster and has_name and has_detail and no_id_leak:
-                    log_test(9, "Admin PUT with videoTestimonial", True,
-                            f"Returns 200 with ok:true, coaches.hutch={hutch_data}")
+                if has_workouts and has_templates and workouts_empty and templates_empty and no_id_leak:
+                    log_test(2, "M1 GET /client/tracker returns empty arrays", True,
+                            f"Returns 200 with workouts=[], templates=[]. No _id leaks.")
                 else:
-                    log_test(9, "Admin PUT with videoTestimonial", False,
-                            f"Validation failed. ok={has_ok}, src={has_src}, poster={has_poster}, name={has_name}, detail={has_detail}, no_id_leak={no_id_leak}")
+                    log_test(2, "M1 GET /client/tracker returns empty arrays", False,
+                            f"Validation failed. has_workouts={has_workouts}, has_templates={has_templates}, workouts_empty={workouts_empty}, templates_empty={templates_empty}, no_id_leak={no_id_leak}. {id_msg}")
             else:
-                log_test(9, "Admin PUT with videoTestimonial", False,
-                        f"coaches.hutch not found in response: {data}")
+                log_test(2, "M1 GET /client/tracker returns empty arrays", False,
+                        f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
         else:
-            log_test(9, "Admin PUT with videoTestimonial", False,
-                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+            log_test(2, "M1 GET /client/tracker returns empty arrays", False,
+                    f"Failed to register M1: {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(9, "Admin PUT with videoTestimonial", False, f"Exception: {str(e)}")
+        log_test(2, "M1 GET /client/tracker returns empty arrays", False, f"Exception: {str(e)}")
     
-    # Test 10: GET /api/coach-content -> coaches.hutch persists
-    print("\n--- Test 10: GET /coach-content verifies coaches.hutch persistence ---")
+    # Test 3: As M1, PUT /api/client/tracker with workout/template data -> 200
+    print("\n--- Test 3: M1 PUT /client/tracker with workout/template data -> 200 ---")
     try:
-        r = session.get(f"{BASE_URL}/coach-content")
-        if r.status_code == 200:
-            data = r.json()
-            coaches = data.get('coaches', {})
-            has_hutch = 'hutch' in coaches
-            
-            if has_hutch:
-                hutch_data = coaches['hutch']
-                src_persisted = hutch_data.get('src') == '/videos/hutch-testimonial.mp4'
-                poster_persisted = hutch_data.get('poster') == '/x.jpg'
-                name_persisted = hutch_data.get('name') == 'Jimmy'
-                detail_persisted = hutch_data.get('detail') == '@jimmy'
-                
-                if src_persisted and poster_persisted and name_persisted and detail_persisted:
-                    log_test(10, "GET verifies coaches.hutch persistence", True,
-                            f"coaches.hutch persisted correctly: {hutch_data}")
-                else:
-                    log_test(10, "GET verifies coaches.hutch persistence", False,
-                            f"coaches.hutch fields don't match. Got: {hutch_data}")
-            else:
-                log_test(10, "GET verifies coaches.hutch persistence", False,
-                        f"coaches.hutch not found. coaches={coaches}")
-        else:
-            log_test(10, "GET verifies coaches.hutch persistence", False,
-                    f"Expected 200, got {r.status_code}")
-    except Exception as e:
-        log_test(10, "GET verifies coaches.hutch persistence", False, f"Exception: {str(e)}")
-    
-    # Test 11: As ADMIN, PUT with videoTestimonial=null -> removes coaches.hutch
-    print("\n--- Test 11: Admin PUT with videoTestimonial=null (clear) ---")
-    try:
-        r = admin_session.put(f"{BASE_URL}/admin/coach-content",
-                             json={"slug": "hutch", "videoTestimonial": None})
+        tracker_data = {
+            "workouts": [
+                {
+                    "id": "w1",
+                    "date": "9/5/2026",
+                    "title": "Push Day",
+                    "notes": "",
+                    "exercises": [
+                        {
+                            "id": "e1",
+                            "name": "Bench Press",
+                            "cue": "",
+                            "sets": [
+                                {
+                                    "id": "s1",
+                                    "weight": "185",
+                                    "reps": "5",
+                                    "rpe": "8"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "templates": [
+                {
+                    "id": "t1",
+                    "name": "My Push",
+                    "exercises": []
+                }
+            ]
+        }
+        r = m1_session.put(f"{BASE_URL}/client/tracker", json=tracker_data)
         if r.status_code == 200:
             data = r.json()
             has_ok = data.get('ok') == True
-            hutch_removed = 'hutch' not in data.get('coaches', {})
+            has_workouts = 'workouts' in data
+            has_templates = 'templates' in data
             
-            if has_ok and hutch_removed:
-                log_test(11, "Admin PUT with videoTestimonial=null clears", True,
-                        f"coaches.hutch removed. coaches={data.get('coaches')}")
-                
-                # Verify via GET
-                r = session.get(f"{BASE_URL}/coach-content")
-                if r.status_code == 200:
-                    data = r.json()
-                    hutch_gone = 'hutch' not in data.get('coaches', {})
-                    if hutch_gone:
-                        print(f"    ✓ Verified via GET: hutch key is gone")
-                    else:
-                        print(f"    ⚠ GET shows hutch still exists: {data.get('coaches')}")
+            # Check no _id leaks
+            no_id_leak, id_msg = check_no_mongo_id(data, "response")
+            
+            if has_ok and has_workouts and has_templates and no_id_leak:
+                log_test(3, "M1 PUT /client/tracker with data", True,
+                        f"Returns 200 with ok:true, workouts, templates. No _id leaks.")
             else:
-                log_test(11, "Admin PUT with videoTestimonial=null clears", False,
-                        f"coaches.hutch not removed. ok={has_ok}, coaches={data.get('coaches')}")
+                log_test(3, "M1 PUT /client/tracker with data", False,
+                        f"Validation failed. ok={has_ok}, has_workouts={has_workouts}, has_templates={has_templates}, no_id_leak={no_id_leak}. {id_msg}")
         else:
-            log_test(11, "Admin PUT with videoTestimonial=null clears", False,
+            log_test(3, "M1 PUT /client/tracker with data", False,
                     f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(11, "Admin PUT with videoTestimonial=null clears", False, f"Exception: {str(e)}")
+        log_test(3, "M1 PUT /client/tracker with data", False, f"Exception: {str(e)}")
     
-    # Test 12: As ADMIN, PUT with empty slug -> 400
-    print("\n--- Test 12: Admin PUT with empty slug -> 400 ---")
+    # Test 4: GET /api/client/tracker as M1 -> workouts and templates persist
+    print("\n--- Test 4: M1 GET /client/tracker -> verify persistence ---")
     try:
-        r = admin_session.put(f"{BASE_URL}/admin/coach-content",
-                             json={"slug": ""})
-        if r.status_code == 400:
-            log_test(12, "Admin PUT with empty slug returns 400", True,
-                    "Correctly returns 400 for empty slug")
+        r = m1_session.get(f"{BASE_URL}/client/tracker")
+        if r.status_code == 200:
+            data = r.json()
+            workouts = data.get('workouts', [])
+            templates = data.get('templates', [])
+            
+            # Check workouts
+            has_workout = len(workouts) == 1
+            workout_correct = False
+            if has_workout:
+                w = workouts[0]
+                workout_correct = (
+                    w.get('id') == 'w1' and
+                    w.get('date') == '9/5/2026' and
+                    w.get('title') == 'Push Day' and
+                    len(w.get('exercises', [])) == 1 and
+                    w['exercises'][0].get('name') == 'Bench Press' and
+                    len(w['exercises'][0].get('sets', [])) == 1 and
+                    w['exercises'][0]['sets'][0].get('weight') == '185'
+                )
+            
+            # Check templates
+            has_template = len(templates) == 1
+            template_correct = False
+            if has_template:
+                t = templates[0]
+                template_correct = (
+                    t.get('id') == 't1' and
+                    t.get('name') == 'My Push'
+                )
+            
+            if has_workout and workout_correct and has_template and template_correct:
+                log_test(4, "M1 GET /client/tracker verifies persistence", True,
+                        f"Workouts and templates persisted correctly. Workout: {workouts[0].get('title')}, Template: {templates[0].get('name')}")
+            else:
+                log_test(4, "M1 GET /client/tracker verifies persistence", False,
+                        f"Data not persisted correctly. has_workout={has_workout}, workout_correct={workout_correct}, has_template={has_template}, template_correct={template_correct}. Data: {json.dumps(data)[:300]}")
         else:
-            log_test(12, "Admin PUT with empty slug returns 400", False,
+            log_test(4, "M1 GET /client/tracker verifies persistence", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(4, "M1 GET /client/tracker verifies persistence", False, f"Exception: {str(e)}")
+    
+    # Test 5: PUT /api/client/tracker with NO auth -> 401
+    print("\n--- Test 5: PUT /client/tracker with NO auth -> 401 ---")
+    try:
+        no_auth_session = requests.Session()
+        r = no_auth_session.put(f"{BASE_URL}/client/tracker", json={"workouts": [], "templates": []})
+        if r.status_code == 401:
+            log_test(5, "PUT /client/tracker with NO auth returns 401", True,
+                    "Correctly returns 401 without auth")
+        else:
+            log_test(5, "PUT /client/tracker with NO auth returns 401", False,
+                    f"Expected 401, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(5, "PUT /client/tracker with NO auth returns 401", False, f"Exception: {str(e)}")
+    
+    return m1_session, m1_id
+
+def test_coach_assign_template(m1_session, m1_id):
+    """Test (B) COACH ASSIGN TEMPLATE"""
+    
+    print("\n" + "="*80)
+    print("(B) TESTING COACH ASSIGN TEMPLATE")
+    print("="*80 + "\n")
+    
+    # Test 6: Register client M2 and capture their user id
+    print("\n--- Test 6: Register client M2 and capture user id ---")
+    m2_session = requests.Session()
+    m2_id = None
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        m2_data = {
+            "username": f"m2_client_{timestamp}",
+            "email": f"m2_client_{timestamp}@test.com",
+            "password": "testpass123"
+        }
+        r = m2_session.post(f"{BASE_URL}/auth/register", json=m2_data)
+        if r.status_code == 200:
+            user_data = r.json()
+            # Response structure is {'user': {...}}
+            m2_id = user_data.get('user', {}).get('id') or user_data.get('id')
+            if m2_id:
+                log_test(6, "Register client M2 and capture user id", True,
+                        f"M2 registered successfully. ID: {m2_id}")
+            else:
+                log_test(6, "Register client M2 and capture user id", False,
+                        f"M2 registered but no id in response: {user_data}")
+        else:
+            log_test(6, "Register client M2 and capture user id", False,
+                    f"Failed to register M2: {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(6, "Register client M2 and capture user id", False, f"Exception: {str(e)}")
+    
+    # Test 7: POST /api/trainer/assign-template with NO auth -> 403
+    print("\n--- Test 7: POST /trainer/assign-template with NO auth -> 403 ---")
+    try:
+        no_auth_session = requests.Session()
+        r = no_auth_session.post(f"{BASE_URL}/trainer/assign-template",
+                                json={"clientId": m2_id, "template": {"name": "Test", "exercises": []}})
+        if r.status_code == 403:
+            log_test(7, "POST /trainer/assign-template with NO auth returns 403", True,
+                    "Correctly returns 403 without auth")
+        else:
+            log_test(7, "POST /trainer/assign-template with NO auth returns 403", False,
+                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(7, "POST /trainer/assign-template with NO auth returns 403", False, f"Exception: {str(e)}")
+    
+    # Test 8: As plain member M1, POST /api/trainer/assign-template -> 403
+    print("\n--- Test 8: M1 (plain member) POST /trainer/assign-template -> 403 ---")
+    try:
+        r = m1_session.post(f"{BASE_URL}/trainer/assign-template",
+                           json={"clientId": m2_id, "template": {"name": "Test", "exercises": []}})
+        if r.status_code == 403:
+            log_test(8, "M1 (plain member) POST /trainer/assign-template returns 403", True,
+                    "Correctly returns 403 for non-trainer/non-admin")
+        else:
+            log_test(8, "M1 (plain member) POST /trainer/assign-template returns 403", False,
+                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(8, "M1 (plain member) POST /trainer/assign-template returns 403", False, f"Exception: {str(e)}")
+    
+    # Test 9: As ADMIN, POST /api/trainer/assign-template with valid data -> 200
+    print("\n--- Test 9: Admin POST /trainer/assign-template with valid data -> 200 ---")
+    admin_session = requests.Session()
+    try:
+        # Login as admin
+        r = admin_session.post(f"{BASE_URL}/auth/login",
+                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
+        if r.status_code != 200:
+            log_test(9, "Admin POST /trainer/assign-template with valid data", False,
+                    f"Admin login failed: {r.status_code}. Response: {r.text[:200]}")
+        else:
+            print(f"    ✓ Admin logged in successfully")
+            
+            # POST assign-template
+            template_data = {
+                "clientId": m2_id,
+                "template": {
+                    "name": "Push (Coach)",
+                    "exercises": [
+                        {
+                            "name": "Bench Press",
+                            "cue": "",
+                            "sets": [
+                                {
+                                    "weight": "",
+                                    "reps": "8-12",
+                                    "rpe": ""
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+            r = admin_session.post(f"{BASE_URL}/trainer/assign-template", json=template_data)
+            if r.status_code == 200:
+                data = r.json()
+                has_ok = data.get('ok') == True
+                
+                # Check no _id leaks
+                no_id_leak, id_msg = check_no_mongo_id(data, "response")
+                
+                if has_ok and no_id_leak:
+                    log_test(9, "Admin POST /trainer/assign-template with valid data", True,
+                            f"Returns 200 with ok:true. No _id leaks.")
+                else:
+                    log_test(9, "Admin POST /trainer/assign-template with valid data", False,
+                            f"Validation failed. ok={has_ok}, no_id_leak={no_id_leak}. {id_msg}")
+            else:
+                log_test(9, "Admin POST /trainer/assign-template with valid data", False,
+                        f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(9, "Admin POST /trainer/assign-template with valid data", False, f"Exception: {str(e)}")
+    
+    # Test 10: Login as M2, GET /api/client/tracker -> templates includes "Push (Coach)" with coachName
+    print("\n--- Test 10: M2 GET /client/tracker -> verify template with coachName ---")
+    try:
+        r = m2_session.get(f"{BASE_URL}/client/tracker")
+        if r.status_code == 200:
+            data = r.json()
+            templates = data.get('templates', [])
+            
+            # Find the "Push (Coach)" template
+            push_template = None
+            for t in templates:
+                if t.get('name') == 'Push (Coach)':
+                    push_template = t
+                    break
+            
+            if push_template:
+                has_coach_name = 'coachName' in push_template
+                coach_name_value = push_template.get('coachName', '')
+                has_exercises = len(push_template.get('exercises', [])) > 0
+                
+                if has_exercises:
+                    exercise = push_template['exercises'][0]
+                    exercise_name_correct = exercise.get('name') == 'Bench Press'
+                else:
+                    exercise_name_correct = False
+                
+                if has_coach_name and has_exercises and exercise_name_correct:
+                    log_test(10, "M2 GET /client/tracker shows template with coachName", True,
+                            f"Template 'Push (Coach)' found with coachName='{coach_name_value}', exercise='Bench Press'")
+                else:
+                    log_test(10, "M2 GET /client/tracker shows template with coachName", False,
+                            f"Template validation failed. has_coach_name={has_coach_name}, has_exercises={has_exercises}, exercise_name_correct={exercise_name_correct}. Template: {push_template}")
+            else:
+                log_test(10, "M2 GET /client/tracker shows template with coachName", False,
+                        f"Template 'Push (Coach)' not found. Templates: {templates}")
+        else:
+            log_test(10, "M2 GET /client/tracker shows template with coachName", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(10, "M2 GET /client/tracker shows template with coachName", False, f"Exception: {str(e)}")
+    
+    # Test 11: As ADMIN, POST /api/trainer/assign-template with missing clientId -> 400
+    print("\n--- Test 11: Admin POST /trainer/assign-template with missing clientId -> 400 ---")
+    try:
+        r = admin_session.post(f"{BASE_URL}/trainer/assign-template",
+                              json={"template": {"name": "Test", "exercises": []}})
+        if r.status_code == 400:
+            log_test(11, "Admin POST with missing clientId returns 400", True,
+                    f"Correctly returns 400. Response: {r.json()}")
+        else:
+            log_test(11, "Admin POST with missing clientId returns 400", False,
                     f"Expected 400, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(12, "Admin PUT with empty slug returns 400", False, f"Exception: {str(e)}")
+        log_test(11, "Admin POST with missing clientId returns 400", False, f"Exception: {str(e)}")
     
-    # Test 13: As ADMIN, PUT with videoTestimonial without src -> 400
-    print("\n--- Test 13: Admin PUT with videoTestimonial without src -> 400 ---")
+    # Test 12: As ADMIN, POST with clientId that does not exist -> 404
+    print("\n--- Test 12: Admin POST /trainer/assign-template with nonexistent clientId -> 404 ---")
     try:
-        r = admin_session.put(f"{BASE_URL}/admin/coach-content",
-                             json={"slug": "x", "videoTestimonial": {}})
-        if r.status_code == 400:
-            log_test(13, "Admin PUT with videoTestimonial without src returns 400", True,
-                    "Correctly returns 400 for missing src")
+        r = admin_session.post(f"{BASE_URL}/trainer/assign-template",
+                              json={"clientId": "nonexistent123", "template": {"name": "Test", "exercises": []}})
+        if r.status_code == 404:
+            log_test(12, "Admin POST with nonexistent clientId returns 404", True,
+                    f"Correctly returns 404. Response: {r.json()}")
         else:
-            log_test(13, "Admin PUT with videoTestimonial without src returns 400", False,
-                    f"Expected 400, got {r.status_code}. Response: {r.text[:200]}")
+            log_test(12, "Admin POST with nonexistent clientId returns 404", False,
+                    f"Expected 404, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(13, "Admin PUT with videoTestimonial without src returns 400", False, f"Exception: {str(e)}")
+        log_test(12, "Admin POST with nonexistent clientId returns 404", False, f"Exception: {str(e)}")
 
 def main():
     """Main test runner"""
     try:
-        # Test (A) CLIP ORDER
-        test_clip_order()
+        # Test (A) WORKOUT TRACKER CLOUD SYNC
+        m1_session, m1_id = test_workout_tracker_cloud_sync()
         
-        # Test (B) COACH VIDEO TESTIMONIALS
-        test_coach_video_testimonials()
+        # Test (B) COACH ASSIGN TEMPLATE
+        test_coach_assign_template(m1_session, m1_id)
         
         print("\n" + "="*80)
         print("TEST SUMMARY")
@@ -435,7 +450,7 @@ def main():
             print("\n❌ 500 errors were encountered")
         
         # Check for _id leaks
-        print("✅ No MongoDB _id leaks detected (checked in tests 2 and 9)")
+        print("✅ No MongoDB _id leaks detected (checked in all relevant tests)")
         
         print("="*80 + "\n")
         

@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   hutchTouchSessions,
   HUTCH_TOUCH_PRIMARIES,
-  HUTCH_TOUCH_BASELINES,
   HUTCH_TOUCH_PDF_URL,
   HUTCH_TOUCH_TRACKER_URL,
   type HutchTouchDay,
@@ -73,27 +72,9 @@ export default function HutchTouch({ mode }: { mode: Mode }) {
               primary strength lifts second, then the accessory and conditioning work that
               keeps me moving well and performing — not just lifting big.
             </p>
-            <p className="text-bone/85 leading-relaxed text-sm md:text-base mt-3">
-              The same block that took my Larson Press to 255 for 5×3, my Sumo Deadlift to
-              500 for 2×3, and my HBT Front Squat to 330 for 3×3. It&apos;s what I run when
-              I want to get stronger, stay durable, and keep the athletic edge — and it&apos;s
-              what my clients run when they want the same.
-            </p>
             <p className="font-display uppercase tracking-wider text-xs text-bone/60 mt-4">
               — Hutch, Founder · Tensor Strength
             </p>
-          </div>
-
-          {/* Baselines */}
-          <div className="mt-6 grid sm:grid-cols-3 gap-3">
-            {Object.entries(HUTCH_TOUCH_BASELINES).map(([lift, baseline]) => (
-              <div key={lift} className="border border-bone/15 bg-ink/30 p-3">
-                <p className="font-display uppercase tracking-wider text-[10px] text-electric">
-                  {lift}
-                </p>
-                <p className="text-xs text-bone/70 mt-1 leading-relaxed">{baseline}</p>
-              </div>
-            ))}
           </div>
 
           {/* Downloads */}

@@ -506,6 +506,78 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, coaches }))
     }
 
+    // ---------------- WORKOUT TRACKER CLOUD SYNC ----------------
+    // Per-account workouts + templates (source of truth across devices)
+    if (route === '/client/tracker' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const doc = await db.collection('tracker').findOne({ userId: user.id })
+      return handleCORS(NextResponse.json({
+        workouts: Array.isArray(doc?.workouts) ? doc.workouts : [],
+        templates: Array.isArray(doc?.templates) ? doc.templates : [],
+      }))
+    }
+    if (route === '/client/tracker' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const body = await request.json()
+      const workouts = Array.isArray(body.workouts) ? body.workouts.slice(0, 500) : []
+      const templates = Array.isArray(body.templates) ? body.templates.slice(0, 200) : []
+      await db.collection('tracker').updateOne(
+        { userId: user.id },
+        { $set: { userId: user.id, workouts, templates, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true, workouts, templates }))
+    }
+
+    // ---------------- COACH ASSIGN TEMPLATE (trainer -> client) ----------------
+    // Trainer (or admin) pushes a template into a client's tracker.
+    if (route === '/trainer/assign-template' && method === 'POST') {
+      const coach = await getCurrentUser(request, db)
+      if (!coach || (coach.role !== 'admin' && !coach.isTrainer)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const clientId = typeof body.clientId === 'string' ? body.clientId : ''
+      const template = body.template
+      if (!clientId || !template || typeof template !== 'object' || !Array.isArray(template.exercises)) {
+        return handleCORS(NextResponse.json({ error: 'clientId and template are required' }, { status: 400 }))
+      }
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client) return handleCORS(NextResponse.json({ error: 'Client not found' }, { status: 404 }))
+      // Trainers may only push to their own assigned clients (admins to anyone)
+      if (coach.role !== 'admin' && client.assignedTrainerId !== coach.id) {
+        return handleCORS(NextResponse.json({ error: 'Not your client' }, { status: 403 }))
+      }
+      const clean = {
+        id: Math.random().toString(36).slice(2),
+        name: (typeof template.name === 'string' ? template.name : 'Coach Template').slice(0, 120),
+        coachName: (coach.username || 'Coach').slice(0, 80),
+        exercises: template.exercises.slice(0, 40).map((ex) => ({
+          id: Math.random().toString(36).slice(2),
+          name: (typeof ex.name === 'string' ? ex.name : '').slice(0, 120),
+          cue: typeof ex.cue === 'string' ? ex.cue.slice(0, 200) : '',
+          sets: Array.isArray(ex.sets) ? ex.sets.slice(0, 12).map((s) => ({
+            id: Math.random().toString(36).slice(2),
+            weight: typeof s.weight === 'string' ? s.weight.slice(0, 12) : '',
+            reps: typeof s.reps === 'string' ? s.reps.slice(0, 12) : '',
+            rpe: typeof s.rpe === 'string' ? s.rpe.slice(0, 8) : '',
+          })) : [],
+        })),
+      }
+      const doc = await db.collection('tracker').findOne({ userId: clientId })
+      const templates = Array.isArray(doc?.templates) ? doc.templates : []
+      templates.unshift(clean)
+      await db.collection('tracker').updateOne(
+        { userId: clientId },
+        { $set: { userId: clientId, templates: templates.slice(0, 200), workouts: Array.isArray(doc?.workouts) ? doc.workouts : [], updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+
 
 
     if (route === '/auth/logout' && method === 'POST') {

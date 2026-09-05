@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   exercises as ALL_EXERCISES,
   splits as SPLITS,
@@ -151,8 +151,38 @@ export default function WorkoutLog() {
         loadProgramSession(JSON.parse(pending));
       }
     } catch {}
+    // Cloud sync: the account is the source of truth. Pull the member's saved
+    // workouts + templates and mirror them locally.
+    (async () => {
+      try {
+        const res = await fetch("/api/client/tracker");
+        if (res.ok) {
+          const d = await res.json();
+          if (Array.isArray(d.workouts)) {
+            setWorkouts(d.workouts);
+            localStorage.setItem(WORKOUT_KEY, JSON.stringify(d.workouts));
+          }
+          if (Array.isArray(d.templates)) {
+            setTemplates(d.templates);
+            localStorage.setItem(TEMPLATE_KEY, JSON.stringify(d.templates));
+          }
+        }
+      } catch {}
+      cloudReady.current = true;
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const cloudReady = useRef(false);
+  // Persist the whole tracker to the member's account (source of truth).
+  function pushTracker(nextWorkouts: Workout[], nextTemplates: Template[]) {
+    if (!cloudReady.current) return;
+    fetch("/api/client/tracker", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workouts: nextWorkouts, templates: nextTemplates }),
+    }).catch(() => {});
+  }
 
   const library: Exercise[] = useMemo(
     () => [...customExercises, ...ALL_EXERCISES],
@@ -162,6 +192,7 @@ export default function WorkoutLog() {
   function persistWorkouts(list: Workout[]) {
     setWorkouts(list);
     localStorage.setItem(WORKOUT_KEY, JSON.stringify(list));
+    pushTracker(list, templates);
   }
   function persistCustom(list: Exercise[]) {
     setCustomExercises(list);
@@ -170,6 +201,7 @@ export default function WorkoutLog() {
   function persistTemplates(list: Template[]) {
     setTemplates(list);
     localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
+    pushTracker(workouts, list);
   }
 
   const activeSplit = SPLITS.find((s) => s.id === activeSplitId) || null;
