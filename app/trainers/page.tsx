@@ -541,6 +541,21 @@ export default function TrainersPage() {
                                 </div>
                               ))}
                             </div>
+                            {tplRows.some((r) => r.name.trim()) && (
+                              <div className="mt-3 border border-bone/10 bg-ink/40 p-3">
+                                <p className="text-[10px] uppercase tracking-wider text-bone/40 mb-1">
+                                  Preview — {tplRows.filter((r) => r.name.trim()).length} exercise{tplRows.filter((r) => r.name.trim()).length === 1 ? "" : "s"}
+                                </p>
+                                <ul className="text-xs text-bone/70 space-y-0.5">
+                                  {tplRows.filter((r) => r.name.trim()).map((r, i) => (
+                                    <li key={i}>
+                                      <span className="text-bone/90">{r.name.trim()}</span>
+                                      <span className="text-bone/50"> — {r.sets || "?"}×{r.reps || "?"}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                             <div className="mt-3 flex flex-wrap items-center gap-3">
                               <button
                                 onClick={addRow}
