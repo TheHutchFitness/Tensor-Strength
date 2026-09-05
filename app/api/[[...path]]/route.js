@@ -414,16 +414,17 @@ async function handleRoute(request, { params }) {
     }
 
     // ---------------- COACHING SHOWCASE CONTENT ----------------
-    // Public: fetch admin-editable captions + featured-reel config
+    // Public: fetch admin-editable captions + clip order
     if (route === '/coaching-content' && method === 'GET') {
       const doc = await db.collection('site_content').findOne({ key: 'coaching' })
       return handleCORS(NextResponse.json({
         labels: doc?.labels || {},
+        order: Array.isArray(doc?.order) ? doc.order : [],
         featuredLabel: doc?.featuredLabel || null,
         featuredEnabled: doc?.featuredEnabled !== false,
       }))
     }
-    // Admin: save captions + featured-reel config
+    // Admin: save captions + clip order
     if (route === '/admin/coaching-content' && method === 'PUT') {
       const admin = await getCurrentUser(request, db)
       if (!admin || admin.role !== 'admin') {
@@ -432,7 +433,6 @@ async function handleRoute(request, { params }) {
       const body = await request.json()
       const update = { key: 'coaching', updatedAt: new Date() }
       if (body.labels && typeof body.labels === 'object') {
-        // sanitize: only string keys/values, cap length
         const clean = {}
         for (const [k, v] of Object.entries(body.labels)) {
           if (typeof k === 'string' && typeof v === 'string') {
@@ -440,6 +440,9 @@ async function handleRoute(request, { params }) {
           }
         }
         update.labels = clean
+      }
+      if (Array.isArray(body.order)) {
+        update.order = body.order.filter((s) => typeof s === 'string').map((s) => s.slice(0, 200)).slice(0, 200)
       }
       if (typeof body.featuredLabel === 'string') {
         update.featuredLabel = body.featuredLabel.slice(0, 120)
@@ -456,10 +459,53 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({
         ok: true,
         labels: doc?.labels || {},
+        order: Array.isArray(doc?.order) ? doc.order : [],
         featuredLabel: doc?.featuredLabel || null,
         featuredEnabled: doc?.featuredEnabled !== false,
       }))
     }
+
+    // ---------------- COACH VIDEO TESTIMONIALS ----------------
+    // Public: per-coach video testimonial overrides { coaches: { slug: {video...} } }
+    if (route === '/coach-content' && method === 'GET') {
+      const doc = await db.collection('site_content').findOne({ key: 'coaches' })
+      return handleCORS(NextResponse.json({ coaches: doc?.coaches || {} }))
+    }
+    // Admin: set/clear a coach's video testimonial
+    if (route === '/admin/coach-content' && method === 'PUT') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const slug = (typeof body.slug === 'string' ? body.slug : '').trim().toLowerCase().slice(0, 80)
+      if (!slug) {
+        return handleCORS(NextResponse.json({ error: 'slug is required' }, { status: 400 }))
+      }
+      const doc = await db.collection('site_content').findOne({ key: 'coaches' })
+      const coaches = doc?.coaches || {}
+      const vt = body.videoTestimonial
+      if (vt === null || (vt && typeof vt.src === 'string' && vt.src.trim() === '')) {
+        // clear
+        delete coaches[slug]
+      } else if (vt && typeof vt === 'object' && typeof vt.src === 'string') {
+        coaches[slug] = {
+          src: vt.src.slice(0, 300),
+          poster: typeof vt.poster === 'string' ? vt.poster.slice(0, 300) : '',
+          name: typeof vt.name === 'string' ? vt.name.slice(0, 120) : '',
+          detail: typeof vt.detail === 'string' ? vt.detail.slice(0, 120) : '',
+        }
+      } else {
+        return handleCORS(NextResponse.json({ error: 'videoTestimonial.src is required' }, { status: 400 }))
+      }
+      await db.collection('site_content').updateOne(
+        { key: 'coaches' },
+        { $set: { key: 'coaches', coaches, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true, coaches }))
+    }
+
 
 
     if (route === '/auth/logout' && method === 'POST') {

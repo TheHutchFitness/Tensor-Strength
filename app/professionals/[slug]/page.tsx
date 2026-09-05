@@ -11,6 +11,18 @@ export default function ProfessionalPage() {
   const slug = String(params?.slug || "");
   const [p, setP] = useState<Professional | null>(null);
   const [state, setState] = useState<"loading" | "found" | "notfound">("loading");
+  const [videoOverride, setVideoOverride] = useState<Professional["videoTestimonial"] | null>(null);
+
+  useEffect(() => {
+    // Admin-set video testimonials (per coach slug) override the static data.
+    fetch("/api/coach-content")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const v = d?.coaches?.[slug];
+        if (v && v.src) setVideoOverride(v);
+      })
+      .catch(() => {});
+  }, [slug]);
 
   useEffect(() => {
     const staticPro = professionals.find((x) => x.slug === slug);
@@ -156,7 +168,10 @@ export default function ProfessionalPage() {
         </section>
 
         {/* Video testimonial */}
-        {p.videoTestimonial && (
+        {(() => {
+          const vt = videoOverride || p.videoTestimonial;
+          if (!vt) return null;
+          return (
           <section className="py-20 md:py-28 border-t border-bone/10">
             <div className="mx-auto max-w-6xl px-6">
               <div className="max-w-2xl mb-12 mx-auto text-center">
@@ -170,8 +185,8 @@ export default function ProfessionalPage() {
               <div className="flex flex-col items-center">
                 <figure className="relative w-full max-w-[340px] aspect-[9/16] overflow-hidden border-4 border-electric bg-ink shadow-[0_0_40px_rgba(0,168,255,0.25)]">
                   <video
-                    src={p.videoTestimonial.src}
-                    poster={p.videoTestimonial.poster}
+                    src={vt.src}
+                    poster={vt.poster}
                     className="h-full w-full object-cover"
                     controls
                     playsInline
@@ -179,15 +194,15 @@ export default function ProfessionalPage() {
                     aria-label={`Video testimonial for ${p.name}`}
                   />
                 </figure>
-                {(p.videoTestimonial.name || p.videoTestimonial.detail) && (
+                {(vt.name || vt.detail) && (
                   <div className="mt-5 text-center">
-                    {p.videoTestimonial.name && (
+                    {vt.name && (
                       <p className="font-display uppercase tracking-wider text-bone">
-                        {p.videoTestimonial.name}
+                        {vt.name}
                       </p>
                     )}
-                    {p.videoTestimonial.detail && (
-                      <p className="text-sm text-electric mt-1">{p.videoTestimonial.detail}</p>
+                    {vt.detail && (
+                      <p className="text-sm text-electric mt-1">{vt.detail}</p>
                     )}
                   </div>
                 )}
@@ -195,7 +210,8 @@ export default function ProfessionalPage() {
               </div>
             </div>
           </section>
-        )}
+          );
+        })()}
 
         {/* Full testimonials */}
         {p.testimonials.length > 0 && (

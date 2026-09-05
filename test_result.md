@@ -604,3 +604,43 @@ backend_coaching_content:
 agent_communication:
     -agent: "testing"
     -message: "✅ ALL COACHING-CONTENT ENDPOINTS TESTS PASSED (7/7 - 100% success rate). Comprehensive testing completed covering all 7 test scenarios from review request: TEST 1: GET /api/coaching-content (PUBLIC, no auth) returns 200 with JSON containing labels (object), featuredLabel (None), featuredEnabled (True). TEST 2: PUT /api/admin/coaching-content with NO auth cookie returns 403 as expected. TEST 3: Registered fresh member and attempted PUT with member cookie, correctly returns 403 (not admin). TEST 4: Admin login successful (NOTE: login uses 'username' field, not 'identifier' field; username is 'the hutch' lowercase). Admin PUT /api/admin/coaching-content with labels {'/videos/coaching1.mp4':'Test Sprint', '/videos/coaching2.mp4':'Dips X'} returns 200 with ok:true and labels correctly saved. TEST 5: GET /api/coaching-content verifies labels persisted with saved values. TEST 6: Admin PUT with 300-char label correctly caps stored value at 120 chars (verified via GET). TEST 7: Admin PUT with non-string label value (integer 123) correctly skips that entry, returns 200 with no 500 error. SECURITY VERIFIED: No 500 errors encountered in any test. No MongoDB _id leaks detected in any responses. All endpoints return correct status codes and proper JSON responses. Admin-only access correctly enforced (403 for non-admin). Label sanitization working correctly (120-char cap, non-string entries skipped)."
+
+    -agent: "main"
+    -message: "NEW — TEST (a) CLIP ORDER on coaching-content and (b) COACH VIDEO TESTIMONIALS. Admin login POST /api/auth/login {username:'the hutch', password:'Vzkfjf3n!3'} (username lowercase). (A) ORDER: (1) GET /api/coaching-content -> 200 now also includes 'order' (array, may be []). (2) As admin PUT /api/admin/coaching-content body {order:['/videos/coaching3.mp4','/videos/coaching1.mp4']} -> 200 ok:true, order echoed in that sequence. (3) GET again -> order persists. (4) PUT order with a non-string element mixed in e.g. ['/videos/coaching2.mp4', 123] -> 200, non-string filtered out. (5) PUT with NO auth -> 403. (B) COACH-CONTENT: (6) GET /api/coach-content (PUBLIC) -> 200 { coaches: {} } (object). (7) PUT /api/admin/coach-content with NO auth -> 403. (8) non-admin member cookie PUT -> 403. (9) As admin PUT {slug:'hutch', videoTestimonial:{src:'/videos/hutch-testimonial.mp4', poster:'/x.jpg', name:'Jimmy', detail:'@jimmy'}} -> 200 ok:true, coaches.hutch present with those fields. (10) GET /api/coach-content -> coaches.hutch persists. (11) PUT admin {slug:'hutch', videoTestimonial:null} -> 200 and coaches.hutch removed (cleared). (12) PUT admin {slug:''} -> 400. (13) PUT admin {slug:'x', videoTestimonial:{}} (no src) -> 400. Confirm no 500s, no _id leaks."
+
+
+
+# ============ CLIP ORDER + COACH VIDEO TESTIMONIALS ============
+backend_clip_order_coach_testimonials:
+  - task: "Clip order on coaching-content (GET/PUT /api/coaching-content with order array)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Extended coaching-content endpoint to include 'order' array field. GET /api/coaching-content now returns {labels, order, featuredLabel, featuredEnabled}. PUT /api/admin/coaching-content accepts order array, filters to only strings, caps at 200 items. Admin-only (403 for non-admin)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 5 tests (100% success rate): (1) GET /api/coaching-content returns 200 with order array (initially []), plus labels, featuredLabel, featuredEnabled. (2) Admin PUT /api/admin/coaching-content with body {order:['/videos/coaching3.mp4','/videos/coaching1.mp4']} returns 200 with ok:true and order echoed in exact sequence. (3) GET /api/coaching-content again verifies order persists with those two values in that order. (4) Admin PUT {order:['/videos/coaching2.mp4', 123]} returns 200 and non-string element (123) is filtered out, order contains only the string. (5) PUT /api/admin/coaching-content with NO auth cookie returns 403. No 500 errors. No _id leaks detected."
+  - task: "Coach video testimonials (GET/PUT /api/coach-content, /api/admin/coach-content)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New coach video testimonials system. GET /api/coach-content (PUBLIC, no auth) returns {coaches: {}} where coaches is an object keyed by slug. PUT /api/admin/coach-content (admin-only) accepts {slug, videoTestimonial:{src,poster,name,detail}} to set/update, or {slug, videoTestimonial:null} to clear. Validates slug required (400 if empty), validates videoTestimonial.src required (400 if missing). Returns {ok:true, coaches}. 403 for non-admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 8 tests (100% success rate): (6) GET /api/coach-content (PUBLIC, no auth) returns 200 with {coaches: {}} (coaches is object). (7) PUT /api/admin/coach-content with NO auth returns 403. (8) Registered normal member, PUT with member cookie returns 403 (non-admin correctly denied). (9) Admin PUT {slug:'hutch', videoTestimonial:{src:'/videos/hutch-testimonial.mp4', poster:'/x.jpg', name:'Jimmy', detail:'@jimmy'}} returns 200 with ok:true, coaches.hutch present with all fields (src, poster, name, detail). (10) GET /api/coach-content verifies coaches.hutch persists with those fields. (11) Admin PUT {slug:'hutch', videoTestimonial:null} returns 200 and coaches.hutch is removed (cleared), verified via GET that hutch key is gone. (12) Admin PUT {slug:''} returns 400 (empty slug rejected). (13) Admin PUT {slug:'x', videoTestimonial:{}} (no src) returns 400 (missing src rejected). No 500 errors. No _id leaks detected."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL CLIP ORDER + COACH VIDEO TESTIMONIALS TESTS PASSED (13/13 - 100% success rate). Comprehensive testing completed covering all 13 test steps from review request. PART A - CLIP ORDER (5 tests): (1) GET /api/coaching-content returns 200 with order array (initially [] or with previous values), plus labels, featuredLabel, featuredEnabled. (2) Admin PUT /api/admin/coaching-content with {order:['/videos/coaching3.mp4','/videos/coaching1.mp4']} returns 200 with ok:true and order echoed in exact sequence. (3) GET /api/coaching-content verifies order persists correctly. (4) Admin PUT with {order:['/videos/coaching2.mp4', 123]} returns 200 and non-string element (123) is correctly filtered out, order contains only the string '/videos/coaching2.mp4'. (5) PUT /api/admin/coaching-content with NO auth cookie returns 403. PART B - COACH VIDEO TESTIMONIALS (8 tests): (6) GET /api/coach-content (PUBLIC, no auth) returns 200 with {coaches: {}} (coaches is object). (7) PUT /api/admin/coach-content with NO auth returns 403. (8) Registered normal member, PUT with member cookie returns 403 (non-admin correctly denied). (9) Admin PUT {slug:'hutch', videoTestimonial:{src:'/videos/hutch-testimonial.mp4', poster:'/x.jpg', name:'Jimmy', detail:'@jimmy'}} returns 200 with ok:true, coaches.hutch={src, poster, name, detail}. (10) GET /api/coach-content verifies coaches.hutch persists with all fields. (11) Admin PUT {slug:'hutch', videoTestimonial:null} returns 200 and coaches.hutch is removed (cleared), verified via GET that hutch key is gone. (12) Admin PUT {slug:''} returns 400 (empty slug correctly rejected). (13) Admin PUT {slug:'x', videoTestimonial:{}} (no src) returns 400 (missing src correctly rejected). SECURITY VERIFIED: No 500 errors encountered in any test. No MongoDB _id leaks detected in any responses. All endpoints return correct status codes (200, 400, 403) and proper JSON responses. Admin-only access correctly enforced (403 for non-admin). Input validation working correctly (empty slug rejected, missing src rejected, non-string array elements filtered). Cookie persistence working correctly across all requests."

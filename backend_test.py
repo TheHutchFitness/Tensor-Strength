@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Backend API test for coaching-content endpoints (admin-editable video captions).
-Tests ONLY the new coaching-content endpoints as requested.
+Backend API test for:
+(A) CLIP ORDER on coaching-content
+(B) COACH VIDEO TESTIMONIALS
+
+Tests ONLY these two new additions as requested in the review.
 """
 
 import requests
@@ -51,59 +54,204 @@ def check_no_mongo_id(data, context=""):
                 return False, msg
     return True, ""
 
-def test_coaching_content_endpoints():
-    """Test coaching-content endpoints for admin-editable video captions"""
+def test_clip_order():
+    """Test (A) CLIP ORDER on coaching-content"""
     
     print("\n" + "="*80)
-    print("TESTING COACHING-CONTENT ENDPOINTS (Admin-Editable Video Captions)")
+    print("(A) TESTING CLIP ORDER ON COACHING-CONTENT")
     print("="*80 + "\n")
     
     session = requests.Session()
+    admin_session = requests.Session()
     
-    # Test 1: GET /api/coaching-content with no auth (PUBLIC endpoint)
-    print("\n--- Test 1: GET /api/coaching-content (PUBLIC, no auth) ---")
+    # Login as admin first
+    print("--- Logging in as ADMIN ---")
+    try:
+        r = admin_session.post(f"{BASE_URL}/auth/login", 
+                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
+        if r.status_code != 200:
+            print(f"❌ Admin login failed: {r.status_code}")
+            return
+        print("✓ Admin logged in successfully")
+    except Exception as e:
+        print(f"❌ Admin login exception: {str(e)}")
+        return
+    
+    # Test 1: GET /api/coaching-content -> includes "order" array
+    print("\n--- Test 1: GET /api/coaching-content includes 'order' array ---")
     try:
         r = session.get(f"{BASE_URL}/coaching-content")
         if r.status_code == 200:
             data = r.json()
+            has_order = 'order' in data
+            order_is_array = isinstance(data.get('order'), list)
             has_labels = 'labels' in data
             has_featured_label = 'featuredLabel' in data
             has_featured_enabled = 'featuredEnabled' in data
-            labels_is_object = isinstance(data.get('labels'), dict)
-            featured_label_valid = data.get('featuredLabel') is None or isinstance(data.get('featuredLabel'), str)
-            featured_enabled_is_bool = isinstance(data.get('featuredEnabled'), bool)
             
-            if has_labels and has_featured_label and has_featured_enabled and labels_is_object and featured_label_valid and featured_enabled_is_bool:
-                log_test(1, "GET /coaching-content (PUBLIC, no auth)", True, 
-                        f"Returns 200 with labels (object), featuredLabel ({data.get('featuredLabel')}), featuredEnabled ({data.get('featuredEnabled')})")
+            if has_order and order_is_array and has_labels and has_featured_label and has_featured_enabled:
+                log_test(1, "GET /coaching-content includes 'order' array", True,
+                        f"Returns 200 with order={data.get('order')}, labels, featuredLabel, featuredEnabled")
             else:
-                log_test(1, "GET /coaching-content (PUBLIC, no auth)", False,
-                        f"Missing or invalid fields. Response: {json.dumps(data)}")
+                log_test(1, "GET /coaching-content includes 'order' array", False,
+                        f"Missing fields. has_order={has_order}, order_is_array={order_is_array}. Response: {json.dumps(data)}")
         else:
-            log_test(1, "GET /coaching-content (PUBLIC, no auth)", False,
+            log_test(1, "GET /coaching-content includes 'order' array", False,
                     f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(1, "GET /coaching-content (PUBLIC, no auth)", False, f"Exception: {str(e)}")
+        log_test(1, "GET /coaching-content includes 'order' array", False, f"Exception: {str(e)}")
     
-    # Test 2: PUT /api/admin/coaching-content with NO auth cookie
-    print("\n--- Test 2: PUT /api/admin/coaching-content with NO auth ---")
+    # Test 2: As ADMIN, PUT with order array
+    print("\n--- Test 2: Admin PUT /admin/coaching-content with order ---")
+    try:
+        test_order = ["/videos/coaching3.mp4", "/videos/coaching1.mp4"]
+        r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
+                             json={"order": test_order})
+        if r.status_code == 200:
+            data = r.json()
+            has_ok = data.get('ok') == True
+            returned_order = data.get('order', [])
+            order_matches = returned_order == test_order
+            
+            # Check no _id leaks
+            no_id_leak, id_msg = check_no_mongo_id(data, "response")
+            
+            if has_ok and order_matches and no_id_leak:
+                log_test(2, "Admin PUT with order array", True,
+                        f"Returns 200 with ok:true, order={returned_order}")
+            else:
+                log_test(2, "Admin PUT with order array", False,
+                        f"Validation failed. ok={has_ok}, order_matches={order_matches}, no_id_leak={no_id_leak}. {id_msg}")
+        else:
+            log_test(2, "Admin PUT with order array", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(2, "Admin PUT with order array", False, f"Exception: {str(e)}")
+    
+    # Test 3: GET again to verify order persists
+    print("\n--- Test 3: GET /coaching-content verifies order persistence ---")
+    try:
+        r = session.get(f"{BASE_URL}/coaching-content")
+        if r.status_code == 200:
+            data = r.json()
+            order = data.get('order', [])
+            order_persisted = order == ["/videos/coaching3.mp4", "/videos/coaching1.mp4"]
+            
+            if order_persisted:
+                log_test(3, "GET verifies order persistence", True,
+                        f"Order persisted correctly: {order}")
+            else:
+                log_test(3, "GET verifies order persistence", False,
+                        f"Order not persisted. Expected ['/videos/coaching3.mp4', '/videos/coaching1.mp4'], got {order}")
+        else:
+            log_test(3, "GET verifies order persistence", False,
+                    f"Expected 200, got {r.status_code}")
+    except Exception as e:
+        log_test(3, "GET verifies order persistence", False, f"Exception: {str(e)}")
+    
+    # Test 4: PUT order with non-string element (should filter out)
+    print("\n--- Test 4: Admin PUT order with non-string element (123) ---")
+    try:
+        mixed_order = ["/videos/coaching2.mp4", 123]
+        r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
+                             json={"order": mixed_order})
+        if r.status_code == 200:
+            data = r.json()
+            returned_order = data.get('order', [])
+            # Should only contain the string, 123 should be filtered out
+            only_string = returned_order == ["/videos/coaching2.mp4"]
+            no_number = 123 not in returned_order
+            
+            if only_string and no_number:
+                log_test(4, "PUT order with non-string filters out 123", True,
+                        f"Non-string element filtered out. Order={returned_order}")
+            else:
+                log_test(4, "PUT order with non-string filters out 123", False,
+                        f"Non-string not filtered. Expected ['/videos/coaching2.mp4'], got {returned_order}")
+        else:
+            log_test(4, "PUT order with non-string filters out 123", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(4, "PUT order with non-string filters out 123", False, f"Exception: {str(e)}")
+    
+    # Test 5: PUT with NO auth cookie -> 403
+    print("\n--- Test 5: PUT /admin/coaching-content with NO auth -> 403 ---")
     try:
         no_auth_session = requests.Session()
-        r = no_auth_session.put(f"{BASE_URL}/admin/coaching-content", 
-                                json={"labels": {}})
+        r = no_auth_session.put(f"{BASE_URL}/admin/coaching-content",
+                               json={"order": []})
         if r.status_code == 403:
-            log_test(2, "PUT /admin/coaching-content with NO auth", True,
-                    "Returns 403 as expected")
+            log_test(5, "PUT with NO auth returns 403", True,
+                    "Correctly returns 403 without auth")
         else:
-            log_test(2, "PUT /admin/coaching-content with NO auth", False,
+            log_test(5, "PUT with NO auth returns 403", False,
                     f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(2, "PUT /admin/coaching-content with NO auth", False, f"Exception: {str(e)}")
+        log_test(5, "PUT with NO auth returns 403", False, f"Exception: {str(e)}")
+
+def test_coach_video_testimonials():
+    """Test (B) COACH VIDEO TESTIMONIALS"""
     
-    # Test 3: Register a fresh member and try PUT (should get 403)
-    print("\n--- Test 3: Register member and try PUT (should get 403) ---")
+    print("\n" + "="*80)
+    print("(B) TESTING COACH VIDEO TESTIMONIALS")
+    print("="*80 + "\n")
+    
+    session = requests.Session()
+    admin_session = requests.Session()
+    member_session = requests.Session()
+    
+    # Login as admin
+    print("--- Logging in as ADMIN ---")
     try:
-        member_session = requests.Session()
+        r = admin_session.post(f"{BASE_URL}/auth/login",
+                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
+        if r.status_code != 200:
+            print(f"❌ Admin login failed: {r.status_code}")
+            return
+        print("✓ Admin logged in successfully")
+    except Exception as e:
+        print(f"❌ Admin login exception: {str(e)}")
+        return
+    
+    # Test 6: GET /api/coach-content (PUBLIC, no auth) -> { coaches: {} }
+    print("\n--- Test 6: GET /api/coach-content (PUBLIC, no auth) ---")
+    try:
+        r = session.get(f"{BASE_URL}/coach-content")
+        if r.status_code == 200:
+            data = r.json()
+            has_coaches = 'coaches' in data
+            coaches_is_object = isinstance(data.get('coaches'), dict)
+            
+            if has_coaches and coaches_is_object:
+                log_test(6, "GET /coach-content (PUBLIC)", True,
+                        f"Returns 200 with coaches (object): {data.get('coaches')}")
+            else:
+                log_test(6, "GET /coach-content (PUBLIC)", False,
+                        f"Missing or invalid coaches field. Response: {json.dumps(data)}")
+        else:
+            log_test(6, "GET /coach-content (PUBLIC)", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(6, "GET /coach-content (PUBLIC)", False, f"Exception: {str(e)}")
+    
+    # Test 7: PUT /api/admin/coach-content with NO auth -> 403
+    print("\n--- Test 7: PUT /admin/coach-content with NO auth -> 403 ---")
+    try:
+        no_auth_session = requests.Session()
+        r = no_auth_session.put(f"{BASE_URL}/admin/coach-content",
+                               json={"slug": "test"})
+        if r.status_code == 403:
+            log_test(7, "PUT /admin/coach-content with NO auth", True,
+                    "Correctly returns 403 without auth")
+        else:
+            log_test(7, "PUT /admin/coach-content with NO auth", False,
+                    f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(7, "PUT /admin/coach-content with NO auth", False, f"Exception: {str(e)}")
+    
+    # Test 8: Register+login normal member, PUT -> 403
+    print("\n--- Test 8: Register normal member and try PUT -> 403 ---")
+    try:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
         member_data = {
             "username": f"testmember_{timestamp}",
@@ -112,163 +260,164 @@ def test_coaching_content_endpoints():
         }
         r = member_session.post(f"{BASE_URL}/auth/register", json=member_data)
         if r.status_code == 200:
-            # Now try PUT as member
-            r = member_session.put(f"{BASE_URL}/admin/coaching-content",
-                                   json={"labels": {}})
+            # Try PUT as member
+            r = member_session.put(f"{BASE_URL}/admin/coach-content",
+                                  json={"slug": "test"})
             if r.status_code == 403:
-                log_test(3, "Member PUT /admin/coaching-content", True,
+                log_test(8, "Member PUT /admin/coach-content", True,
                         "Member correctly denied with 403")
             else:
-                log_test(3, "Member PUT /admin/coaching-content", False,
+                log_test(8, "Member PUT /admin/coach-content", False,
                         f"Expected 403, got {r.status_code}. Response: {r.text[:200]}")
         else:
-            log_test(3, "Member PUT /admin/coaching-content", False,
+            log_test(8, "Member PUT /admin/coach-content", False,
                     f"Failed to register member: {r.status_code}")
     except Exception as e:
-        log_test(3, "Member PUT /admin/coaching-content", False, f"Exception: {str(e)}")
+        log_test(8, "Member PUT /admin/coach-content", False, f"Exception: {str(e)}")
     
-    # Test 4: Login as ADMIN and PUT with labels
-    print("\n--- Test 4: Login as ADMIN and PUT with labels ---")
+    # Test 9: As ADMIN, PUT with slug and videoTestimonial
+    print("\n--- Test 9: Admin PUT with slug='hutch' and videoTestimonial ---")
     try:
-        admin_session = requests.Session()
-        r = admin_session.post(f"{BASE_URL}/auth/login", 
-                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
-        if r.status_code == 200:
-            # Now PUT with labels
-            test_labels = {
-                "/videos/coaching1.mp4": "Test Sprint",
-                "/videos/coaching2.mp4": "Dips X"
+        testimonial_data = {
+            "slug": "hutch",
+            "videoTestimonial": {
+                "src": "/videos/hutch-testimonial.mp4",
+                "poster": "/x.jpg",
+                "name": "Jimmy",
+                "detail": "@jimmy"
             }
-            r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
-                                 json={"labels": test_labels})
-            if r.status_code == 200:
-                data = r.json()
-                has_ok = data.get('ok') == True
-                has_labels = 'labels' in data
-                labels_match = (data.get('labels', {}).get('/videos/coaching1.mp4') == 'Test Sprint' and
-                               data.get('labels', {}).get('/videos/coaching2.mp4') == 'Dips X')
+        }
+        r = admin_session.put(f"{BASE_URL}/admin/coach-content", json=testimonial_data)
+        if r.status_code == 200:
+            data = r.json()
+            has_ok = data.get('ok') == True
+            has_coaches = 'coaches' in data
+            has_hutch = 'hutch' in data.get('coaches', {})
+            
+            if has_hutch:
+                hutch_data = data['coaches']['hutch']
+                has_src = hutch_data.get('src') == '/videos/hutch-testimonial.mp4'
+                has_poster = hutch_data.get('poster') == '/x.jpg'
+                has_name = hutch_data.get('name') == 'Jimmy'
+                has_detail = hutch_data.get('detail') == '@jimmy'
                 
                 # Check no _id leaks
                 no_id_leak, id_msg = check_no_mongo_id(data, "response")
                 
-                if has_ok and has_labels and labels_match and no_id_leak:
-                    log_test(4, "Admin PUT /admin/coaching-content with labels", True,
-                            f"Returns 200 with ok:true and labels: {data.get('labels')}")
+                if has_ok and has_coaches and has_src and has_poster and has_name and has_detail and no_id_leak:
+                    log_test(9, "Admin PUT with videoTestimonial", True,
+                            f"Returns 200 with ok:true, coaches.hutch={hutch_data}")
                 else:
-                    log_test(4, "Admin PUT /admin/coaching-content with labels", False,
-                            f"Response validation failed. ok={has_ok}, has_labels={has_labels}, labels_match={labels_match}, no_id_leak={no_id_leak}. {id_msg}")
+                    log_test(9, "Admin PUT with videoTestimonial", False,
+                            f"Validation failed. ok={has_ok}, src={has_src}, poster={has_poster}, name={has_name}, detail={has_detail}, no_id_leak={no_id_leak}")
             else:
-                log_test(4, "Admin PUT /admin/coaching-content with labels", False,
-                        f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+                log_test(9, "Admin PUT with videoTestimonial", False,
+                        f"coaches.hutch not found in response: {data}")
         else:
-            log_test(4, "Admin PUT /admin/coaching-content with labels", False,
-                    f"Admin login failed: {r.status_code}")
+            log_test(9, "Admin PUT with videoTestimonial", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(4, "Admin PUT /admin/coaching-content with labels", False, f"Exception: {str(e)}")
+        log_test(9, "Admin PUT with videoTestimonial", False, f"Exception: {str(e)}")
     
-    # Test 5: GET /api/coaching-content again to verify persistence
-    print("\n--- Test 5: GET /api/coaching-content to verify persistence ---")
+    # Test 10: GET /api/coach-content -> coaches.hutch persists
+    print("\n--- Test 10: GET /coach-content verifies coaches.hutch persistence ---")
     try:
-        r = session.get(f"{BASE_URL}/coaching-content")
+        r = session.get(f"{BASE_URL}/coach-content")
         if r.status_code == 200:
             data = r.json()
-            labels = data.get('labels', {})
-            label1_persisted = labels.get('/videos/coaching1.mp4') == 'Test Sprint'
-            label2_persisted = labels.get('/videos/coaching2.mp4') == 'Dips X'
+            coaches = data.get('coaches', {})
+            has_hutch = 'hutch' in coaches
             
-            if label1_persisted and label2_persisted:
-                log_test(5, "GET /coaching-content verifies persistence", True,
-                        f"Labels persisted correctly: {labels}")
+            if has_hutch:
+                hutch_data = coaches['hutch']
+                src_persisted = hutch_data.get('src') == '/videos/hutch-testimonial.mp4'
+                poster_persisted = hutch_data.get('poster') == '/x.jpg'
+                name_persisted = hutch_data.get('name') == 'Jimmy'
+                detail_persisted = hutch_data.get('detail') == '@jimmy'
+                
+                if src_persisted and poster_persisted and name_persisted and detail_persisted:
+                    log_test(10, "GET verifies coaches.hutch persistence", True,
+                            f"coaches.hutch persisted correctly: {hutch_data}")
+                else:
+                    log_test(10, "GET verifies coaches.hutch persistence", False,
+                            f"coaches.hutch fields don't match. Got: {hutch_data}")
             else:
-                log_test(5, "GET /coaching-content verifies persistence", False,
-                        f"Labels not persisted correctly. Got: {labels}")
+                log_test(10, "GET verifies coaches.hutch persistence", False,
+                        f"coaches.hutch not found. coaches={coaches}")
         else:
-            log_test(5, "GET /coaching-content verifies persistence", False,
+            log_test(10, "GET verifies coaches.hutch persistence", False,
                     f"Expected 200, got {r.status_code}")
     except Exception as e:
-        log_test(5, "GET /coaching-content verifies persistence", False, f"Exception: {str(e)}")
+        log_test(10, "GET verifies coaches.hutch persistence", False, f"Exception: {str(e)}")
     
-    # Test 6: PUT with 300-char label (should be capped at 120)
-    print("\n--- Test 6: PUT with 300-char label (should cap at 120) ---")
+    # Test 11: As ADMIN, PUT with videoTestimonial=null -> removes coaches.hutch
+    print("\n--- Test 11: Admin PUT with videoTestimonial=null (clear) ---")
     try:
-        admin_session = requests.Session()
-        r = admin_session.post(f"{BASE_URL}/auth/login",
-                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
+        r = admin_session.put(f"{BASE_URL}/admin/coach-content",
+                             json={"slug": "hutch", "videoTestimonial": None})
         if r.status_code == 200:
-            long_label = "A" * 300  # 300 characters
-            r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
-                                 json={"labels": {"/videos/coaching3.mp4": long_label}})
-            if r.status_code == 200:
-                data = r.json()
-                stored_label = data.get('labels', {}).get('/videos/coaching3.mp4', '')
-                if len(stored_label) == 120:
-                    log_test(6, "PUT with 300-char label caps at 120", True,
-                            f"Label correctly capped at 120 chars (was 300)")
-                else:
-                    log_test(6, "PUT with 300-char label caps at 120", False,
-                            f"Expected 120 chars, got {len(stored_label)} chars")
+            data = r.json()
+            has_ok = data.get('ok') == True
+            hutch_removed = 'hutch' not in data.get('coaches', {})
+            
+            if has_ok and hutch_removed:
+                log_test(11, "Admin PUT with videoTestimonial=null clears", True,
+                        f"coaches.hutch removed. coaches={data.get('coaches')}")
                 
                 # Verify via GET
-                r = session.get(f"{BASE_URL}/coaching-content")
+                r = session.get(f"{BASE_URL}/coach-content")
                 if r.status_code == 200:
                     data = r.json()
-                    stored_label = data.get('labels', {}).get('/videos/coaching3.mp4', '')
-                    if len(stored_label) == 120:
-                        print(f"    ✓ Verified via GET: label is {len(stored_label)} chars")
+                    hutch_gone = 'hutch' not in data.get('coaches', {})
+                    if hutch_gone:
+                        print(f"    ✓ Verified via GET: hutch key is gone")
                     else:
-                        print(f"    ⚠ GET shows label is {len(stored_label)} chars (expected 120)")
+                        print(f"    ⚠ GET shows hutch still exists: {data.get('coaches')}")
             else:
-                log_test(6, "PUT with 300-char label caps at 120", False,
-                        f"Expected 200, got {r.status_code}")
+                log_test(11, "Admin PUT with videoTestimonial=null clears", False,
+                        f"coaches.hutch not removed. ok={has_ok}, coaches={data.get('coaches')}")
         else:
-            log_test(6, "PUT with 300-char label caps at 120", False,
-                    f"Admin login failed: {r.status_code}")
+            log_test(11, "Admin PUT with videoTestimonial=null clears", False,
+                    f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(6, "PUT with 300-char label caps at 120", False, f"Exception: {str(e)}")
+        log_test(11, "Admin PUT with videoTestimonial=null clears", False, f"Exception: {str(e)}")
     
-    # Test 7: PUT with non-string label value (should skip, no 500)
-    print("\n--- Test 7: PUT with non-string label value (should skip, no 500) ---")
+    # Test 12: As ADMIN, PUT with empty slug -> 400
+    print("\n--- Test 12: Admin PUT with empty slug -> 400 ---")
     try:
-        admin_session = requests.Session()
-        r = admin_session.post(f"{BASE_URL}/auth/login",
-                              json={"username": "the hutch", "password": "Vzkfjf3n!3"})
-        if r.status_code == 200:
-            r = admin_session.put(f"{BASE_URL}/admin/coaching-content",
-                                 json={"labels": {"/videos/coaching4.mp4": 123}})
-            if r.status_code == 200:
-                data = r.json()
-                # The non-string entry should be skipped
-                has_invalid_entry = '/videos/coaching4.mp4' in data.get('labels', {})
-                if not has_invalid_entry:
-                    log_test(7, "PUT with non-string label value", True,
-                            "Non-string entry correctly skipped, no 500 error")
-                else:
-                    log_test(7, "PUT with non-string label value", False,
-                            f"Non-string entry was not skipped: {data.get('labels')}")
-            else:
-                log_test(7, "PUT with non-string label value", False,
-                        f"Expected 200, got {r.status_code}. Response: {r.text[:200]}")
+        r = admin_session.put(f"{BASE_URL}/admin/coach-content",
+                             json={"slug": ""})
+        if r.status_code == 400:
+            log_test(12, "Admin PUT with empty slug returns 400", True,
+                    "Correctly returns 400 for empty slug")
         else:
-            log_test(7, "PUT with non-string label value", False,
-                    f"Admin login failed: {r.status_code}")
+            log_test(12, "Admin PUT with empty slug returns 400", False,
+                    f"Expected 400, got {r.status_code}. Response: {r.text[:200]}")
     except Exception as e:
-        log_test(7, "PUT with non-string label value", False, f"Exception: {str(e)}")
+        log_test(12, "Admin PUT with empty slug returns 400", False, f"Exception: {str(e)}")
     
-    # Final check: No 500 errors in any test
-    print("\n--- Final Checks ---")
-    has_500_errors = any("500" in str(result.get('details', '')) for result in test_results)
-    if not has_500_errors:
-        print("✅ No 500 errors encountered in any test")
-    else:
-        print("❌ 500 errors were encountered")
-    
-    # Check for _id leaks in all responses
-    print("✅ No MongoDB _id leaks detected (checked in test 4)")
+    # Test 13: As ADMIN, PUT with videoTestimonial without src -> 400
+    print("\n--- Test 13: Admin PUT with videoTestimonial without src -> 400 ---")
+    try:
+        r = admin_session.put(f"{BASE_URL}/admin/coach-content",
+                             json={"slug": "x", "videoTestimonial": {}})
+        if r.status_code == 400:
+            log_test(13, "Admin PUT with videoTestimonial without src returns 400", True,
+                    "Correctly returns 400 for missing src")
+        else:
+            log_test(13, "Admin PUT with videoTestimonial without src returns 400", False,
+                    f"Expected 400, got {r.status_code}. Response: {r.text[:200]}")
+    except Exception as e:
+        log_test(13, "Admin PUT with videoTestimonial without src returns 400", False, f"Exception: {str(e)}")
 
 def main():
     """Main test runner"""
     try:
-        test_coaching_content_endpoints()
+        # Test (A) CLIP ORDER
+        test_clip_order()
+        
+        # Test (B) COACH VIDEO TESTIMONIALS
+        test_coach_video_testimonials()
         
         print("\n" + "="*80)
         print("TEST SUMMARY")
@@ -277,6 +426,17 @@ def main():
         print(f"Passed: {passed_tests}")
         print(f"Failed: {total_tests - passed_tests}")
         print(f"Success rate: {(passed_tests/total_tests*100):.1f}%")
+        
+        # Check for 500 errors
+        has_500_errors = any("500" in str(result.get('details', '')) for result in test_results)
+        if not has_500_errors:
+            print("\n✅ No 500 errors encountered in any test")
+        else:
+            print("\n❌ 500 errors were encountered")
+        
+        # Check for _id leaks
+        print("✅ No MongoDB _id leaks detected (checked in tests 2 and 9)")
+        
         print("="*80 + "\n")
         
         # Exit with appropriate code

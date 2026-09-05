@@ -28,6 +28,7 @@ export const DEFAULT_CLIPS = [
 
 export default function CoachingShowcase() {
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [order, setOrder] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
@@ -36,11 +37,23 @@ export default function CoachingShowcase() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.labels) setLabels(d.labels);
+        if (Array.isArray(d?.order)) setOrder(d.order);
       })
       .catch(() => {});
   }, []);
 
   const labelFor = (src: string, fallback: string) => labels[src] || fallback;
+
+  // Apply admin-defined order; any clips not in the saved order keep their
+  // default position at the end.
+  const clips = (() => {
+    if (!order.length) return DEFAULT_CLIPS;
+    const bySrc = new Map(DEFAULT_CLIPS.map((c) => [c.src, c]));
+    const ordered = order.map((s) => bySrc.get(s)).filter(Boolean) as typeof DEFAULT_CLIPS;
+    const seen = new Set(order);
+    const rest = DEFAULT_CLIPS.filter((c) => !seen.has(c.src));
+    return [...ordered, ...rest];
+  })();
 
   // Clips autoplay muted (silent wall). Tapping one turns its sound on and mutes
   // every other clip. Tapping the active one again mutes it back.
@@ -79,7 +92,7 @@ export default function CoachingShowcase() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
-          {DEFAULT_CLIPS.map((c, i) => {
+          {clips.map((c, i) => {
             const label = labelFor(c.src, c.label);
             const isActive = activeIndex === i;
             return (
