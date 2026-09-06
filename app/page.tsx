@@ -14,6 +14,7 @@ import ProgramFinder from "@/components/ProgramFinder";
 import Pricing from "@/components/Pricing";
 import CustomProgram from "@/components/CustomProgram";
 import EmailCapture from "@/components/EmailCapture";
+import MarketingExtras from "@/components/MarketingExtras";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
 
@@ -35,6 +36,7 @@ export default function Home() {
         <FitEffectCard />
         <ProgramFinder />
         <Pricing />
+        <MarketingExtras />
         <CustomProgram />
         <EmailCapture />
         <ContactForm />
