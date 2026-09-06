@@ -29,6 +29,7 @@ export const DEFAULT_CLIPS = [
 export default function CoachingShowcase() {
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [order, setOrder] = useState<string[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
@@ -38,6 +39,7 @@ export default function CoachingShowcase() {
       .then((d) => {
         if (d?.labels) setLabels(d.labels);
         if (Array.isArray(d?.order)) setOrder(d.order);
+        if (Array.isArray(d?.hidden)) setHidden(d.hidden);
       })
       .catch(() => {});
   }, []);
@@ -45,14 +47,15 @@ export default function CoachingShowcase() {
   const labelFor = (src: string, fallback: string) => labels[src] || fallback;
 
   // Apply admin-defined order; any clips not in the saved order keep their
-  // default position at the end.
+  // default position at the end. Admin-hidden clips are removed entirely.
   const clips = (() => {
-    if (!order.length) return DEFAULT_CLIPS;
+    const visible = (list: typeof DEFAULT_CLIPS) => list.filter((c) => !hidden.includes(c.src));
+    if (!order.length) return visible(DEFAULT_CLIPS);
     const bySrc = new Map(DEFAULT_CLIPS.map((c) => [c.src, c]));
     const ordered = order.map((s) => bySrc.get(s)).filter(Boolean) as typeof DEFAULT_CLIPS;
     const seen = new Set(order);
     const rest = DEFAULT_CLIPS.filter((c) => !seen.has(c.src));
-    return [...ordered, ...rest];
+    return visible([...ordered, ...rest]);
   })();
 
   // Clips autoplay muted (silent wall). Tapping one turns its sound on and mutes

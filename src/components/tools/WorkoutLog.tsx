@@ -495,7 +495,7 @@ export default function WorkoutLog() {
   }
 
   const setCell =
-    "bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-center focus:border-electric outline-none w-full";
+    "bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-center focus:border-electric outline-none w-full min-w-0";
 
   return (
     <div className="grid gap-8">

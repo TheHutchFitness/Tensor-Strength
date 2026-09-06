@@ -245,11 +245,35 @@ export default function NutritionTracker() {
   const [newSupp, setNewSupp] = useState("");
   const [savedMeals, setSavedMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
   const [coachMeals, setCoachMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
+  const [coachGoalNote, setCoachGoalNote] = useState("");
 
   useEffect(() => {
     fetch("/api/client/meals")
       .then((r) => (r.ok ? r.json() : { meals: [] }))
       .then((d) => setCoachMeals(d.meals || []))
+      .catch(() => {});
+  }, []);
+
+  // Apply nutrition targets pushed by the client's coach (once per new push).
+  useEffect(() => {
+    fetch("/api/client/coach-goal")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const g = d?.goal;
+        if (!g || !g.setAt) return;
+        if (localStorage.getItem("ts-nutrition-coach-at") === g.setAt) return;
+        const next = {
+          calories: Number(g.calories) || 0,
+          protein: Number(g.protein) || 0,
+          carbs: Number(g.carbs) || 0,
+          fat: Number(g.fat) || 0,
+        };
+        setGoal(next);
+        setGoalDraft(next);
+        localStorage.setItem(GOAL_KEY, JSON.stringify(next));
+        localStorage.setItem("ts-nutrition-coach-at", g.setAt);
+        setCoachGoalNote(`Your coach${g.setByName ? " (" + g.setByName + ")" : ""} set these targets.`);
+      })
       .catch(() => {});
   }, []);
 
@@ -501,6 +525,11 @@ export default function NutritionTracker() {
               {editingGoal ? "Cancel" : "Edit goals"}
             </button>
           </div>
+          {coachGoalNote && (
+            <p className="mb-3 text-[11px] uppercase tracking-wider text-electric border border-electric/40 bg-electric/5 px-3 py-2">
+              ★ {coachGoalNote} You can still edit them.
+            </p>
+          )}
           {editingGoal ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(["calories", "protein", "carbs", "fat"] as (keyof Goal)[]).map((k) => (

@@ -615,6 +615,7 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({
         labels: doc?.labels || {},
         order: Array.isArray(doc?.order) ? doc.order : [],
+        hidden: Array.isArray(doc?.hidden) ? doc.hidden : [],
         featuredLabel: doc?.featuredLabel || null,
         featuredEnabled: doc?.featuredEnabled !== false,
       }))
@@ -639,6 +640,9 @@ async function handleRoute(request, { params }) {
       if (Array.isArray(body.order)) {
         update.order = body.order.filter((s) => typeof s === 'string').map((s) => s.slice(0, 200)).slice(0, 200)
       }
+      if (Array.isArray(body.hidden)) {
+        update.hidden = body.hidden.filter((s) => typeof s === 'string').map((s) => s.slice(0, 200)).slice(0, 200)
+      }
       if (typeof body.featuredLabel === 'string') {
         update.featuredLabel = body.featuredLabel.slice(0, 120)
       }
@@ -655,6 +659,7 @@ async function handleRoute(request, { params }) {
         ok: true,
         labels: doc?.labels || {},
         order: Array.isArray(doc?.order) ? doc.order : [],
+        hidden: Array.isArray(doc?.hidden) ? doc.hidden : [],
         featuredLabel: doc?.featuredLabel || null,
         featuredEnabled: doc?.featuredEnabled !== false,
       }))
@@ -1332,6 +1337,111 @@ async function handleRoute(request, { params }) {
         recent: recentRaw.map(strip),
       }))
     }
+
+    // ---- Coach Tools: read a client's workout history (progress dashboard) ----
+    if (route === '/trainer/client-tracker' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      if (!clientId) return handleCORS(NextResponse.json({ error: 'clientId is required' }, { status: 400 }))
+      const client = await db.collection('users').findOne({ id: String(clientId) })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const doc = await db.collection('tracker').findOne({ userId: String(clientId) })
+      return handleCORS(NextResponse.json({
+        workouts: Array.isArray(doc?.workouts) ? doc.workouts : [],
+      }))
+    }
+
+    // ---- Coach Tools: push macro/calorie targets to a client ----
+    if (route === '/trainer/push-macros' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const clientId = typeof body.clientId === 'string' ? body.clientId : ''
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const goal = {
+        calories: Math.max(0, Math.round(Number(body.goal?.calories) || 0)),
+        protein: Math.max(0, Math.round(Number(body.goal?.protein) || 0)),
+        carbs: Math.max(0, Math.round(Number(body.goal?.carbs) || 0)),
+        fat: Math.max(0, Math.round(Number(body.goal?.fat) || 0)),
+        setAt: new Date().toISOString(),
+        setByName: user.trainerProfile?.displayName || user.username,
+      }
+      await db.collection('users').updateOne({ id: clientId }, { $set: { coachNutritionGoal: goal } })
+      // Notify the client via their message thread so they see it immediately.
+      const msg = {
+        id: uuidv4(), trainerId: user.id, clientId, senderId: user.id, senderRole: 'trainer',
+        body: `New nutrition targets from your coach: ${goal.calories} kcal · ${goal.protein}g protein · ${goal.carbs}g carbs · ${goal.fat}g fat. They're now loaded in your Nutrition Tracker.`,
+        mediaUrl: null, mediaType: null, read: false, createdAt: new Date(),
+      }
+      await db.collection('messages').insertOne(msg)
+      return handleCORS(NextResponse.json({ ok: true, goal }))
+    }
+
+    // ---- Client reads coach-set nutrition goal (Nutrition Tracker) ----
+    if (route === '/client/coach-goal' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const fresh = await db.collection('users').findOne({ id: user.id })
+      return handleCORS(NextResponse.json({ goal: fresh?.coachNutritionGoal || null }))
+    }
+
+    // ---- Coach Tools: broadcast one message to ALL assigned clients ----
+    if (route === '/trainer/broadcast' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      const text = (typeof body.body === 'string' ? body.body : '').trim().slice(0, 4000)
+      if (!text) return handleCORS(NextResponse.json({ error: 'A message is required' }, { status: 400 }))
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).limit(500).toArray()
+      if (!clients.length) return handleCORS(NextResponse.json({ ok: true, sent: 0 }))
+      const now = new Date()
+      const docs = clients.map((c) => ({
+        id: uuidv4(), trainerId: user.id, clientId: c.id, senderId: user.id, senderRole: 'trainer',
+        body: text, mediaUrl: null, mediaType: null, read: false, broadcast: true, createdAt: now,
+      }))
+      await db.collection('messages').insertMany(docs)
+      return handleCORS(NextResponse.json({ ok: true, sent: docs.length }))
+    }
+
+    // ---- Coach Tools: private per-client notes (coach + admin only) ----
+    if (route === '/trainer/client-notes' && (method === 'GET' || method === 'PUT')) {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clientId = method === 'GET'
+        ? request.nextUrl.searchParams.get('clientId')
+        : null
+      if (method === 'GET') {
+        const client = await db.collection('users').findOne({ id: String(clientId || '') })
+        if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+          return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+        }
+        return handleCORS(NextResponse.json({ notes: client.coachNotes || '' }))
+      }
+      const body = await request.json()
+      const cid = typeof body.clientId === 'string' ? body.clientId : ''
+      const client = await db.collection('users').findOne({ id: cid })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const notes = (typeof body.notes === 'string' ? body.notes : '').slice(0, 8000)
+      await db.collection('users').updateOne({ id: cid }, { $set: { coachNotes: notes, coachNotesUpdatedAt: new Date() } })
+      return handleCORS(NextResponse.json({ ok: true, notes }))
+    }
+
 
     // ---- Client gets their assigned trainer (for messaging UI) ----
     if (route === '/client/trainer' && method === 'GET') {

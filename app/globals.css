@@ -15,6 +15,8 @@ html {
   /* Declare the app as dark so mobile browsers (Chrome Auto Dark Theme, etc.)
      don't force form controls to a white background with invisible text. */
   color-scheme: dark;
+  /* Prevent any element from creating a horizontal scroll / sideways slide. */
+  overflow-x: hidden;
 }
 
 :root {
@@ -26,6 +28,8 @@ body {
   color: var(--color-bone);
   font-family: "Inter", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* ---- Global dark form controls ----

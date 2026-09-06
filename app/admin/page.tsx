@@ -40,6 +40,7 @@ export default function AdminPage() {
   // Coaching video captions + order (editable)
   const [clipLabels, setClipLabels] = useState<Record<string, string>>({});
   const [clipOrder, setClipOrder] = useState<string[]>(DEFAULT_CLIPS.map((c) => c.src));
+  const [hiddenClips, setHiddenClips] = useState<string[]>([]);
   const [dragSrc, setDragSrc] = useState<string | null>(null);
   const [savingClips, setSavingClips] = useState(false);
   const [clipsSaved, setClipsSaved] = useState(false);
@@ -53,6 +54,7 @@ export default function AdminPage() {
     if (res.ok) {
       const d = await res.json();
       setClipLabels(d.labels || {});
+      if (Array.isArray(d.hidden)) setHiddenClips(d.hidden);
       if (Array.isArray(d.order) && d.order.length) {
         const seen = new Set(d.order);
         const rest = DEFAULT_CLIPS.map((c) => c.src).filter((s) => !seen.has(s));
@@ -79,6 +81,12 @@ export default function AdminPage() {
     });
   }
 
+  function toggleHidden(src: string) {
+    setHiddenClips((prev) =>
+      prev.includes(src) ? prev.filter((s) => s !== src) : [...prev, src]
+    );
+  }
+
   async function saveCoaching() {
     setSavingClips(true);
     setClipsSaved(false);
@@ -89,11 +97,12 @@ export default function AdminPage() {
     const res = await fetch("/api/admin/coaching-content", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ labels, order: clipOrder }),
+      body: JSON.stringify({ labels, order: clipOrder, hidden: hiddenClips }),
     });
     if (res.ok) {
       const d = await res.json();
       setClipLabels(d.labels || labels);
+      if (Array.isArray(d.hidden)) setHiddenClips(d.hidden);
       setClipsSaved(true);
       setTimeout(() => setClipsSaved(false), 2500);
     }
@@ -660,6 +669,7 @@ export default function AdminPage() {
                     {clipOrder.map((src, idx) => {
                       const c = DEFAULT_CLIPS.find((x) => x.src === src);
                       if (!c) return null;
+                      const isHidden = hiddenClips.includes(src);
                       return (
                         <li
                           key={src}
@@ -669,22 +679,42 @@ export default function AdminPage() {
                           onDragEnd={() => setDragSrc(null)}
                           className={
                             "flex items-center gap-3 border p-2 bg-ink/30 " +
-                            (dragSrc === src ? "border-electric" : "border-bone/15")
+                            (dragSrc === src ? "border-electric " : "border-bone/15 ") +
+                            (isHidden ? "opacity-45" : "")
                           }
                         >
                           <span className="cursor-grab active:cursor-grabbing text-bone/40 font-display select-none px-1">⋮⋮</span>
                           <span className="text-bone/40 text-xs w-5 text-right">{idx + 1}</span>
-                          <img src={c.poster} alt="" className="h-12 w-8 object-cover border border-bone/20 shrink-0" />
+                          <img src={c.poster} alt="" className={"h-12 w-8 object-cover border border-bone/20 shrink-0 " + (isHidden ? "grayscale" : "")} />
                           <input
                             value={clipLabels[src] ?? c.label}
                             onChange={(e) => setClipLabels({ ...clipLabels, [src]: e.target.value })}
                             maxLength={120}
-                            className="flex-1 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none font-display tracking-wider text-sm"
+                            disabled={isHidden}
+                            className="flex-1 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none font-display tracking-wider text-sm disabled:opacity-60"
                           />
+                          <button
+                            type="button"
+                            onClick={() => toggleHidden(src)}
+                            title={isHidden ? "Show this clip on the homepage" : "Hide this clip from the homepage"}
+                            className={
+                              "shrink-0 font-display uppercase tracking-wider text-[10px] px-3 py-2 border transition-colors " +
+                              (isHidden
+                                ? "border-electric text-electric hover:bg-electric hover:text-ink"
+                                : "border-bone/25 text-bone/60 hover:border-bone hover:text-bone")
+                            }
+                          >
+                            {isHidden ? "Show" : "Hide"}
+                          </button>
                         </li>
                       );
                     })}
                   </ul>
+                  <p className="mt-3 text-bone/40 text-[11px] uppercase tracking-wider font-display">
+                    {hiddenClips.length > 0
+                      ? `${hiddenClips.length} clip${hiddenClips.length === 1 ? "" : "s"} hidden · won't show on the homepage after saving`
+                      : "Tap Hide to remove a clip from the homepage reel"}
+                  </p>
                   <div className="mt-5 flex items-center gap-4">
                     <button
                       onClick={saveCoaching}

@@ -9,6 +9,7 @@ import TrainerPrograms from "@/components/portal/TrainerPrograms";
 import TrainerFiles from "@/components/portal/TrainerFiles";
 import TrainerMeals from "@/components/portal/TrainerMeals";
 import TrainerMessages from "@/components/portal/TrainerMessages";
+import CoachTools from "@/components/portal/CoachTools";
 
 type Client = {
   id: string;
@@ -30,7 +31,7 @@ type CheckIn = {
   createdAt: string;
 };
 
-type Tab = "clients" | "messages" | "programs" | "meals" | "files" | "profile";
+type Tab = "clients" | "messages" | "programs" | "meals" | "files" | "tools" | "profile";
 
 function fmt(d?: string | null) {
   if (!d) return "—";
@@ -273,6 +274,7 @@ export default function TrainersPage() {
     { id: "programs", label: "Programs" },
     { id: "meals", label: "Meals" },
     { id: "files", label: "Files" },
+    { id: "tools", label: "Coach Tools" },
     { id: "profile", label: "My Profile" },
   ];
 
@@ -649,6 +651,7 @@ export default function TrainersPage() {
               {tab === "programs" && <TrainerPrograms />}
               {tab === "meals" && <TrainerMeals />}
               {tab === "files" && <TrainerFiles />}
+              {tab === "tools" && <CoachTools />}
               {tab === "profile" && (
                 <TrainerProfileForm onSaved={() => setProfileCompleted(true)} />
               )}
