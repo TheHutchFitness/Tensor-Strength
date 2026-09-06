@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AnnouncementBanner from "@/components/AnnouncementBanner";
 
 export const metadata: Metadata = {
   title: "Tensor Strength — Strength & Performance Coaching",
@@ -42,6 +43,7 @@ export default function RootLayout({
         <div className="fixed inset-0 -z-10 overflow-hidden" aria-hidden>
           <div className="absolute inset-0 bg-[#07021c]" />
         </div>
+        <AnnouncementBanner />
         {children}
       </body>
     </html>

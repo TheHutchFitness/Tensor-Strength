@@ -1443,6 +1443,150 @@ async function handleRoute(request, { params }) {
     }
 
 
+    // ---- Coach Tools: client activity board (all clients at a glance) ----
+    if (route === '/trainer/activity' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).limit(500).toArray()
+      const out = []
+      for (const c of clients) {
+        const tr = await db.collection('tracker').findOne({ userId: c.id })
+        const workouts = Array.isArray(tr?.workouts) ? tr.workouts : []
+        const lastWorkout = workouts.reduce((m, w) => (w.date && w.date > m ? w.date : m), '')
+        const nut = await db.collection('nutrition_logs').find({ userId: c.id }).sort({ date: -1 }).limit(1).toArray()
+        const ci = await db.collection('checkins').find({ userId: c.id }).sort({ createdAt: -1 }).limit(1).toArray()
+        out.push({
+          id: c.id, username: c.username,
+          workoutCount: workouts.length,
+          lastWorkout: lastWorkout || null,
+          lastNutrition: nut[0]?.date || null,
+          lastCheckin: ci[0]?.createdAt || null,
+        })
+      }
+      return handleCORS(NextResponse.json({ clients: out }))
+    }
+
+    // ---- Coach Tools: per-client goals & milestones ----
+    if (route === '/trainer/client-goals' && (method === 'GET' || method === 'PUT')) {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const cid = method === 'GET' ? request.nextUrl.searchParams.get('clientId') : null
+      if (method === 'GET') {
+        const client = await db.collection('users').findOne({ id: String(cid || '') })
+        if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+          return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+        }
+        return handleCORS(NextResponse.json({ goals: Array.isArray(client.coachGoals) ? client.coachGoals : [] }))
+      }
+      const body = await request.json()
+      const clientId = typeof body.clientId === 'string' ? body.clientId : ''
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const goals = (Array.isArray(body.goals) ? body.goals : []).slice(0, 50).map((g) => ({
+        id: typeof g.id === 'string' ? g.id : uuidv4(),
+        label: String(g.label || '').slice(0, 120),
+        target: Number(g.target) || 0,
+        current: Number(g.current) || 0,
+        unit: String(g.unit || '').slice(0, 12),
+      }))
+      await db.collection('users').updateOne({ id: clientId }, { $set: { coachGoals: goals } })
+      return handleCORS(NextResponse.json({ ok: true, goals }))
+    }
+
+    // ---- Admin: analytics summary ----
+    if (route === '/admin/analytics' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const users = await db.collection('users').find({}).limit(20000).toArray()
+      const now = Date.now()
+      const d30 = now - 30 * 86400000
+      const members = users.filter((u) => u.role !== 'admin')
+      const weeks = []
+      for (let i = 7; i >= 0; i--) {
+        const start = now - (i + 1) * 7 * 86400000
+        const end = now - i * 7 * 86400000
+        const count = users.filter((u) => { const t = new Date(u.createdAt || 0).getTime(); return t >= start && t < end }).length
+        weeks.push({ label: `${i === 0 ? 'This wk' : i + 'w ago'}`, count })
+      }
+      const [forumPosts, checkins] = await Promise.all([
+        db.collection('forum_posts').countDocuments({}),
+        db.collection('checkins').countDocuments({}),
+      ])
+      return handleCORS(NextResponse.json({
+        totalMembers: members.length,
+        portalAccess: members.filter((u) => u.portalAccess).length,
+        trainers: users.filter((u) => u.isTrainer).length,
+        newLast30: users.filter((u) => new Date(u.createdAt || 0).getTime() >= d30).length,
+        activeSubscribers: users.filter((u) => u.stripeSubscriptionId).length,
+        forumPosts, checkins,
+        signupsByWeek: weeks,
+      }))
+    }
+
+    // ---- Admin: revenue / subscription breakdown ----
+    if (route === '/admin/revenue' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const users = await db.collection('users').find({ stripeSubscriptionId: { $exists: true, $ne: null } }).limit(20000).toArray()
+      const byPlan = {}
+      for (const u of users) {
+        const plan = u.accessType || 'unknown'
+        byPlan[plan] = (byPlan[plan] || 0) + 1
+      }
+      return handleCORS(NextResponse.json({
+        activeSubscribers: users.length,
+        byPlan: Object.entries(byPlan).map(([plan, count]) => ({ plan, count })),
+      }))
+    }
+
+    // ---- Site announcement banner ----
+    if (route === '/announcement' && method === 'GET') {
+      const doc = await db.collection('site_content').findOne({ key: 'announcement' })
+      return handleCORS(NextResponse.json({
+        enabled: !!doc?.enabled && !!doc?.message,
+        message: doc?.message || '',
+        updatedAt: doc?.updatedAt || null,
+      }))
+    }
+    if (route === '/admin/announcement' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json()
+      const message = String(body.message || '').slice(0, 300)
+      const enabled = !!body.enabled
+      await db.collection('site_content').updateOne(
+        { key: 'announcement' },
+        { $set: { key: 'announcement', message, enabled, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true, enabled, message }))
+    }
+
+    // ---- Admin: bulk assign clients to a trainer ----
+    if (route === '/admin/bulk-assign' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json()
+      const clientIds = (Array.isArray(body.clientIds) ? body.clientIds : []).filter((s) => typeof s === 'string').slice(0, 1000)
+      const trainerId = typeof body.trainerId === 'string' ? body.trainerId : ''
+      if (!clientIds.length) return handleCORS(NextResponse.json({ error: 'No clients selected' }, { status: 400 }))
+      if (trainerId) {
+        const t = await db.collection('users').findOne({ id: trainerId })
+        if (!t || !t.isTrainer) return handleCORS(NextResponse.json({ error: 'Invalid trainer' }, { status: 400 }))
+      }
+      const res = await db.collection('users').updateMany(
+        { id: { $in: clientIds } },
+        { $set: { assignedTrainerId: trainerId || null } }
+      )
+      return handleCORS(NextResponse.json({ ok: true, updated: res.modifiedCount }))
+    }
+
     // ---- Client gets their assigned trainer (for messaging UI) ----
     if (route === '/client/trainer' && method === 'GET') {
       const user = await getCurrentUser(request, db)

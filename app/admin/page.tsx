@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { DEFAULT_CLIPS } from "@/components/CoachingShowcase";
 import { professionals } from "@/data/professionals";
+import AdminTools from "@/components/portal/AdminTools";
 
 type User = {
   id: string;
@@ -294,6 +295,9 @@ export default function AdminPage() {
             </p>
           ) : (
             <>
+              <div className="mt-12 mb-4 pb-8 border-b border-bone/15">
+                <AdminTools />
+              </div>
               <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="border border-bone/15 bg-ink/30 p-5">
                   <p className="font-display text-3xl text-electric font-700">{members.length}</p>
