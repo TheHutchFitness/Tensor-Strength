@@ -694,7 +694,7 @@ export default function NutritionTracker() {
       </div>
 
       <p className="text-[10px] uppercase tracking-wider text-bone/40">
-        Food macros are per 100g/ml and scale to your chosen amount. Your log saves on this device. Set targets with the Macro Calculator.
+        Food macros are per 100g/ml and scale to your chosen amount. Your log syncs to your account. Set targets with the Macro Calculator.
       </p>
 
       {/* Supplements & vitamins */}

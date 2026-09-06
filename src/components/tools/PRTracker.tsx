@@ -228,7 +228,7 @@ export default function PRTracker() {
         <p className="font-display uppercase tracking-wider text-sm text-bone/70 mb-4">PR History</p>
         {prs.length === 0 ? (
           <p className="text-bone/50 font-display uppercase tracking-wider text-sm">
-            No PRs logged yet. Your records save on this device.
+            No PRs logged yet. Your records sync to your account.
           </p>
         ) : (
           <ul className="grid gap-2 max-h-[420px] overflow-y-auto">

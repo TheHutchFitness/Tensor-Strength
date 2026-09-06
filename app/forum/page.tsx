@@ -47,9 +47,12 @@ const EMOJIS = ["👍", "🔥", "💪", "👏", "😂", "❤️"];
 type Notification = {
   id: string;
   actorName: string;
-  type: "mention" | "reply" | "best-answer";
+  type: "mention" | "reply" | "best-answer" | "reaction" | "announcement";
   postId: string | null;
   postTitle: string;
+  replyId: string | null;
+  emoji?: string | null;
+  targetType?: string | null;
   snippet: string;
   read: boolean;
   createdAt: string;
@@ -300,6 +303,8 @@ export default function ForumPage() {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [focusReplyId, setFocusReplyId] = useState<string | null>(null);
+  const [notifyClients, setNotifyClients] = useState(false);
 
   async function loadPosts() {
     const res = await fetch("/api/forum/posts");
@@ -445,28 +450,48 @@ export default function ForumPage() {
     return Object.entries(tally).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
   })();
 
-  async function openThread(id: string) {
+  async function openThread(id: string, replyId?: string | null) {
     setOpenId(id);
     setThread(null);
+    setFocusReplyId(replyId || null);
     const res = await fetch(`/api/forum/thread?id=${id}`);
     const data = await res.json();
     if (res.ok) setThread(data);
   }
 
+  // After a thread loads via a notification, scroll to and briefly highlight
+  // the exact reply that was referenced.
+  useEffect(() => {
+    if (!thread || !focusReplyId) return;
+    const el = document.getElementById(`reply-${focusReplyId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-electric");
+      const t = setTimeout(() => {
+        el.classList.remove("ring-2", "ring-electric");
+        setFocusReplyId(null);
+      }, 2600);
+      return () => clearTimeout(t);
+    }
+    setFocusReplyId(null);
+  }, [thread, focusReplyId]);
+
   async function createPost(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
     setPosting(true);
+    const isCoach = !!(me && (me.isTrainer || me.role === "admin"));
     const res = await fetch("/api/forum/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, category, mediaUrl: media?.url, mediaType: media?.type }),
+      body: JSON.stringify({ title, body, category, mediaUrl: media?.url, mediaType: media?.type, notifyClients: isCoach && notifyClients }),
     });
     if (res.ok) {
       setTitle("");
       setBody("");
       setCategory("general");
       setMedia(null);
+      setNotifyClients(false);
       await loadPosts();
     }
     setPosting(false);
@@ -536,7 +561,7 @@ export default function ForumPage() {
                       key={n.id}
                       onClick={() => {
                         setNotifOpen(false);
-                        if (n.postId) openThread(n.postId);
+                        if (n.postId) openThread(n.postId, n.replyId);
                       }}
                       className={
                         "block w-full text-left px-4 py-3 border-b border-bone/10 hover:bg-electric/5 transition-colors " +
@@ -545,7 +570,15 @@ export default function ForumPage() {
                     >
                       <p className="text-sm text-bone/80">
                         <span className="text-electric font-display uppercase tracking-wider">{n.actorName}</span>{" "}
-                        {n.type === "mention" ? "mentioned you" : n.type === "best-answer" ? "marked your answer as best" : "replied to your post"}
+                        {n.type === "mention"
+                          ? "mentioned you"
+                          : n.type === "best-answer"
+                          ? "marked your answer as best"
+                          : n.type === "reaction"
+                          ? `reacted ${n.emoji || "👍"} to your ${n.targetType === "reply" ? "reply" : "post"}`
+                          : n.type === "announcement"
+                          ? "posted an announcement for you"
+                          : "replied to your post"}
                       </p>
                       {n.postTitle && <p className="text-xs text-bone/50 mt-0.5 truncate">on “{n.postTitle}”</p>}
                       <p className="text-[10px] text-bone/40 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
@@ -614,12 +647,26 @@ export default function ForumPage() {
                   className={inputCls + " resize-none"}
                 />
                 <MediaPicker media={media} setMedia={setMedia} />
+                {me && (me.isTrainer || me.role === "admin") && (
+                  <label className="flex items-center gap-3 border border-electric/40 bg-electric/5 px-4 py-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={notifyClients}
+                      onChange={(e) => setNotifyClients(e.target.checked)}
+                      className="h-4 w-4 accent-electric"
+                    />
+                    <span className="text-sm text-bone/80">
+                      <span className="font-display uppercase tracking-wider text-electric">📢 Coach Broadcast</span>
+                      <span className="block text-xs text-bone/50 mt-0.5">Notify all of your assigned clients about this post.</span>
+                    </span>
+                  </label>
+                )}
                 <button
                   type="submit"
                   disabled={posting}
                   className="mt-1 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
                 >
-                  {posting ? "Posting…" : "Post to Forum"}
+                  {posting ? "Posting…" : notifyClients ? "Post & Notify Clients" : "Post to Forum"}
                 </button>
               </form>
 
@@ -766,8 +813,9 @@ export default function ForumPage() {
                           return (
                             <div
                               key={r.id}
+                              id={`reply-${r.id}`}
                               className={
-                                "border p-5 " +
+                                "border p-5 transition-all rounded-sm " +
                                 (isBest
                                   ? "border-emerald-500/60 bg-emerald-500/[0.06]"
                                   : "border-bone/15 bg-ink/30")

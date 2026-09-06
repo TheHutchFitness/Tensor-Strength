@@ -105,6 +105,34 @@
 user_problem_statement: "Migrate the Tensor Strength Next.js site to Emergent and add real server-side authentication: entire site gated behind login, self-registration for members, an admin (Hutch) who can approve/revoke each member's Client Portal access. Replace the old client-side passcode gate on /clients with the new auth."
 
 backend:
+  - task: "Forum - Reaction notifications (Reaction Digest)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "POST /api/forum/react now pushes a 'reaction' notification to the target's author when a reaction is ADDED (not on removal, not for self-reactions). Notification includes emoji, targetType ('post'|'reply'), postId, postTitle, and replyId (when reacting to a reply) so the frontend can jump to the exact reply."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 12 tests (100% success rate). COMPREHENSIVE REACTION NOTIFICATIONS TESTING: (1) Member A creates post and reply. (2) Member B reacts to A's POST with 🔥 emoji, POST /api/forum/react returns 200 with reactions map. (3) Member A GET /api/forum/notifications returns 'reaction' notification with type='reaction', emoji='🔥', targetType='post', postId set, replyId=null (correctly null for post reactions). (4) Member B reacts to A's REPLY with 💪 emoji, returns 200. (5) Member A receives 'reaction' notification with type='reaction', emoji='💪', targetType='reply', replyId set, postId set (both fields present for reply reactions). (6) Member B REMOVES reaction (toggle off by re-POSTing same emoji), returns 200. (7) Member A's notification count stays the same - NO additional notification created on removal (toggle-off correctly does NOT notify). (8) Member A reacts to A's own post with 👍, returns 200. (9) Member A's notification count stays the same - NO self-notification created (self-reactions correctly skipped). All notification fields verified: type, emoji, targetType, postId, postTitle, replyId (null for posts, set for replies), snippet. No MongoDB _id or passwordHash leaks detected. All status codes correct (200). REACTION DIGEST FULLY VERIFIED: notifications created ONLY when reactions are ADDED (not removed), NOT for self-reactions, with correct emoji and targetType metadata."
+  - task: "Forum - Coach Broadcast (notify all assigned clients)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "POST /api/forum/posts accepts optional notifyClients:true. When the author is a trainer (isTrainer) or admin, an 'announcement' notification is pushed to every user whose assignedTrainerId === author.id (limit 1000). Ignored (no error) for non-coach members. Self not notified."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 8 tests (100% success rate). COMPREHENSIVE COACH BROADCAST TESTING: (1) Admin sets self as trainer (isTrainer=true) via PUT /api/admin/users, returns 200. (2) Admin assigns Member B to coach (assignedTrainerId=admin.id) via PUT /api/admin/users, returns 200. (3) Admin (The Hutch) creates post with {title:'Week announcement', body:'Deload week, everyone', notifyClients:true}, POST /api/forum/posts returns 200 with post created. (4) Member B GET /api/forum/notifications returns 'announcement' notification with type='announcement', postId set to the new post, actorName='the hutch' (coach's username). (5) NEGATIVE TEST: Member A (not a coach, no assigned clients) creates post with notifyClients:true, POST returns 200 (post IS created, no error). (6) Member B's notification count stays the same - NO announcement notifications generated for Member A's post (correctly ignored for non-coach members). All notification fields verified: type='announcement', postId, postTitle, actorId, actorName (coach's username), snippet. No MongoDB _id or passwordHash leaks detected. All status codes correct (200). COACH BROADCAST FULLY VERIFIED: only trainers/admins can trigger announcements, notifications sent ONLY to users with assignedTrainerId === author.id, non-coach posts with notifyClients:true are silently ignored (no error, no notifications)."
   - task: "Client Cloud Store (GET/PUT /api/client/store)"
     implemented: true
     working: true
@@ -345,16 +373,21 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Forum - Reaction notifications (Reaction Digest)"
+    - "Forum - Coach Broadcast (notify all assigned clients)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     -agent: "main"
-    -message: "NEW FORUM FEATURES to test (all under /api). Use cookie jar for httpOnly ts_token. Admin/Trainer login: username 'The Hutch' password 'Vzkfjf3n!3'. Register a couple of members to test cross-user notifications/mentions. Flows: (1) Member A creates a post; Member B replies -> A gets a 'reply' notification (GET /api/forum/notifications shows unread>=1). (2) Member B writes a reply/post body containing '@<A username>' -> A gets a 'mention' notification. Usernames may contain spaces (e.g. '@The Hutch'); matching is exact & case-insensitive. (3) POST /api/forum/react {targetType:'post'|'reply', targetId, emoji:'🔥'} toggles reaction; re-POST removes it; invalid emoji -> 400; returns updated reactions map. (4) POST /api/forum/best-answer {postId, replyId} by the OP/trainer/admin sets post.bestAnswerId and notifies reply author with 'best-answer'; a non-owner non-coach member -> 403; replyId:null clears it. (5) POST /api/forum/notifications/read marks all read (unread becomes 0); optional {id} marks one. (6) GET /api/forum/members returns [{username,isCoach}] and requires auth. Verify no _id leaks and self-notifications are skipped."
+    -message: "TWO NEW forum behaviours to test (all /api, cookie jar for ts_token). Coach/admin: username 'The Hutch' pw 'Vzkfjf3n!3'. Register 2 members (A, B). (A) REACTION DIGEST: Member A creates a post and a reply on it. Member B POST /api/forum/react on A's post (and on A's reply) with emoji '🔥' -> A gets a 'reaction' notification (GET /api/forum/notifications: type 'reaction', has emoji, targetType 'post'/'reply', and replyId set when reacting to the reply, postId set). Removing the reaction (re-POST same emoji) must NOT create another notification. Self-reaction (A reacts to own) must NOT notify. (B) COACH BROADCAST: POST /api/forum/posts as The Hutch with {title, body, notifyClients:true}. Every user whose assignedTrainerId === The Hutch's id must receive an 'announcement' notification (the seeded demo client 'Ben Carter (Demo)' id da3cf979-45da-4c47-9b5f-8680d131038e is assigned to admin - but it has no login; to verify, first login as admin, register member B, then as admin PUT /api/admin/users {id: B.id, assignedTrainerId: <admin id>} to assign B to the coach, then do the broadcast and check B's notifications for type 'announcement'). A plain member posting with notifyClients:true must NOT trigger broadcasts (silently ignored, still creates the post). Verify no _id leaks."
     -agent: "testing"
     -message: "✅ ALL NEW COMMUNITY FORUM BACKEND TESTS PASSED (40/40 - 100% success rate). Comprehensive testing completed covering all 5 forum features: MEMBERS LIST (3 tests): GET /api/forum/members requires auth (401 without cookie), returns members array with {username, isCoach} where isCoach=true for admin/trainers. EMOJI REACTIONS (8 tests): POST /api/forum/react toggles reactions on posts/replies, allowed emojis (👍 🔥 💪 👏 😂 ❤️) work, invalid emoji returns 400, toggle on/off working, empty arrays pruned. BEST ANSWER (7 tests): Only OP/trainer/admin can mark (403 for others), sets/clears post.bestAnswerId, sends 'best-answer' notification to reply author, 404 for missing post. NOTIFICATIONS (15 tests): Reply notifications work (Bob replies to Alice's post -> Alice gets 'reply' notification), mention notifications work with case-insensitive matching including usernames with spaces ('@Alice QA 187001'), best-answer notifications sent when reply marked, self-notifications correctly skipped, GET returns notifications sorted newest first with unread count, POST /read marks all or single notification as read. MENTION PARSING (7 tests): @username mentions in posts/replies create notifications, case-insensitive matching works, usernames with spaces parsed correctly. All status codes correct (200, 400, 401, 403, 404). No MongoDB _id or passwordHash leaks detected in any response. NOTE: Admin username is 'the hutch' (lowercase) in database, login requires username field (not identifier)."
+    -agent: "testing"
+    -message: "✅ ALL TWO NEW COMMUNITY FORUM BACKEND FEATURES PASSED (20/20 - 100% success rate). FEATURE 1 - REACTION NOTIFICATIONS (12 tests): Member A creates post and reply. Member B reacts to A's POST with 🔥 -> A receives 'reaction' notification with type='reaction', emoji='🔥', targetType='post', postId set, replyId=null. Member B reacts to A's REPLY with 💪 -> A receives 'reaction' notification with type='reaction', emoji='💪', targetType='reply', replyId set, postId set. Member B REMOVES reaction (toggle off) -> NO additional notification created (toggle-off correctly does NOT notify). Member A reacts to own post -> NO self-notification created (self-reactions correctly skipped). FEATURE 2 - COACH BROADCAST (8 tests): Admin sets self as trainer (isTrainer=true), assigns Member B to coach (assignedTrainerId=admin.id). Admin creates post with notifyClients:true -> Member B receives 'announcement' notification with type='announcement', postId set, actorName='the hutch'. NEGATIVE TEST: Member A (not coach) creates post with notifyClients:true -> post created (200) but NO announcement notifications generated (correctly ignored for non-coach members). All notification fields verified. No MongoDB _id or passwordHash leaks detected. All status codes correct (200). BOTH FEATURES FULLY VERIFIED."
+
     -agent: "main"
     -message: "Test the NEW generic per-user Cloud Store backend endpoints on the Next.js app. All routes are /api-prefixed and require auth via httpOnly cookie ts_token — use a cookie jar. CREDENTIALS: Admin: username 'The Hutch', password 'Vzkfjf3n!3'. Also register 2 fresh members via POST /api/auth/register to test per-user isolation. ENDPOINTS: 1) PUT /api/client/store body { key, value } - Requires auth (401 without cookie). Empty/missing key -> 400. Valid { key: 'ts-bodyweight', value: [{date:'2025-01-01', weight:200}] } -> 200 {ok:true}. value can be any JSON (object, array, number, string). A value larger than 2MB -> 413 (build a big string to test). 2) GET /api/client/store?key=<k> - Requires auth (401). After a PUT, returns { found: true, value: <exact value stored> }. For a key never set -> { found: false, value: null }. 3) GET /api/client/store (no key) - Returns { data: { key: value, ... } } containing all keys the current user has set. 4) PER-USER ISOLATION (critical): Login as Member A, PUT key 'ts-water' value {'2025-01-01':5}. Login as Member B, GET /api/client/store?key=ts-water -> found:false (must NOT see A's data). Then B PUTs its own value; A still sees only A's value. 5) UPSERT: PUT the same key twice with different values -> GET returns the latest value (not duplicated). 6) No MongoDB _id leaks in any response. Focus ONLY on /api/client/store. Do not retest forum/auth/payments."
     -agent: "testing"

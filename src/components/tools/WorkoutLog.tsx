@@ -529,7 +529,7 @@ export default function WorkoutLog() {
     "bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-center focus:border-electric outline-none w-full min-w-0";
 
   return (
-    <div className="grid gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
       {prCelebration.length > 0 && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-6" onClick={() => setPrCelebration([])}>
           <div className="relative border-2 border-electric bg-[#0c0630] p-8 max-w-sm w-full text-center shadow-2xl shadow-electric/30" onClick={(e) => e.stopPropagation()}>
@@ -837,7 +837,7 @@ export default function WorkoutLog() {
           </div>
           {savedFlash && (
             <p className="mt-3 font-display uppercase tracking-wider text-sm text-electric">
-              ✓ Workout saved to this device.
+              ✓ Workout saved to your account.
             </p>
           )}
           {templateFlash && (
@@ -886,7 +886,7 @@ export default function WorkoutLog() {
             <select
               value={active}
               onChange={(e) => setChartLift(e.target.value)}
-              className="mb-4 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm"
+              className="mb-4 w-full max-w-full sm:w-auto min-w-0 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm truncate"
             >
               {lifts.map((l) => (
                 <option key={l} value={l}>{l}</option>

@@ -364,7 +364,7 @@ export default function ClientPortalPage() {
                 <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
                   The full toolkit — clients only. Calculators to estimate your
                   maxes and scores, a PR tracker, the workout log, and a macro
-                  calculator. Everything saves right on your device.
+                  calculator. Everything saves to your account and syncs across your devices.
                 </p>
 
                 <div className="flex flex-wrap gap-2 mb-6 mt-8 border-b border-bone/15 pb-2">

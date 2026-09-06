@@ -55,7 +55,7 @@ export default function WorkoutLogPage() {
         </h1>
         <p className="mt-4 text-bone/70 leading-relaxed max-w-2xl">
           Your workout tracker, exercise library and warm-up routines — all in
-          one place. Everything you log saves right on your device.
+          one place. Everything you log syncs to your account, so it&apos;s there on any device.
         </p>
 
         {loading || !authorized ? (

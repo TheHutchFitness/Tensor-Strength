@@ -99,17 +99,19 @@ async function deleteUpload(db, url) {
 
 // ---- Forum notifications & @mentions ----
 // Insert a notification for a recipient (skips self-notifications).
-async function pushNotification(db, { recipientId, actorId, actorName, type, postId, postTitle, replyId, snippet }) {
+async function pushNotification(db, { recipientId, actorId, actorName, type, postId, postTitle, replyId, snippet, emoji, targetType }) {
   if (!recipientId || recipientId === actorId) return
   await db.collection('forum_notifications').insertOne({
     id: uuidv4(),
     userId: recipientId,
     actorId: actorId || null,
     actorName: actorName || 'Someone',
-    type, // 'mention' | 'reply' | 'best-answer'
+    type, // 'mention' | 'reply' | 'best-answer' | 'reaction' | 'announcement'
     postId: postId || null,
     postTitle: postTitle || '',
     replyId: replyId || null,
+    emoji: emoji || null,
+    targetType: targetType || null,
     snippet: (snippet || '').slice(0, 140),
     read: false,
     createdAt: new Date(),
@@ -2469,6 +2471,24 @@ async function handleRoute(request, { params }) {
       }
       await db.collection('forum_posts').insertOne(post)
       await notifyMentions(db, { text: post.title + ' ' + post.body, actor: user, postId: post.id, postTitle: post.title })
+      // Coach Broadcast: a trainer/admin can notify all of their assigned clients
+      // about this post in one tap.
+      if (body.notifyClients && (user.isTrainer || user.role === 'admin')) {
+        const clients = await db.collection('users')
+          .find({ assignedTrainerId: user.id }, { projection: { id: 1 } })
+          .limit(1000).toArray()
+        for (const c of clients) {
+          await pushNotification(db, {
+            recipientId: c.id,
+            actorId: user.id,
+            actorName: user.username,
+            type: 'announcement',
+            postId: post.id,
+            postTitle: post.title,
+            snippet: post.body || post.title,
+          })
+        }
+      }
       const { _id, ...clean } = post
       return handleCORS(NextResponse.json({ post: clean }))
     }
@@ -2593,6 +2613,27 @@ async function handleRoute(request, { params }) {
       const collection = targetType === 'reply' ? 'forum_replies' : 'forum_posts'
       const reactions = await toggleReaction(db, collection, targetId, emoji, user.id)
       if (reactions === null) return handleCORS(NextResponse.json({ error: 'Invalid target or emoji' }, { status: 400 }))
+      // Notify the target's author when a reaction is ADDED (not when removed).
+      const added = Array.isArray(reactions[emoji]) && reactions[emoji].includes(user.id)
+      if (added) {
+        const target = await db.collection(collection).findOne({ id: targetId })
+        if (target) {
+          const postId = targetType === 'reply' ? target.postId : target.id
+          const post = targetType === 'reply' ? await db.collection('forum_posts').findOne({ id: postId }) : target
+          await pushNotification(db, {
+            recipientId: target.userId,
+            actorId: user.id,
+            actorName: user.username,
+            type: 'reaction',
+            emoji,
+            targetType,
+            postId,
+            postTitle: post?.title || '',
+            replyId: targetType === 'reply' ? targetId : null,
+            snippet: target.body || target.title || '',
+          })
+        }
+      }
       return handleCORS(NextResponse.json({ reactions }))
     }
 
