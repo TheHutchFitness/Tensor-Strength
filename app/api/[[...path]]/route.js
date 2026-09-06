@@ -473,7 +473,7 @@ async function handleRoute(request, { params }) {
       let data
       try {
         const upstream = await fetch(
-          'https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data',
+          `${process.env.EMERGENT_AUTH_BASE || 'https://demobackend.emergentagent.com'}/auth/v1/env/oauth/session-data`,
           { method: 'GET', headers: { 'X-Session-ID': sessionId }, cache: 'no-store' }
         )
         if (!upstream.ok) {
@@ -890,6 +890,7 @@ async function handleRoute(request, { params }) {
       const clients = await db.collection('users')
         .find({ assignedTrainerId: user.id })
         .sort({ createdAt: -1 })
+        .limit(500)
         .toArray()
       // Attach the latest check-in date + count so the trainer sees activity at a glance.
       const withMeta = await Promise.all(
@@ -918,7 +919,7 @@ async function handleRoute(request, { params }) {
       if (!user || (!user.isTrainer && user.role !== 'admin')) {
         return handleCORS(NextResponse.json({ count: 0 }))
       }
-      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).toArray()
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).limit(500).toArray()
       const ids = clients.map((c) => c.id)
       const count = ids.length
         ? await db.collection('checkins').countDocuments({ userId: { $in: ids }, seenByTrainer: { $ne: true } })
@@ -1053,6 +1054,7 @@ async function handleRoute(request, { params }) {
       const list = await db.collection('users')
         .find({ isTrainer: true, profileCompleted: true })
         .sort({ createdAt: 1 })
+        .limit(500)
         .toArray()
       return handleCORS(NextResponse.json({ professionals: list.map(publicTrainerProfile) }))
     }
@@ -1114,6 +1116,7 @@ async function handleRoute(request, { params }) {
       const list = await db.collection('programs')
         .find({ trainerId: user.id })
         .sort({ createdAt: -1 })
+        .limit(500)
         .toArray()
       return handleCORS(NextResponse.json({ programs: list.map(({ _id, ...r }) => r) }))
     }
@@ -1138,6 +1141,7 @@ async function handleRoute(request, { params }) {
       const list = await db.collection('programs')
         .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
         .sort({ createdAt: -1 })
+        .limit(500)
         .toArray()
       return handleCORS(NextResponse.json({ programs: list.map(({ _id, ...r }) => r) }))
     }
@@ -1174,7 +1178,7 @@ async function handleRoute(request, { params }) {
     if (route === '/trainer/meals' && method === 'GET') {
       const user = await getCurrentUser(request, db)
       if (!user || !user.isTrainer) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
-      const list = await db.collection('coach_meals').find({ trainerId: user.id }).sort({ createdAt: -1 }).toArray()
+      const list = await db.collection('coach_meals').find({ trainerId: user.id }).sort({ createdAt: -1 }).limit(500).toArray()
       return handleCORS(NextResponse.json({ meals: list.map(({ _id, ...r }) => r) }))
     }
     if (route === '/trainer/meals' && method === 'DELETE') {
@@ -1191,7 +1195,7 @@ async function handleRoute(request, { params }) {
       if (!user.assignedTrainerId) return handleCORS(NextResponse.json({ meals: [] }))
       const list = await db.collection('coach_meals')
         .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
-        .sort({ createdAt: -1 }).toArray()
+        .sort({ createdAt: -1 }).limit(500).toArray()
       return handleCORS(NextResponse.json({ meals: list.map(({ _id, ...r }) => r) }))
     }
 
@@ -1384,7 +1388,7 @@ async function handleRoute(request, { params }) {
       if (!user || !user.isTrainer) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
-      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).toArray()
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).limit(500).toArray()
       const threads = await Promise.all(clients.map(async (c) => {
         const last = await db.collection('messages')
           .find({ trainerId: user.id, clientId: c.id })
@@ -1485,6 +1489,7 @@ async function handleRoute(request, { params }) {
       const list = await db.collection('trainerFiles')
         .find({ trainerId: user.id })
         .sort({ createdAt: -1 })
+        .limit(500)
         .toArray()
       return handleCORS(NextResponse.json({ files: list.map(({ _id, ...r }) => r) }))
     }
@@ -1509,6 +1514,7 @@ async function handleRoute(request, { params }) {
       const list = await db.collection('trainerFiles')
         .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
         .sort({ createdAt: -1 })
+        .limit(500)
         .toArray()
       return handleCORS(NextResponse.json({ files: list.map(({ _id, ...r }) => r) }))
     }
@@ -1631,12 +1637,12 @@ async function handleRoute(request, { params }) {
       }
       const HUTCH_FILES = {
         pdf: {
-          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/uozo0w84_The_Hutch_6_Day_PPL_Performance_Block.pdf',
+          url: process.env.HUTCH_TOUCH_PDF_URL || 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/uozo0w84_The_Hutch_6_Day_PPL_Performance_Block.pdf',
           type: 'application/pdf',
           name: 'The-Hutch-Touch-8-Week-Program.pdf',
         },
         tracker: {
-          url: 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/6rp8lcad_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx',
+          url: process.env.HUTCH_TOUCH_TRACKER_URL || 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/6rp8lcad_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx',
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           name: 'The-Hutch-Touch-Tracker.xlsx',
         },
