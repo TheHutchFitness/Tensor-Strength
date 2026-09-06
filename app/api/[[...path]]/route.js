@@ -6,7 +6,7 @@ import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import path from 'path'
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 // ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
 // When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
@@ -44,19 +44,57 @@ async function saveUploadBuffer(db, buffer, ext, mime, ownerId, visibility) {
       ContentLength: buffer.length,
       CacheControl: 'public, max-age=31536000, immutable',
     }))
-    // Write the ACL doc BEFORE returning the URL. If this fails we throw so the
-    // upload fails rather than leaving an object with no access-control record.
-    await db.collection('uploads').updateOne(
-      { key },
-      { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', mime: mime || '', createdAt: new Date() } },
-      { upsert: true }
-    )
+    // Write the ACL doc BEFORE returning the URL. If it fails, best-effort delete
+    // the just-uploaded object so we never leave an object with no ACL record.
+    try {
+      await db.collection('uploads').updateOne(
+        { key },
+        { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', allowedUserIds: [], mime: mime || '', createdAt: new Date() } },
+        { upsert: true }
+      )
+    } catch (e) {
+      try { await getS3().send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key })) } catch {}
+      throw e
+    }
     return '/api/files/' + key
   }
   const dir = process.cwd() + '/public/uploads'
+  // Without durable storage, local disk is served statically with NO auth/ACL.
+  // Refuse private uploads here so sensitive files can never be exposed; public
+  // assets (profile photos, forum media) may still use the dev fallback.
+  if (visibility !== 'public') {
+    throw new Error('Durable storage is not configured; cannot store a private file securely.')
+  }
   await mkdir(dir, { recursive: true })
   await writeFile(dir + '/' + filename, buffer)
   return '/uploads/' + filename
+}
+
+// Extract the R2 object key from a stored /api/files/<key> URL.
+function keyFromFileUrl(url) {
+  const m = String(url || '').match(/\/api\/files\/(uploads\/[^?#]+)/)
+  return m ? m[1] : null
+}
+// Grant a specific user read access to a private uploaded file (recipient-scoped).
+async function grantFileAccess(db, url, userId) {
+  const key = keyFromFileUrl(url)
+  if (!key || !userId) return
+  await db.collection('uploads').updateOne({ key }, { $addToSet: { allowedUserIds: userId } }).catch(() => {})
+}
+// Mark a file as broadcast to all of the owner-trainer's clients.
+async function markFileBroadcast(db, url) {
+  const key = keyFromFileUrl(url)
+  if (!key) return
+  await db.collection('uploads').updateOne({ key }, { $set: { broadcastFromTrainer: true } }).catch(() => {})
+}
+// Delete an uploaded object + its ACL doc when the owning record is removed.
+async function deleteUpload(db, url) {
+  const key = keyFromFileUrl(url)
+  if (!key) return
+  if (r2Enabled()) {
+    try { await getS3().send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key })) } catch (e) { console.error('R2 delete failed:', e?.message) }
+  }
+  await db.collection('uploads').deleteOne({ key }).catch(() => {})
 }
 
 // MongoDB connection
@@ -355,13 +393,16 @@ async function handleRoute(request, { params }) {
       // (A missing ACL doc is treated as private and only the admin may read it.)
       const isPublic = !!meta && meta.visibility === 'public'
       if (!isPublic) {
+        // Recipient-scoped: admin, the owner, an explicitly-granted user
+        // (allowedUserIds — e.g. the specific client a trainer shared with, or the
+        // other party of a DM), or — for trainer broadcast files — any client
+        // assigned to that trainer.
         let allowed = me.role === 'admin' || (!!meta && me.id === meta.ownerId)
-        if (!allowed && meta && meta.ownerId) {
-          const owner = await db.collection('users').findOne({ id: String(meta.ownerId) })
-          // Allow the two parties of an assigned trainer<->client relationship.
-          if (owner && (owner.assignedTrainerId === me.id || me.assignedTrainerId === owner.id)) {
-            allowed = true
-          }
+        if (!allowed && meta && Array.isArray(meta.allowedUserIds) && meta.allowedUserIds.includes(me.id)) {
+          allowed = true
+        }
+        if (!allowed && meta && meta.broadcastFromTrainer && me.assignedTrainerId === meta.ownerId) {
+          allowed = true
         }
         if (!allowed) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
@@ -640,8 +681,9 @@ async function handleRoute(request, { params }) {
       const coaches = doc?.coaches || {}
       const vt = body.videoTestimonial
       if (vt === null || (vt && typeof vt.src === 'string' && vt.src.trim() === '')) {
-        // clear
-        delete coaches[slug]
+        // Explicitly hide the coach's spotlight video. We must persist a marker
+        // (not delete) so the profile page won't fall back to the static default.
+        coaches[slug] = { hidden: true }
       } else if (vt && typeof vt === 'object' && typeof vt.src === 'string') {
         coaches[slug] = {
           src: vt.src.slice(0, 300),
@@ -797,6 +839,9 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
       }
       const target = await db.collection('users').findOne({ id: body.id })
+      if (!target) {
+        return handleCORS(NextResponse.json({ error: 'User not found' }, { status: 404 }))
+      }
       const update = { portalAccessUpdatedAt: new Date() }
       if (typeof body.portalAccess === 'boolean') {
         update.portalAccess = body.portalAccess
@@ -1339,6 +1384,9 @@ async function handleRoute(request, { params }) {
         createdAt: new Date(),
       }
       await db.collection('messages').insertOne(msg)
+      // Grant the recipient read access to any attached private media (owner =
+      // sender already has access; the other party is added here).
+      if (msg.mediaUrl) await grantFileAccess(db, msg.mediaUrl, other.id)
       const { _id, ...clean } = msg
       return handleCORS(NextResponse.json(clean))
     }
@@ -1364,7 +1412,10 @@ async function handleRoute(request, { params }) {
         { trainerId, clientId, senderId: { $ne: user.id }, read: false },
         { $set: { read: true } }
       )
-      return handleCORS(NextResponse.json({ messages: list.map(({ _id, ...r }) => r) }))
+      // Reflect that read state in the response we just fetched (avoid stale flags).
+      return handleCORS(NextResponse.json({
+        messages: list.map(({ _id, ...r }) => (r.senderId !== user.id ? { ...r, read: true } : r)),
+      }))
     }
 
     // Unread count for the current user (notification badge).
@@ -1477,6 +1528,14 @@ async function handleRoute(request, { params }) {
         createdAt: new Date(),
       }
       await db.collection('trainerFiles').insertOne(doc)
+      // Grant the intended recipient read access (recipient-scoped ACL). A file
+      // targeted at one client is visible only to that client; a broadcast file
+      // (no clientId) is visible to all of this trainer's clients.
+      if (clientId) {
+        await grantFileAccess(db, doc.url, clientId)
+      } else {
+        await markFileBroadcast(db, doc.url)
+      }
       const { _id, ...clean } = doc
       return handleCORS(NextResponse.json(clean))
     }
@@ -1501,7 +1560,9 @@ async function handleRoute(request, { params }) {
       }
       const id = request.nextUrl.searchParams.get('id')
       if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      const existing = await db.collection('trainerFiles').findOne({ id, trainerId: user.id })
       await db.collection('trainerFiles').deleteOne({ id, trainerId: user.id })
+      if (existing?.url) await deleteUpload(db, existing.url)
       return handleCORS(NextResponse.json({ ok: true }))
     }
 
@@ -1972,8 +2033,11 @@ async function handleRoute(request, { params }) {
         if (mime === 'image/svg+xml') {
           return handleCORS(NextResponse.json({ error: 'SVG images are not allowed.' }, { status: 400 }))
         }
-        const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }
-        const ext = extMap[mime] || (isImg ? 'jpg' : 'mp4')
+        const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }
+        const ext = extMap[mime]
+        if (!ext) {
+          return handleCORS(NextResponse.json({ error: 'Unsupported file type. Use JPG, PNG, WebP, GIF, HEIC or MP4/MOV/WebM.' }, { status: 400 }))
+        }
         const buffer = Buffer.from(await file.arrayBuffer())
         // Forum media is community-visible to any logged-in member.
         const url = await saveUploadBuffer(db, buffer, ext, mime, user.id, 'public')
@@ -2081,8 +2145,14 @@ async function handleRoute(request, { params }) {
       if (post.userId !== user.id && user.role !== 'admin') {
         return handleCORS(NextResponse.json({ error: 'You can only delete your own posts.' }, { status: 403 }))
       }
+      // Clean up any uploaded media on the post and its replies from R2.
+      const replies = await db.collection('forum_replies').find({ postId: body.id }).toArray()
       await db.collection('forum_posts').deleteOne({ id: body.id })
       await db.collection('forum_replies').deleteMany({ postId: body.id })
+      if (post.mediaUrl) await deleteUpload(db, post.mediaUrl)
+      for (const r of replies) {
+        if (r.mediaUrl) await deleteUpload(db, r.mediaUrl)
+      }
       return handleCORS(NextResponse.json({ ok: true }))
     }
 

@@ -11,7 +11,7 @@ export default function ProfessionalPage() {
   const slug = String(params?.slug || "");
   const [p, setP] = useState<Professional | null>(null);
   const [state, setState] = useState<"loading" | "found" | "notfound">("loading");
-  const [videoOverride, setVideoOverride] = useState<Professional["videoTestimonial"] | null>(null);
+  const [videoOverride, setVideoOverride] = useState<(Professional["videoTestimonial"] & { hidden?: boolean }) | { hidden?: boolean } | null>(null);
 
   useEffect(() => {
     // Admin-set video testimonials (per coach slug) override the static data.
@@ -19,7 +19,9 @@ export default function ProfessionalPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         const v = d?.coaches?.[slug];
-        if (v && v.src) setVideoOverride(v);
+        // Persist ANY admin override (including an explicit { hidden:true } removal)
+        // so the render logic can hide the video instead of reverting to default.
+        if (v) setVideoOverride(v);
       })
       .catch(() => {});
   }, [slug]);
@@ -169,7 +171,11 @@ export default function ProfessionalPage() {
 
         {/* Video testimonial */}
         {(() => {
-          const vt = videoOverride || p.videoTestimonial;
+          // Admin override wins: an explicit { hidden:true } removes the video;
+          // an override with a src replaces it; otherwise use the static default.
+          const vt = (videoOverride
+            ? ((videoOverride as { hidden?: boolean }).hidden ? null : videoOverride)
+            : p.videoTestimonial) as Professional["videoTestimonial"] | null;
           if (!vt) return null;
           return (
           <section className="py-20 md:py-28 border-t border-bone/10">
