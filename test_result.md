@@ -790,6 +790,99 @@ backend_coach_saved_templates:
         -agent: "testing"
         -comment: "✅ PASSED all 6 tests (100% success rate): (1) GET /api/trainer/templates with NO auth cookie returns 403. (2) Registered plain member, GET /api/trainer/templates with member cookie returns 403 (not trainer/admin, correctly denied). (3) Admin login successful (username:'the hutch', password:'Vzkfjf3n!3'), GET /api/trainer/templates returns 200 with {templates: []} (array, initially empty). (4) Admin PUT /api/trainer/templates with body {templates:[{id:'a1',name:'Push A',rows:[{name:'Bench Press',sets:'3',reps:'8-12'}]}]} returns 200 with ok:true and templates echoed correctly (id:a1, name:Push A, rows with Bench Press). (5) Admin GET /api/trainer/templates again returns 200, template persists with all fields (id:a1, name:Push A, rows with Bench Press sets:3 reps:8-12). (6) PUT /api/trainer/templates with NO auth cookie returns 403. No 500 errors encountered. No MongoDB _id leaks detected in any responses. All endpoints return correct status codes (200, 403) and proper JSON responses. Authentication and authorization correctly enforced (403 for non-trainer/non-admin). Cookie persistence working correctly. Data persistence verified for templates with nested structure (rows array)."
 
+
+# ============ NEW COACH TOOLS ENDPOINTS (trainer activity, client goals, admin analytics, revenue, announcement, bulk-assign) ============
+backend_new_coach_tools:
+  - task: "Trainer activity dashboard (GET /api/trainer/activity)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New trainer activity dashboard endpoint. GET /api/trainer/activity (isTrainer or admin only) returns {clients: [{id, username, workoutCount, lastWorkout, lastNutrition, lastCheckin}]} for all assigned clients. Aggregates data from tracker, nutrition_logs, and checkins collections. 403 for non-trainer/non-admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED (1/1 test): GET /api/trainer/activity as admin returns 200 with {clients: [{id, username, workoutCount, lastWorkout, lastNutrition, lastCheckin}]} array (1 client found). All required fields present (id, username, workoutCount=0, lastWorkout=null, lastNutrition=null, lastCheckin='2026-09-03T16:14:32.052Z'). No MongoDB _id leaks detected. Authorization test: member GET returns 403 (Forbidden) - correctly denied."
+  
+  - task: "Client goals management (GET/PUT /api/trainer/client-goals)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New client goals management endpoints. GET /api/trainer/client-goals?clientId=<CID> (isTrainer or admin only) returns {goals: []} where goals is array of {id, label, target, current, unit}. PUT /api/trainer/client-goals {clientId, goals: [{label, target, current, unit}]} saves goals (auto-assigns id if missing), capped at 50 goals. Returns {ok, goals}. 403 if client not assigned to trainer (admins can access any)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED (3/3 tests): (2a) GET /api/trainer/client-goals?clientId=<CID> returns 200 with {goals: []} (initially empty array). (2b) PUT /api/trainer/client-goals with {clientId, goals: [{label:'Squat 1RM', target:405, current:365, unit:'lb'}]} returns 200 with {ok:true, goals: [{id:'b2b381b7-e7d3-4ce4-b3cc-ca4873dc8ad2', label:'Squat 1RM', target:405, current:365, unit:'lb'}]} - id auto-assigned. (2c) GET again returns 200 with goals persisted correctly with same id. No MongoDB _id leaks detected."
+  
+  - task: "Admin analytics dashboard (GET /api/admin/analytics)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New admin analytics dashboard endpoint. GET /api/admin/analytics (admin only) returns {totalMembers, portalAccess, trainers, newLast30, activeSubscribers, forumPosts, checkins, signupsByWeek: [{label, count}]} where signupsByWeek is array of 8 weeks. All numeric fields are integers. 403 for non-admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED (1/1 test): GET /api/admin/analytics as admin returns 200 with all required numeric fields (totalMembers=51, portalAccess=16, trainers=6, newLast30=52, activeSubscribers=0, forumPosts=4, checkins=9) and signupsByWeek array with 8 items (each with label and count). All numeric fields are integers. No MongoDB _id leaks detected. Authorization test: member GET returns 403 (Forbidden) - correctly denied."
+  
+  - task: "Admin revenue dashboard (GET /api/admin/revenue)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New admin revenue dashboard endpoint. GET /api/admin/revenue (admin only) returns {activeSubscribers: number, byPlan: [{plan, count}]} where byPlan is array of subscription plans with counts. 403 for non-admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED (1/1 test): GET /api/admin/revenue as admin returns 200 with {activeSubscribers: 0, byPlan: []} (no active subscriptions currently). Structure correct: activeSubscribers is integer, byPlan is array. No MongoDB _id leaks detected. Authorization test: member GET returns 403 (Forbidden) - correctly denied."
+  
+  - task: "Site announcement banner (GET /api/announcement, PUT /api/admin/announcement)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New site announcement banner system. GET /api/announcement (PUBLIC, no auth required) returns {enabled, message, updatedAt}. PUT /api/admin/announcement (admin only) accepts {enabled, message} and upserts to site_content collection. Returns {ok, enabled, message}. 403 for non-admin PUT."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED (4/4 tests): (5a) GET /api/announcement (no auth) returns 200 with {enabled: false, message: '', updatedAt: null} (initially empty). PUBLIC endpoint accessible without authentication. (5b) Admin PUT /api/admin/announcement with {enabled: true, message: 'Test banner'} returns 200 with {ok: true, enabled: true, message: 'Test banner'}. (5c) GET /api/announcement again returns 200 with {enabled: true, message: 'Test banner', updatedAt: '2026-09-06T04:51:14.355Z'} - persistence verified. (5d) Admin PUT with {enabled: false, message: ''} returns 200 - reset successful. No MongoDB _id leaks detected. Authorization tests: member PUT returns 403 (Forbidden), anonymous GET returns 200 (public), member GET returns 200 (public) - all correct."
+  
+  - task: "Admin bulk client assignment (POST /api/admin/bulk-assign)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New admin bulk client assignment endpoint. POST /api/admin/bulk-assign (admin only) accepts {clientIds: [], trainerId: string} and bulk-assigns clients to trainer. Validates trainerId exists and has isTrainer=true (400 if invalid). Empty trainerId unassigns clients. Returns {ok, updated: number}. Returns 400 if clientIds is empty. 403 for non-admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED (2/2 tests): (6a) POST /api/admin/bulk-assign with {clientIds: ['da3cf979-45da-4c47-9b5f-8680d131038e'], trainerId: '73242b1a-8348-493e-adb3-f2e42e932f68'} returns 200 with {ok: true, updated: 0} (client already assigned, so 0 updated). Note: Admin needed isTrainer=true to be used as trainerId (set via PUT /api/admin/users first). (6b) POST with {clientIds: [], trainerId: admin_id} returns 400 with error 'No clients selected' - correctly validates empty array. No MongoDB _id leaks detected. Authorization test: member POST returns 403 (Forbidden) - correctly denied."
+
 agent_communication:
     -agent: "main"
     -message: "✅ VERIFIED (visual, screenshot tool): Template Preview in Trainer Workspace. Seeded a demo client 'Ben Carter (Demo)' (ben.demo@tensorstrength.com, id da3cf979-45da-4c47-9b5f-8680d131038e) with a clientProfile + 2 check-ins, assigned to admin coach (id 73242b1a-...). Logged in as admin, opened Clients tab, selected the client. Confirmed: About-this-client panel, ready-made split buttons, custom template builder, saved-template chip (Push A), exercise rows, and the new PREVIEW block listing 'Bench Press — 3×8-12' and 'Overhead Press — 3×8-12' before send. Last working item is complete."
@@ -810,3 +903,7 @@ agent_communication:
     -agent: "testing"
     -message: "✅ ALL COACH TOOLS BACKEND TESTS PASSED (17/17 - 100% success rate). Comprehensive testing completed covering all requirements from review request: ADMIN LOGIN & CLIENT DISCOVERY (2 tests): (1) Admin login with 'The Hutch'/'Vzkfjf3n!3' returns 200 with role=admin, ts_token cookie set. (2) GET /api/trainer/clients returns 200 with 1 client, captured Ben Carter (Demo) id=da3cf979-45da-4c47-9b5f-8680d131038e. CLIENT-TRACKER (2 tests): (3) GET /api/trainer/client-tracker?clientId={Ben} returns 200 with {workouts:[]} array (client has no workouts yet). (4) GET /api/trainer/client-tracker?clientId=not-a-real-id returns 403 (Forbidden) - correctly denies invalid/unassigned client. PUSH-MACROS (2 tests): (5) POST /api/trainer/push-macros with clientId={Ben} and goal:{calories:2600,protein:190,carbs:250,fat:80} returns 200 with {ok:true, goal:{calories:2600,protein:190,carbs:250,fat:80,setAt:'2026-09-06T04:26:12.177Z',setByName:'the hutch'}} - goal correctly set with metadata. (6) POST /api/trainer/push-macros with clientId='not-real' returns 403 (Forbidden) - correctly denies invalid client. COACH-GOAL (1 test): (7) GET /api/client/coach-goal as admin returns 200 with {goal:null} - admin has no coach, goal is null as expected. BROADCAST (2 tests): (8) POST /api/trainer/broadcast with body:'Test broadcast — please ignore' returns 200 with {ok:true, sent:1} - broadcast sent to 1 assigned client. (9) POST /api/trainer/broadcast with body:'   ' (blank) returns 400 - correctly rejects blank message. CLIENT-NOTES (3 tests): (10) GET /api/trainer/client-notes?clientId={Ben} returns 200 with {notes:''} - initially empty. (11) PUT /api/trainer/client-notes with clientId={Ben} and notes:'Right shoulder — avoid heavy overhead' returns 200 with {ok:true}. (12) GET /api/trainer/client-notes?clientId={Ben} again returns 200 with {notes:'Right shoulder — avoid heavy overhead'} - notes correctly persisted. AUTHORIZATION (5 tests): (13) Registered normal member testmember_1788668772.909829 with role=member. (14) Member GET /api/trainer/client-tracker returns 403 (Forbidden). (15) Member POST /api/trainer/push-macros returns 403 (Forbidden). (16) Member POST /api/trainer/broadcast returns 403 (Forbidden). (17) Member GET /api/trainer/client-notes returns 403 (Forbidden). SECURITY VERIFIED: No 500 errors encountered. No MongoDB _id fields leaked in any responses. All trainer endpoints correctly enforce isTrainer/admin authorization. All endpoints return correct status codes (200, 400, 403) and proper JSON responses. Cookie-based authentication working correctly. All Coach Tools endpoints are working correctly and ready for production use."
 
+
+
+    -agent: "testing"
+    -message: "✅ ALL NEW COACH TOOLS ENDPOINTS TESTS PASSED (19/19 - 100% success rate). Comprehensive testing completed for 6 new endpoints covering all requirements from review request: ENDPOINT 1 - TRAINER ACTIVITY (1 test): GET /api/trainer/activity as admin returns 200 with {clients: [{id, username, workoutCount, lastWorkout, lastNutrition, lastCheckin}]} array (1 client found with all required fields). ENDPOINT 2 - CLIENT GOALS (3 tests): GET /api/trainer/client-goals?clientId=<CID> returns 200 with {goals: []} initially empty. PUT /api/trainer/client-goals with {clientId, goals: [{label:'Squat 1RM', target:405, current:365, unit:'lb'}]} returns 200 with {ok:true, goals} and auto-assigns id. GET again verifies goals persisted with id='b2b381b7-e7d3-4ce4-b3cc-ca4873dc8ad2'. ENDPOINT 3 - ADMIN ANALYTICS (1 test): GET /api/admin/analytics returns 200 with all numeric fields (totalMembers=51, portalAccess=16, trainers=6, newLast30=52, activeSubscribers=0, forumPosts=4, checkins=9) and signupsByWeek array with 8 items. ENDPOINT 4 - ADMIN REVENUE (1 test): GET /api/admin/revenue returns 200 with {activeSubscribers: 0, byPlan: []} (correct structure). ENDPOINT 5 - ANNOUNCEMENT (4 tests): GET /api/announcement (no auth) returns 200 with {enabled, message, updatedAt} - PUBLIC endpoint accessible without authentication. PUT /api/admin/announcement with {enabled:true, message:'Test banner'} returns 200. GET again verifies persistence. PUT with {enabled:false, message:''} resets successfully. ENDPOINT 6 - BULK ASSIGN (2 tests): POST /api/admin/bulk-assign with {clientIds:['<CID>'], trainerId:'<admin_id>'} returns 200 with {ok:true, updated:0} (Note: Admin needed isTrainer=true to be used as trainerId, set via PUT /api/admin/users first). POST with empty clientIds:[] returns 400 with error 'No clients selected'. AUTHORIZATION TESTS (7 tests): Registered normal member and verified: member GET /api/trainer/activity returns 403, member GET /api/admin/analytics returns 403, member GET /api/admin/revenue returns 403, member PUT /api/admin/announcement returns 403, member POST /api/admin/bulk-assign returns 403 - all correctly denied. Anonymous GET /api/announcement returns 200 (public), member GET /api/announcement returns 200 (public) - both correct. SECURITY VERIFIED: No 500 errors encountered in any test. No MongoDB _id leaks detected in any responses. All endpoints return correct status codes (200, 400, 403) and proper JSON responses. Cookie-based authentication (httpOnly ts_token) working correctly. Admin login with username:'The Hutch' password:'Vzkfjf3n!3' successful. Demo client id da3cf979-45da-4c47-9b5f-8680d131038e used for testing. Base URL: https://trainer-profiles-2.preview.emergentagent.com/api. All 6 new coach tools endpoints are working correctly and ready for production use."

@@ -6,8 +6,9 @@ import WorkoutLog from "@/components/tools/WorkoutLog";
 import ExerciseLibrary from "@/components/ExerciseLibrary";
 import WarmupLibrary from "@/components/WarmupLibrary";
 import TrainerPrograms from "@/components/portal/TrainerPrograms";
+import ClientExtras from "@/components/tools/ClientExtras";
 
-type Tab = "tracker" | "exercises" | "warmups" | "build";
+type Tab = "tracker" | "exercises" | "warmups" | "extras" | "build";
 
 export default function WorkoutLogPage() {
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,7 @@ export default function WorkoutLogPage() {
     { id: "tracker", label: "Workout Tracker" },
     { id: "exercises", label: "Exercise Library" },
     { id: "warmups", label: "Warmups & Conditioning" },
+    { id: "extras", label: "Tools" },
     ...(isTrainer ? [{ id: "build" as Tab, label: "Build for Clients" }] : []),
   ];
 
@@ -99,6 +101,7 @@ export default function WorkoutLogPage() {
                 {tab === "tracker" && <WorkoutLog />}
                 {tab === "exercises" && <ExerciseLibrary />}
                 {tab === "warmups" && <WarmupLibrary />}
+                {tab === "extras" && <ClientExtras />}
               </div>
             )}
           </>

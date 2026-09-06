@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Backend API tests for Coach Tools endpoints
-Tests the new trainer-only endpoints on the Tensor Strength Next.js app
+Backend API test for 6 new endpoints:
+1. GET /api/trainer/activity
+2. GET/PUT /api/trainer/client-goals
+3. GET /api/admin/analytics
+4. GET /api/admin/revenue
+5. GET/PUT /api/announcement
+6. POST /api/admin/bulk-assign
 """
 
 import requests
@@ -12,488 +17,710 @@ from datetime import datetime
 # Base URL from .env
 BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
-# Admin credentials
+# Admin credentials from .env
 ADMIN_USERNAME = "The Hutch"
 ADMIN_PASSWORD = "Vzkfjf3n!3"
 
-# Demo client (if stale, will discover via GET /api/trainer/clients)
+# Demo client ID from review request
 DEMO_CLIENT_ID = "da3cf979-45da-4c47-9b5f-8680d131038e"
 
-# Test results tracking
-test_results = []
-total_tests = 0
-passed_tests = 0
+def print_test(num, desc):
+    print(f"\n{'='*80}")
+    print(f"TEST {num}: {desc}")
+    print('='*80)
 
-def log_test(test_name, passed, details=""):
-    """Log test result"""
-    global total_tests, passed_tests
-    total_tests += 1
-    if passed:
-        passed_tests += 1
-    status = "✅ PASS" if passed else "❌ FAIL"
-    result = f"{status}: {test_name}"
-    if details:
-        result += f" - {details}"
-    print(result)
-    test_results.append({"test": test_name, "passed": passed, "details": details})
+def print_result(success, message):
+    status = "✅ PASSED" if success else "❌ FAILED"
+    print(f"{status}: {message}")
 
-def check_no_mongo_id(data):
-    """Check that response doesn't contain MongoDB _id fields"""
-    json_str = json.dumps(data)
-    if '"_id"' in json_str or "'_id'" in json_str:
-        return False
+def check_no_id_leak(data):
+    """Check if response contains MongoDB _id field"""
+    if isinstance(data, dict):
+        if '_id' in data:
+            return False
+        for value in data.values():
+            if not check_no_id_leak(value):
+                return False
+    elif isinstance(data, list):
+        for item in data:
+            if not check_no_id_leak(item):
+                return False
     return True
 
-def check_status_and_json(response, expected_status, test_name):
-    """Check response status and that it's valid JSON"""
+def main():
+    print("Starting backend API tests for 6 new endpoints...")
+    print(f"Base URL: {BASE_URL}")
+    
+    # Create session for admin
+    admin_session = requests.Session()
+    
+    # Create session for member
+    member_session = requests.Session()
+    
+    test_count = 0
+    passed_count = 0
+    
     try:
-        if response.status_code != expected_status:
-            log_test(test_name, False, f"Expected {expected_status}, got {response.status_code}: {response.text[:200]}")
-            return None
-        data = response.json()
-        if not check_no_mongo_id(data):
-            log_test(test_name, False, "Response contains MongoDB _id field")
-            return None
-        return data
-    except Exception as e:
-        log_test(test_name, False, f"Error: {str(e)}")
-        return None
-
-print("=" * 80)
-print("COACH TOOLS BACKEND API TESTS")
-print("=" * 80)
-print(f"Base URL: {BASE_URL}")
-print(f"Admin: {ADMIN_USERNAME}")
-print(f"Starting tests at {datetime.now().isoformat()}")
-print("=" * 80)
-
-# Create session for cookie persistence
-admin_session = requests.Session()
-member_session = requests.Session()
-
-# ============================================================================
-# TEST 1: Admin Login
-# ============================================================================
-print("\n[TEST 1] Admin Login")
-try:
-    response = admin_session.post(
-        f"{BASE_URL}/auth/login",
-        json={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "Admin login")
-    if data:
-        if data.get("user", {}).get("role") == "admin":
-            log_test("Admin login", True, f"Logged in as {data['user'].get('username')}, role=admin")
-            # Check cookie is set
-            if 'ts_token' in admin_session.cookies:
-                print(f"  ✓ Cookie 'ts_token' set")
+        # ============================================================
+        # SETUP: Admin login
+        # ============================================================
+        print_test("SETUP", "Admin login")
+        resp = admin_session.post(f"{BASE_URL}/auth/login", json={
+            "username": ADMIN_USERNAME,
+            "password": ADMIN_PASSWORD
+        })
+        print(f"Status: {resp.status_code}")
+        print(f"Response: {resp.text[:200]}")
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('user', {}).get('role') == 'admin':
+                print_result(True, f"Admin login successful, role={data['user']['role']}")
+                admin_id = data['user']['id']
             else:
-                print(f"  ⚠ Warning: Cookie 'ts_token' not found in session")
+                print_result(False, f"Admin login returned wrong role: {data.get('user', {}).get('role')}")
+                sys.exit(1)
         else:
-            log_test("Admin login", False, f"User role is {data.get('user', {}).get('role')}, expected admin")
-except Exception as e:
-    log_test("Admin login", False, f"Exception: {str(e)}")
-    print(f"\n❌ CRITICAL: Admin login failed. Cannot continue tests.")
-    sys.exit(1)
-
-# ============================================================================
-# TEST 2: GET /api/trainer/clients - Capture client ID
-# ============================================================================
-print("\n[TEST 2] GET /api/trainer/clients")
-client_id = None
-try:
-    response = admin_session.get(f"{BASE_URL}/trainer/clients", timeout=10)
-    data = check_status_and_json(response, 200, "GET /trainer/clients")
-    if data:
-        clients = data.get("clients", [])
-        if len(clients) > 0:
-            # Try to find Ben Carter (Demo) first
-            ben = next((c for c in clients if "Ben" in c.get("username", "") or "Carter" in c.get("username", "")), None)
-            if ben:
-                client_id = ben.get("id")
-                log_test("GET /trainer/clients", True, f"Found {len(clients)} clients, captured Ben Carter id={client_id}")
+            print_result(False, f"Admin login failed with status {resp.status_code}")
+            sys.exit(1)
+        
+        # ============================================================
+        # SETUP: Get a valid client ID (use demo client or get from /api/trainer/clients)
+        # ============================================================
+        print_test("SETUP", "Get valid client ID")
+        resp = admin_session.get(f"{BASE_URL}/trainer/clients")
+        print(f"Status: {resp.status_code}")
+        
+        client_id = None
+        if resp.status_code == 200:
+            data = resp.json()
+            clients = data.get('clients', [])
+            print(f"Found {len(clients)} clients")
+            if len(clients) > 0:
+                client_id = clients[0]['id']
+                print_result(True, f"Using client ID: {client_id}")
             else:
-                # Use first client
-                client_id = clients[0].get("id")
-                log_test("GET /trainer/clients", True, f"Found {len(clients)} clients, captured first client id={client_id}")
-            print(f"  ✓ Client ID for testing: {client_id}")
+                # Try using the demo client ID from review request
+                client_id = DEMO_CLIENT_ID
+                print_result(True, f"No clients found, using demo client ID: {client_id}")
         else:
-            log_test("GET /trainer/clients", False, "No clients found in response")
-            print(f"  ⚠ Warning: No clients assigned to admin. Will use demo client ID: {DEMO_CLIENT_ID}")
             client_id = DEMO_CLIENT_ID
-except Exception as e:
-    log_test("GET /trainer/clients", False, f"Exception: {str(e)}")
-    client_id = DEMO_CLIENT_ID
-
-if not client_id:
-    print(f"\n⚠ Warning: Could not capture client ID. Using demo client ID: {DEMO_CLIENT_ID}")
-    client_id = DEMO_CLIENT_ID
-
-# ============================================================================
-# TEST 3: GET /api/trainer/client-tracker?clientId=CID (valid)
-# ============================================================================
-print("\n[TEST 3] GET /api/trainer/client-tracker?clientId={valid}")
-try:
-    response = admin_session.get(
-        f"{BASE_URL}/trainer/client-tracker",
-        params={"clientId": client_id},
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "GET /trainer/client-tracker (valid client)")
-    if data:
-        if "workouts" in data and isinstance(data["workouts"], list):
-            log_test("GET /trainer/client-tracker (valid)", True, f"Returns 200 with workouts array (length={len(data['workouts'])})")
-        else:
-            log_test("GET /trainer/client-tracker (valid)", False, "Response missing 'workouts' array")
-except Exception as e:
-    log_test("GET /trainer/client-tracker (valid)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 4: GET /api/trainer/client-tracker?clientId=not-a-real-id (invalid)
-# ============================================================================
-print("\n[TEST 4] GET /api/trainer/client-tracker?clientId={invalid}")
-try:
-    response = admin_session.get(
-        f"{BASE_URL}/trainer/client-tracker",
-        params={"clientId": "not-a-real-id-12345"},
-        timeout=10
-    )
-    if response.status_code == 403:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("GET /trainer/client-tracker (invalid)", True, "Returns 403 for invalid client ID")
-        else:
-            log_test("GET /trainer/client-tracker (invalid)", False, "Response contains MongoDB _id")
-    else:
-        log_test("GET /trainer/client-tracker (invalid)", False, f"Expected 403, got {response.status_code}")
-except Exception as e:
-    log_test("GET /trainer/client-tracker (invalid)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 5: POST /api/trainer/push-macros (valid client)
-# ============================================================================
-print("\n[TEST 5] POST /api/trainer/push-macros (valid client)")
-try:
-    response = admin_session.post(
-        f"{BASE_URL}/trainer/push-macros",
-        json={
-            "clientId": client_id,
-            "goal": {
-                "calories": 2600,
-                "protein": 190,
-                "carbs": 250,
-                "fat": 80
+            print_result(True, f"Could not fetch clients, using demo client ID: {client_id}")
+        
+        # ============================================================
+        # TEST 1: GET /api/trainer/activity
+        # ============================================================
+        test_count += 1
+        print_test(1, "GET /api/trainer/activity as admin")
+        
+        try:
+            resp = admin_session.get(f"{BASE_URL}/trainer/activity")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'clients' in data and isinstance(data['clients'], list):
+                    # Check structure of first client if any
+                    if len(data['clients']) > 0:
+                        client = data['clients'][0]
+                        required_fields = ['id', 'username', 'workoutCount', 'lastWorkout', 'lastNutrition', 'lastCheckin']
+                        has_all_fields = all(field in client for field in required_fields)
+                        
+                        if has_all_fields:
+                            if check_no_id_leak(data):
+                                print_result(True, f"Returns 200 with clients array ({len(data['clients'])} clients), all required fields present, no _id leaks")
+                                passed_count += 1
+                            else:
+                                print_result(False, "Response contains MongoDB _id leak")
+                        else:
+                            missing = [f for f in required_fields if f not in client]
+                            print_result(False, f"Client missing required fields: {missing}")
+                    else:
+                        if check_no_id_leak(data):
+                            print_result(True, "Returns 200 with empty clients array, no _id leaks")
+                            passed_count += 1
+                        else:
+                            print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Response missing 'clients' array: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 2a: GET /api/trainer/client-goals?clientId=<CID>
+        # ============================================================
+        test_count += 1
+        print_test("2a", f"GET /api/trainer/client-goals?clientId={client_id}")
+        
+        try:
+            resp = admin_session.get(f"{BASE_URL}/trainer/client-goals?clientId={client_id}")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'goals' in data and isinstance(data['goals'], list):
+                    if check_no_id_leak(data):
+                        print_result(True, f"Returns 200 with goals array ({len(data['goals'])} goals), no _id leaks")
+                        passed_count += 1
+                    else:
+                        print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Response missing 'goals' array: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 2b: PUT /api/trainer/client-goals with goals
+        # ============================================================
+        test_count += 1
+        print_test("2b", f"PUT /api/trainer/client-goals with clientId={client_id}")
+        
+        try:
+            goal_data = {
+                "clientId": client_id,
+                "goals": [
+                    {
+                        "label": "Squat 1RM",
+                        "target": 405,
+                        "current": 365,
+                        "unit": "lb"
+                    }
+                ]
             }
-        },
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "POST /trainer/push-macros (valid)")
-    if data:
-        if data.get("ok") and "goal" in data:
-            goal = data["goal"]
-            if (goal.get("calories") == 2600 and 
-                goal.get("protein") == 190 and 
-                goal.get("carbs") == 250 and 
-                goal.get("fat") == 80):
-                log_test("POST /trainer/push-macros (valid)", True, f"Returns 200 with ok:true and goal: {goal}")
+            resp = admin_session.put(f"{BASE_URL}/trainer/client-goals", json=goal_data)
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('ok') and 'goals' in data and isinstance(data['goals'], list):
+                    if len(data['goals']) > 0:
+                        goal = data['goals'][0]
+                        if (goal.get('label') == 'Squat 1RM' and 
+                            goal.get('target') == 405 and 
+                            goal.get('current') == 365 and 
+                            goal.get('unit') == 'lb' and
+                            'id' in goal):
+                            if check_no_id_leak(data):
+                                print_result(True, f"Returns 200 with ok:true, goals array with id assigned, no _id leaks")
+                                passed_count += 1
+                            else:
+                                print_result(False, "Response contains MongoDB _id leak")
+                        else:
+                            print_result(False, f"Goal data mismatch: {goal}")
+                    else:
+                        print_result(False, "Goals array is empty")
+                else:
+                    print_result(False, f"Response missing ok or goals: {data}")
             else:
-                log_test("POST /trainer/push-macros (valid)", False, f"Goal values don't match: {goal}")
-        else:
-            log_test("POST /trainer/push-macros (valid)", False, f"Response missing 'ok' or 'goal': {data}")
-except Exception as e:
-    log_test("POST /trainer/push-macros (valid)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 6: POST /api/trainer/push-macros (invalid client)
-# ============================================================================
-print("\n[TEST 6] POST /api/trainer/push-macros (invalid client)")
-try:
-    response = admin_session.post(
-        f"{BASE_URL}/trainer/push-macros",
-        json={
-            "clientId": "not-real-client-id",
-            "goal": {
-                "calories": 2000,
-                "protein": 150,
-                "carbs": 200,
-                "fat": 60
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 2c: GET /api/trainer/client-goals again to verify persistence
+        # ============================================================
+        test_count += 1
+        print_test("2c", f"GET /api/trainer/client-goals?clientId={client_id} again (verify persistence)")
+        
+        try:
+            resp = admin_session.get(f"{BASE_URL}/trainer/client-goals?clientId={client_id}")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'goals' in data and isinstance(data['goals'], list) and len(data['goals']) > 0:
+                    goal = data['goals'][0]
+                    if (goal.get('label') == 'Squat 1RM' and 
+                        goal.get('target') == 405 and 
+                        goal.get('current') == 365 and 
+                        goal.get('unit') == 'lb' and
+                        'id' in goal):
+                        if check_no_id_leak(data):
+                            print_result(True, f"Goals persisted correctly with id={goal['id']}, no _id leaks")
+                            passed_count += 1
+                        else:
+                            print_result(False, "Response contains MongoDB _id leak")
+                    else:
+                        print_result(False, f"Goal data mismatch after persistence: {goal}")
+                else:
+                    print_result(False, f"Goals not persisted: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 3: GET /api/admin/analytics
+        # ============================================================
+        test_count += 1
+        print_test(3, "GET /api/admin/analytics")
+        
+        try:
+            resp = admin_session.get(f"{BASE_URL}/admin/analytics")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                required_fields = ['totalMembers', 'portalAccess', 'trainers', 'newLast30', 
+                                 'activeSubscribers', 'forumPosts', 'checkins', 'signupsByWeek']
+                has_all_fields = all(field in data for field in required_fields)
+                
+                if has_all_fields:
+                    # Check that numeric fields are numbers
+                    numeric_fields = ['totalMembers', 'portalAccess', 'trainers', 'newLast30', 
+                                    'activeSubscribers', 'forumPosts', 'checkins']
+                    all_numeric = all(isinstance(data[field], int) for field in numeric_fields)
+                    
+                    # Check signupsByWeek is array of 8 items with label and count
+                    signups_valid = (isinstance(data['signupsByWeek'], list) and 
+                                   len(data['signupsByWeek']) == 8 and
+                                   all('label' in item and 'count' in item for item in data['signupsByWeek']))
+                    
+                    if all_numeric and signups_valid:
+                        if check_no_id_leak(data):
+                            print_result(True, f"Returns 200 with all numeric fields and signupsByWeek array (8 items), no _id leaks")
+                            passed_count += 1
+                        else:
+                            print_result(False, "Response contains MongoDB _id leak")
+                    else:
+                        if not all_numeric:
+                            print_result(False, "Some numeric fields are not numbers")
+                        if not signups_valid:
+                            print_result(False, f"signupsByWeek invalid: {data['signupsByWeek']}")
+                else:
+                    missing = [f for f in required_fields if f not in data]
+                    print_result(False, f"Response missing required fields: {missing}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 4: GET /api/admin/revenue
+        # ============================================================
+        test_count += 1
+        print_test(4, "GET /api/admin/revenue")
+        
+        try:
+            resp = admin_session.get(f"{BASE_URL}/admin/revenue")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if ('activeSubscribers' in data and isinstance(data['activeSubscribers'], int) and
+                    'byPlan' in data and isinstance(data['byPlan'], list)):
+                    # Check byPlan structure if not empty
+                    byplan_valid = True
+                    if len(data['byPlan']) > 0:
+                        byplan_valid = all('plan' in item and 'count' in item for item in data['byPlan'])
+                    
+                    if byplan_valid:
+                        if check_no_id_leak(data):
+                            print_result(True, f"Returns 200 with activeSubscribers={data['activeSubscribers']}, byPlan array ({len(data['byPlan'])} plans), no _id leaks")
+                            passed_count += 1
+                        else:
+                            print_result(False, "Response contains MongoDB _id leak")
+                    else:
+                        print_result(False, f"byPlan structure invalid: {data['byPlan']}")
+                else:
+                    print_result(False, f"Response missing activeSubscribers or byPlan: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 5a: GET /api/announcement (no auth)
+        # ============================================================
+        test_count += 1
+        print_test("5a", "GET /api/announcement (no auth - public)")
+        
+        try:
+            # Use a new session without auth
+            resp = requests.get(f"{BASE_URL}/announcement")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'enabled' in data and 'message' in data and 'updatedAt' in data:
+                    if check_no_id_leak(data):
+                        print_result(True, f"Returns 200 with enabled={data['enabled']}, message='{data['message'][:50]}...', updatedAt={data['updatedAt']}, no _id leaks")
+                        passed_count += 1
+                    else:
+                        print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Response missing required fields: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 5b: PUT /api/admin/announcement (set enabled=true)
+        # ============================================================
+        test_count += 1
+        print_test("5b", "PUT /api/admin/announcement with enabled=true")
+        
+        try:
+            announcement_data = {
+                "enabled": True,
+                "message": "Test banner"
             }
-        },
-        timeout=10
-    )
-    if response.status_code == 403:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("POST /trainer/push-macros (invalid)", True, "Returns 403 for invalid client ID")
-        else:
-            log_test("POST /trainer/push-macros (invalid)", False, "Response contains MongoDB _id")
-    else:
-        log_test("POST /trainer/push-macros (invalid)", False, f"Expected 403, got {response.status_code}")
-except Exception as e:
-    log_test("POST /trainer/push-macros (invalid)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 7: GET /api/client/coach-goal (as admin who has no coach goal)
-# ============================================================================
-print("\n[TEST 7] GET /api/client/coach-goal (as admin)")
-try:
-    response = admin_session.get(f"{BASE_URL}/client/coach-goal", timeout=10)
-    data = check_status_and_json(response, 200, "GET /client/coach-goal")
-    if data:
-        # Admin has no coach, so goal should be null or a goal object if one exists
-        if "goal" in data:
-            log_test("GET /client/coach-goal", True, f"Returns 200 with goal: {data['goal']}")
-        else:
-            log_test("GET /client/coach-goal", False, "Response missing 'goal' field")
-except Exception as e:
-    log_test("GET /client/coach-goal", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 8: POST /api/trainer/broadcast (valid message)
-# ============================================================================
-print("\n[TEST 8] POST /api/trainer/broadcast (valid message)")
-try:
-    response = admin_session.post(
-        f"{BASE_URL}/trainer/broadcast",
-        json={"body": "Test broadcast — please ignore"},
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "POST /trainer/broadcast (valid)")
-    if data:
-        if data.get("ok") and "sent" in data:
-            sent_count = data["sent"]
-            if isinstance(sent_count, int) and sent_count >= 0:
-                log_test("POST /trainer/broadcast (valid)", True, f"Returns 200 with ok:true, sent={sent_count}")
+            resp = admin_session.put(f"{BASE_URL}/admin/announcement", json=announcement_data)
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('ok') and data.get('enabled') == True and data.get('message') == 'Test banner':
+                    if check_no_id_leak(data):
+                        print_result(True, f"Returns 200 with ok=true, enabled=true, message='Test banner', no _id leaks")
+                        passed_count += 1
+                    else:
+                        print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Response data mismatch: {data}")
             else:
-                log_test("POST /trainer/broadcast (valid)", False, f"Invalid sent count: {sent_count}")
-        else:
-            log_test("POST /trainer/broadcast (valid)", False, f"Response missing 'ok' or 'sent': {data}")
-except Exception as e:
-    log_test("POST /trainer/broadcast (valid)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 9: POST /api/trainer/broadcast (blank body)
-# ============================================================================
-print("\n[TEST 9] POST /api/trainer/broadcast (blank body)")
-try:
-    response = admin_session.post(
-        f"{BASE_URL}/trainer/broadcast",
-        json={"body": "   "},
-        timeout=10
-    )
-    if response.status_code == 400:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("POST /trainer/broadcast (blank)", True, "Returns 400 for blank body")
-        else:
-            log_test("POST /trainer/broadcast (blank)", False, "Response contains MongoDB _id")
-    else:
-        log_test("POST /trainer/broadcast (blank)", False, f"Expected 400, got {response.status_code}")
-except Exception as e:
-    log_test("POST /trainer/broadcast (blank)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 10: GET /api/trainer/client-notes?clientId=CID
-# ============================================================================
-print("\n[TEST 10] GET /api/trainer/client-notes?clientId={valid}")
-try:
-    response = admin_session.get(
-        f"{BASE_URL}/trainer/client-notes",
-        params={"clientId": client_id},
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "GET /trainer/client-notes")
-    if data:
-        if "notes" in data:
-            notes = data["notes"]
-            log_test("GET /trainer/client-notes", True, f"Returns 200 with notes: '{notes[:50]}...' (length={len(notes)})")
-        else:
-            log_test("GET /trainer/client-notes", False, "Response missing 'notes' field")
-except Exception as e:
-    log_test("GET /trainer/client-notes", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 11: PUT /api/trainer/client-notes
-# ============================================================================
-print("\n[TEST 11] PUT /api/trainer/client-notes")
-test_note = "Right shoulder — avoid heavy overhead"
-try:
-    response = admin_session.put(
-        f"{BASE_URL}/trainer/client-notes",
-        json={
-            "clientId": client_id,
-            "notes": test_note
-        },
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "PUT /trainer/client-notes")
-    if data:
-        if data.get("ok"):
-            log_test("PUT /trainer/client-notes", True, f"Returns 200 with ok:true")
-        else:
-            log_test("PUT /trainer/client-notes", False, f"Response missing 'ok': {data}")
-except Exception as e:
-    log_test("PUT /trainer/client-notes", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 12: GET /api/trainer/client-notes again (verify persistence)
-# ============================================================================
-print("\n[TEST 12] GET /api/trainer/client-notes (verify persistence)")
-try:
-    response = admin_session.get(
-        f"{BASE_URL}/trainer/client-notes",
-        params={"clientId": client_id},
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "GET /trainer/client-notes (verify)")
-    if data:
-        if "notes" in data:
-            notes = data["notes"]
-            if notes == test_note:
-                log_test("GET /trainer/client-notes (verify)", True, f"Notes persisted correctly: '{notes}'")
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 5c: GET /api/announcement again (verify persistence)
+        # ============================================================
+        test_count += 1
+        print_test("5c", "GET /api/announcement again (verify enabled=true, message='Test banner')")
+        
+        try:
+            resp = requests.get(f"{BASE_URL}/announcement")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('enabled') == True and data.get('message') == 'Test banner':
+                    if check_no_id_leak(data):
+                        print_result(True, f"Announcement persisted correctly: enabled=true, message='Test banner', no _id leaks")
+                        passed_count += 1
+                    else:
+                        print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Announcement not persisted correctly: {data}")
             else:
-                log_test("GET /trainer/client-notes (verify)", False, f"Notes don't match. Expected: '{test_note}', Got: '{notes}'")
-        else:
-            log_test("GET /trainer/client-notes (verify)", False, "Response missing 'notes' field")
-except Exception as e:
-    log_test("GET /trainer/client-notes (verify)", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# AUTHORIZATION TESTS: Register a normal member and test access
-# ============================================================================
-print("\n[AUTHORIZATION TESTS] Register normal member and test trainer endpoints")
-
-# Register a normal member
-member_username = f"testmember_{datetime.now().timestamp()}"
-member_email = f"{member_username}@test.com"
-member_password = "testpass123"
-
-print(f"\n[TEST 13] Register normal member: {member_username}")
-try:
-    response = member_session.post(
-        f"{BASE_URL}/auth/register",
-        json={
-            "username": member_username,
-            "email": member_email,
-            "password": member_password
-        },
-        timeout=10
-    )
-    data = check_status_and_json(response, 200, "Register normal member")
-    if data:
-        if data.get("user", {}).get("role") == "member":
-            log_test("Register normal member", True, f"Registered as {member_username}, role=member")
-        else:
-            log_test("Register normal member", False, f"User role is {data.get('user', {}).get('role')}, expected member")
-except Exception as e:
-    log_test("Register normal member", False, f"Exception: {str(e)}")
-
-# Test 14: Member tries GET /api/trainer/client-tracker
-print("\n[TEST 14] Member tries GET /api/trainer/client-tracker")
-try:
-    response = member_session.get(
-        f"{BASE_URL}/trainer/client-tracker",
-        params={"clientId": client_id},
-        timeout=10
-    )
-    if response.status_code == 403:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("Member GET /trainer/client-tracker", True, "Returns 403 (Forbidden)")
-        else:
-            log_test("Member GET /trainer/client-tracker", False, "Response contains MongoDB _id")
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 5d: PUT /api/admin/announcement (reset to enabled=false)
+        # ============================================================
+        test_count += 1
+        print_test("5d", "PUT /api/admin/announcement with enabled=false (reset)")
+        
+        try:
+            announcement_data = {
+                "enabled": False,
+                "message": ""
+            }
+            resp = admin_session.put(f"{BASE_URL}/admin/announcement", json=announcement_data)
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('ok') and data.get('enabled') == False:
+                    if check_no_id_leak(data):
+                        print_result(True, f"Returns 200 with ok=true, enabled=false (reset successful), no _id leaks")
+                        passed_count += 1
+                    else:
+                        print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Response data mismatch: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # SETUP: Set admin as trainer for bulk-assign test
+        # ============================================================
+        print_test("SETUP-6", "Set admin isTrainer=true for bulk-assign test")
+        
+        try:
+            resp = admin_session.put(f"{BASE_URL}/admin/users", json={
+                "id": admin_id,
+                "isTrainer": True
+            })
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 200:
+                print_result(True, "Admin isTrainer set to true")
+            else:
+                print_result(False, f"Failed to set admin isTrainer: {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 6a: POST /api/admin/bulk-assign with valid clientIds
+        # ============================================================
+        test_count += 1
+        print_test("6a", f"POST /api/admin/bulk-assign with clientIds=[{client_id}], trainerId={admin_id}")
+        
+        try:
+            bulk_assign_data = {
+                "clientIds": [client_id],
+                "trainerId": admin_id
+            }
+            resp = admin_session.post(f"{BASE_URL}/admin/bulk-assign", json=bulk_assign_data)
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('ok') and 'updated' in data and isinstance(data['updated'], int):
+                    if check_no_id_leak(data):
+                        print_result(True, f"Returns 200 with ok=true, updated={data['updated']}, no _id leaks")
+                        passed_count += 1
+                    else:
+                        print_result(False, "Response contains MongoDB _id leak")
+                else:
+                    print_result(False, f"Response missing ok or updated: {data}")
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST 6b: POST /api/admin/bulk-assign with empty clientIds
+        # ============================================================
+        test_count += 1
+        print_test("6b", "POST /api/admin/bulk-assign with clientIds=[] (should return 400)")
+        
+        try:
+            bulk_assign_data = {
+                "clientIds": [],
+                "trainerId": admin_id
+            }
+            resp = admin_session.post(f"{BASE_URL}/admin/bulk-assign", json=bulk_assign_data)
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:500]}")
+            
+            if resp.status_code == 400:
+                data = resp.json()
+                if 'error' in data:
+                    print_result(True, f"Returns 400 with error message: {data['error']}")
+                    passed_count += 1
+                else:
+                    print_result(False, f"400 response missing error field: {data}")
+            else:
+                print_result(False, f"Expected 400, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # AUTHORIZATION TESTS: Register a normal member and test access
+        # ============================================================
+        print_test("AUTH-SETUP", "Register a normal member for authorization tests")
+        
+        timestamp = datetime.now().timestamp()
+        member_username = f"testmember_{timestamp}"
+        member_email = f"testmember_{timestamp}@test.com"
+        member_password = "testpass123"
+        
+        try:
+            resp = member_session.post(f"{BASE_URL}/auth/register", json={
+                "username": member_username,
+                "email": member_email,
+                "password": member_password
+            })
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('user', {}).get('role') == 'member':
+                    print_result(True, f"Member registered successfully: {member_username}")
+                else:
+                    print_result(False, f"Member registration returned wrong role: {data.get('user', {}).get('role')}")
+            else:
+                print_result(False, f"Member registration failed with status {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-1: Member calls GET /api/trainer/activity (should be 403)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-1", "Member GET /api/trainer/activity (should be 403)")
+        
+        try:
+            resp = member_session.get(f"{BASE_URL}/trainer/activity")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 403:
+                print_result(True, "Member correctly denied with 403")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 403, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-2: Member calls GET /api/admin/analytics (should be 403)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-2", "Member GET /api/admin/analytics (should be 403)")
+        
+        try:
+            resp = member_session.get(f"{BASE_URL}/admin/analytics")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 403:
+                print_result(True, "Member correctly denied with 403")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 403, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-3: Member calls GET /api/admin/revenue (should be 403)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-3", "Member GET /api/admin/revenue (should be 403)")
+        
+        try:
+            resp = member_session.get(f"{BASE_URL}/admin/revenue")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 403:
+                print_result(True, "Member correctly denied with 403")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 403, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-4: Member calls PUT /api/admin/announcement (should be 403)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-4", "Member PUT /api/admin/announcement (should be 403)")
+        
+        try:
+            resp = member_session.put(f"{BASE_URL}/admin/announcement", json={
+                "enabled": True,
+                "message": "Test"
+            })
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 403:
+                print_result(True, "Member correctly denied with 403")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 403, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-5: Member calls POST /api/admin/bulk-assign (should be 403)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-5", "Member POST /api/admin/bulk-assign (should be 403)")
+        
+        try:
+            resp = member_session.post(f"{BASE_URL}/admin/bulk-assign", json={
+                "clientIds": [client_id],
+                "trainerId": admin_id
+            })
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 403:
+                print_result(True, "Member correctly denied with 403")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 403, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-6: Anonymous/Member calls GET /api/announcement (should be 200 - public)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-6", "Anonymous GET /api/announcement (should be 200 - public)")
+        
+        try:
+            resp = requests.get(f"{BASE_URL}/announcement")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 200:
+                print_result(True, "Anonymous user can access public announcement endpoint")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+        # ============================================================
+        # TEST AUTH-7: Member calls GET /api/announcement (should be 200 - public)
+        # ============================================================
+        test_count += 1
+        print_test("AUTH-7", "Member GET /api/announcement (should be 200 - public)")
+        
+        try:
+            resp = member_session.get(f"{BASE_URL}/announcement")
+            print(f"Status: {resp.status_code}")
+            print(f"Response: {resp.text[:200]}")
+            
+            if resp.status_code == 200:
+                print_result(True, "Member can access public announcement endpoint")
+                passed_count += 1
+            else:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+        except Exception as e:
+            print_result(False, f"Exception: {e}")
+        
+    except Exception as e:
+        print(f"\n❌ FATAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    
+    # ============================================================
+    # SUMMARY
+    # ============================================================
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    print(f"Total tests: {test_count}")
+    print(f"Passed: {passed_count}")
+    print(f"Failed: {test_count - passed_count}")
+    print(f"Success rate: {(passed_count/test_count*100):.1f}%")
+    
+    if passed_count == test_count:
+        print("\n✅ ALL TESTS PASSED!")
+        sys.exit(0)
     else:
-        log_test("Member GET /trainer/client-tracker", False, f"Expected 403, got {response.status_code}")
-except Exception as e:
-    log_test("Member GET /trainer/client-tracker", False, f"Exception: {str(e)}")
+        print(f"\n❌ {test_count - passed_count} TEST(S) FAILED")
+        sys.exit(1)
 
-# Test 15: Member tries POST /api/trainer/push-macros
-print("\n[TEST 15] Member tries POST /api/trainer/push-macros")
-try:
-    response = member_session.post(
-        f"{BASE_URL}/trainer/push-macros",
-        json={
-            "clientId": client_id,
-            "goal": {"calories": 2000, "protein": 150, "carbs": 200, "fat": 60}
-        },
-        timeout=10
-    )
-    if response.status_code == 403:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("Member POST /trainer/push-macros", True, "Returns 403 (Forbidden)")
-        else:
-            log_test("Member POST /trainer/push-macros", False, "Response contains MongoDB _id")
-    else:
-        log_test("Member POST /trainer/push-macros", False, f"Expected 403, got {response.status_code}")
-except Exception as e:
-    log_test("Member POST /trainer/push-macros", False, f"Exception: {str(e)}")
-
-# Test 16: Member tries POST /api/trainer/broadcast
-print("\n[TEST 16] Member tries POST /api/trainer/broadcast")
-try:
-    response = member_session.post(
-        f"{BASE_URL}/trainer/broadcast",
-        json={"body": "Test message"},
-        timeout=10
-    )
-    if response.status_code == 403:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("Member POST /trainer/broadcast", True, "Returns 403 (Forbidden)")
-        else:
-            log_test("Member POST /trainer/broadcast", False, "Response contains MongoDB _id")
-    else:
-        log_test("Member POST /trainer/broadcast", False, f"Expected 403, got {response.status_code}")
-except Exception as e:
-    log_test("Member POST /trainer/broadcast", False, f"Exception: {str(e)}")
-
-# Test 17: Member tries GET /api/trainer/client-notes
-print("\n[TEST 17] Member tries GET /api/trainer/client-notes")
-try:
-    response = member_session.get(
-        f"{BASE_URL}/trainer/client-notes",
-        params={"clientId": client_id},
-        timeout=10
-    )
-    if response.status_code == 403:
-        data = response.json()
-        if check_no_mongo_id(data):
-            log_test("Member GET /trainer/client-notes", True, "Returns 403 (Forbidden)")
-        else:
-            log_test("Member GET /trainer/client-notes", False, "Response contains MongoDB _id")
-    else:
-        log_test("Member GET /trainer/client-notes", False, f"Expected 403, got {response.status_code}")
-except Exception as e:
-    log_test("Member GET /trainer/client-notes", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# FINAL SUMMARY
-# ============================================================================
-print("\n" + "=" * 80)
-print("TEST SUMMARY")
-print("=" * 80)
-print(f"Total Tests: {total_tests}")
-print(f"Passed: {passed_tests}")
-print(f"Failed: {total_tests - passed_tests}")
-print(f"Success Rate: {(passed_tests/total_tests*100):.1f}%")
-print("=" * 80)
-
-# Print detailed results
-print("\nDETAILED RESULTS:")
-for i, result in enumerate(test_results, 1):
-    status = "✅" if result["passed"] else "❌"
-    print(f"{i}. {status} {result['test']}")
-    if result["details"]:
-        print(f"   {result['details']}")
-
-# Check for 500 errors
-print("\n" + "=" * 80)
-print("ADDITIONAL CHECKS:")
-print("=" * 80)
-print("✓ No 500 errors encountered")
-print("✓ No MongoDB _id fields leaked in responses")
-
-# Exit with appropriate code
-sys.exit(0 if passed_tests == total_tests else 1)
+if __name__ == "__main__":
+    main()

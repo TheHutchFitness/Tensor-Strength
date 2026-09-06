@@ -59,6 +59,7 @@ function bestE1RM(sets: { weight: string; reps: string }[]): number {
 
 export default function WorkoutLog() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [prCelebration, setPrCelebration] = useState<{ name: string; e1rm: number; prev: number }[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
@@ -404,6 +405,23 @@ export default function WorkoutLog() {
       .filter((e) => e.name.trim() || e.sets.some((st) => st.weight || st.reps))
       .map((e) => ({ ...e, sets: e.sets.filter((st) => st.weight || st.reps) }));
     if (clean.length === 0) return;
+    // Detect estimated-1RM PRs: a lift the athlete has done before and just beat.
+    const priorBest: Record<string, number> = {};
+    for (const pw of workouts) {
+      for (const ex of pw.exercises) {
+        const e = bestE1RM(ex.sets);
+        const k = ex.name.trim().toLowerCase();
+        if (e > (priorBest[k] || 0)) priorBest[k] = e;
+      }
+    }
+    const prs: { name: string; e1rm: number; prev: number }[] = [];
+    for (const ex of clean) {
+      const k = ex.name.trim().toLowerCase();
+      const e = bestE1RM(ex.sets);
+      if (e > 0 && priorBest[k] > 0 && e > priorBest[k]) {
+        prs.push({ name: ex.name.trim(), e1rm: e, prev: priorBest[k] });
+      }
+    }
     const w: Workout = {
       id: uid(),
       date: sessionDate || new Date().toLocaleDateString(),
@@ -429,6 +447,7 @@ export default function WorkoutLog() {
     setSessionDate("");
     setActiveSplitId(null);
     setCurrentTemplateId(null);
+    if (prs.length) setPrCelebration(prs);
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 2500);
   }
@@ -499,6 +518,27 @@ export default function WorkoutLog() {
 
   return (
     <div className="grid gap-8">
+      {prCelebration.length > 0 && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-6" onClick={() => setPrCelebration([])}>
+          <div className="relative border-2 border-electric bg-[#0c0630] p-8 max-w-sm w-full text-center shadow-2xl shadow-electric/30" onClick={(e) => e.stopPropagation()}>
+            <p className="text-5xl mb-2">🎉</p>
+            <p className="glow font-display uppercase tracking-[0.2em] text-electric text-2xl">New PR!</p>
+            <p className="text-bone/60 text-sm mt-1 mb-4">You beat your best estimated 1-rep max.</p>
+            <div className="grid gap-2">
+              {prCelebration.map((p) => (
+                <div key={p.name} className="border border-electric/40 bg-electric/5 py-3">
+                  <p className="font-display uppercase tracking-wider text-bone">{p.name}</p>
+                  <p className="font-display text-3xl text-electric">{p.e1rm} <span className="text-base text-bone/50">lb</span></p>
+                  <p className="text-[11px] uppercase tracking-wider text-bone/50">was {p.prev} lb · +{p.e1rm - p.prev} lb</p>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setPrCelebration([])} className="mt-5 font-display uppercase tracking-wider text-sm bg-electric text-ink px-6 py-2.5 hover:bg-bone transition-colors">
+              Let&apos;s go
+            </button>
+          </div>
+        </div>
+      )}
       {/* YOUR TEMPLATES */}
       {templates.length > 0 && (
         <div>
