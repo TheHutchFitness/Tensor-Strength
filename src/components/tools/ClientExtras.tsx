@@ -2,12 +2,138 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Tab = "bodyweight" | "habits" | "timer" | "plate";
+type Tab = "records" | "calendar" | "bodyweight" | "habits" | "deload" | "warmup" | "timer" | "plate";
 const card = "border border-bone/15 bg-ink/20 p-5";
 const label = "block text-[11px] uppercase tracking-wider text-bone/50 mb-1 font-display";
 const input = "w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none min-w-0";
 const btn = "font-display uppercase tracking-wider text-sm bg-electric text-ink px-5 py-2.5 hover:bg-bone transition-colors disabled:opacity-50";
 const ghost = "font-display uppercase tracking-wider text-xs border border-bone/25 text-bone/70 px-4 py-2 hover:border-electric hover:text-electric transition-colors";
+
+const WORKOUT_KEY = "hutch-workouts";
+const e1rm = (w: number, r: number) => (w > 0 && r > 0 ? Math.round(w * (1 + r / 30)) : 0);
+function loadWorkouts(): any[] {
+  try { const s = localStorage.getItem(WORKOUT_KEY); return s ? JSON.parse(s) : []; } catch { return []; }
+}
+
+/* ---------- Personal Records Board ---------- */
+function Records() {
+  const [rows, setRows] = useState<{ name: string; e1rm: number; date: string }[]>([]);
+  useEffect(() => {
+    const best: Record<string, { e1rm: number; date: string }> = {};
+    for (const w of loadWorkouts()) {
+      for (const ex of w.exercises || []) {
+        const e = (ex.sets || []).reduce((m: number, s: any) => Math.max(m, e1rm(parseFloat(s.weight), parseFloat(s.reps))), 0);
+        const k = (ex.name || "").trim();
+        if (k && e > (best[k]?.e1rm || 0)) best[k] = { e1rm: e, date: w.date };
+      }
+    }
+    setRows(Object.entries(best).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.e1rm - a.e1rm));
+  }, []);
+  if (!rows.length) return <p className="text-bone/50 text-sm">Log some workouts and your best estimated 1RM per lift shows up here.</p>;
+  return (
+    <div className={card + " overflow-x-auto"}>
+      <table className="w-full text-sm">
+        <thead><tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15"><th className="text-left py-2">Lift</th><th className="text-right py-2">Est. 1RM</th><th className="text-right py-2">Set on</th></tr></thead>
+        <tbody>{rows.map((r) => (<tr key={r.name} className="border-b border-bone/5"><td className="py-2.5 font-display uppercase tracking-wider text-bone">{r.name}</td><td className="text-right font-display text-electric">{r.e1rm} lb</td><td className="text-right text-bone/50 text-xs">{r.date}</td></tr>))}</tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ---------- Consistency Calendar ---------- */
+function Calendar() {
+  const days = useMemo(() => {
+    const set = new Set<string>();
+    for (const w of loadWorkouts()) { const d = new Date(w.date); if (!isNaN(d.getTime())) set.add(d.toISOString().slice(0, 10)); }
+    const out: { key: string; on: boolean }[] = [];
+    const today = new Date();
+    for (let i = 83; i >= 0; i--) { const d = new Date(today); d.setDate(d.getDate() - i); const key = d.toISOString().slice(0, 10); out.push({ key, on: set.has(key) }); }
+    return out;
+  }, []);
+  const total = days.filter((d) => d.on).length;
+  // current streak
+  let streak = 0; for (let i = days.length - 1; i >= 0; i--) { if (days[i].on) streak++; else break; }
+  return (
+    <div className="grid gap-4 max-w-lg">
+      <div className="flex gap-6">
+        <div className={card + " flex-1 text-center"}><p className="text-3xl font-display text-electric">{total}</p><p className="text-[10px] uppercase tracking-wider text-bone/50">Sessions (12 wks)</p></div>
+        <div className={card + " flex-1 text-center"}><p className="text-3xl font-display text-electric">{streak}🔥</p><p className="text-[10px] uppercase tracking-wider text-bone/50">Current streak</p></div>
+      </div>
+      <div className={card}>
+        <div className="grid grid-cols-[repeat(12,1fr)] gap-1">
+          {days.map((d) => (<div key={d.key} title={d.key} className={"aspect-square " + (d.on ? "bg-electric" : "bg-bone/10")} />))}
+        </div>
+        <p className="text-[10px] uppercase tracking-wider text-bone/40 mt-2">Each square = a day · bright = you trained</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Deload / Readiness Check ---------- */
+function Deload() {
+  const q = [
+    { k: "sleep", label: "Sleep quality" },
+    { k: "soreness", label: "Muscle soreness" },
+    { k: "energy", label: "Energy / motivation" },
+    { k: "joints", label: "Joint / niggle pain" },
+  ];
+  const [v, setV] = useState<Record<string, number>>({ sleep: 3, soreness: 3, energy: 3, joints: 3 });
+  // higher soreness/joints = worse, so invert those
+  const score = v.sleep + v.energy + (6 - v.soreness) + (6 - v.joints); // out of 20
+  const rec = score >= 16 ? { t: "Green — push hard", c: "text-electric" } : score >= 11 ? { t: "Amber — train, but cap top sets", c: "text-amber-400" } : { t: "Red — deload or active recovery", c: "text-red-400" };
+  return (
+    <div className="grid gap-4 max-w-lg">
+      {q.map((item) => (
+        <div key={item.k}>
+          <label className={label}>{item.label} <span className="text-bone/30">({v[item.k]}/5)</span></label>
+          <input type="range" min={1} max={5} value={v[item.k]} onChange={(e) => setV((s) => ({ ...s, [item.k]: parseInt(e.target.value) }))} className="w-full accent-[#00A8FF]" />
+        </div>
+      ))}
+      <div className={card + " text-center"}>
+        <p className="text-[10px] uppercase tracking-wider text-bone/50">Readiness</p>
+        <p className="text-4xl font-display text-electric">{score}<span className="text-lg text-bone/40">/20</span></p>
+        <p className={"font-display uppercase tracking-wider text-sm mt-1 " + rec.c}>{rec.t}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Warm-up Generator ---------- */
+function Warmup() {
+  const [lift, setLift] = useState("Squat");
+  const [top, setTop] = useState("315");
+  const sets = useMemo(() => {
+    const w = parseFloat(top) || 0; if (!w) return [];
+    const round = (x: number) => Math.round(x / 5) * 5;
+    return [
+      { pct: "Empty bar", load: "bar", reps: 8 },
+      { pct: "40%", load: round(w * 0.4), reps: 5 },
+      { pct: "60%", load: round(w * 0.6), reps: 3 },
+      { pct: "75%", load: round(w * 0.75), reps: 2 },
+      { pct: "90%", load: round(w * 0.9), reps: 1 },
+    ];
+  }, [top]);
+  return (
+    <div className="grid gap-4 max-w-lg">
+      <div className="grid grid-cols-2 gap-2">
+        <div><label className={label}>Lift</label><input className={input} value={lift} onChange={(e) => setLift(e.target.value)} /></div>
+        <div><label className={label}>Top working set (lb)</label><input className={input} inputMode="decimal" value={top} onChange={(e) => setTop(e.target.value)} /></div>
+      </div>
+      <div className={card}>
+        <p className="font-display uppercase tracking-wider text-bone/60 text-xs mb-3">Ramp-up for {lift}</p>
+        <div className="grid gap-2">
+          {sets.map((s, i) => (
+            <div key={i} className="flex items-center justify-between border-b border-bone/5 py-2">
+              <span className="text-bone/60 text-sm">{s.pct}</span>
+              <span className="font-display text-bone">{s.load === "bar" ? "Empty bar" : `${s.load} lb`} × {s.reps}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] text-bone/40 mt-3">Add 5–8 min general cardio + dynamic mobility for the working muscles before the bar.</p>
+      </div>
+    </div>
+  );
+}
 
 /* ---------- Bodyweight & measurements ---------- */
 function Bodyweight() {
@@ -192,10 +318,14 @@ function Plate() {
 }
 
 export default function ClientExtras() {
-  const [t, setT] = useState<Tab>("bodyweight");
+  const [t, setT] = useState<Tab>("records");
   const tabs: { id: Tab; label: string }[] = [
+    { id: "records", label: "PR Board" },
+    { id: "calendar", label: "Calendar" },
     { id: "bodyweight", label: "Bodyweight" },
     { id: "habits", label: "Habits & Streaks" },
+    { id: "deload", label: "Readiness" },
+    { id: "warmup", label: "Warm-up" },
     { id: "timer", label: "Rest Timer" },
     { id: "plate", label: "Plate & Convert" },
   ];
@@ -206,8 +336,12 @@ export default function ClientExtras() {
           <button key={x.id} onClick={() => setT(x.id)} className={"px-4 py-2 font-display uppercase tracking-wider text-xs transition-colors " + (t === x.id ? "bg-electric text-ink" : "text-bone/60 hover:text-electric border border-bone/20")}>{x.label}</button>
         ))}
       </div>
+      {t === "records" && <Records />}
+      {t === "calendar" && <Calendar />}
       {t === "bodyweight" && <Bodyweight />}
       {t === "habits" && <Habits />}
+      {t === "deload" && <Deload />}
+      {t === "warmup" && <Warmup />}
       {t === "timer" && <Timer />}
       {t === "plate" && <Plate />}
     </div>
