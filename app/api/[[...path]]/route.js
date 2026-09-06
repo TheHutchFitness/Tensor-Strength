@@ -44,13 +44,13 @@ async function saveUploadBuffer(db, buffer, ext, mime, ownerId, visibility) {
       ContentLength: buffer.length,
       CacheControl: 'public, max-age=31536000, immutable',
     }))
-    try {
-      await db.collection('uploads').updateOne(
-        { key },
-        { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', mime: mime || '', createdAt: new Date() } },
-        { upsert: true }
-      )
-    } catch (e) { console.error('upload ACL write failed:', e?.message) }
+    // Write the ACL doc BEFORE returning the URL. If this fails we throw so the
+    // upload fails rather than leaving an object with no access-control record.
+    await db.collection('uploads').updateOne(
+      { key },
+      { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', mime: mime || '', createdAt: new Date() } },
+      { upsert: true }
+    )
     return '/api/files/' + key
   }
   const dir = process.cwd() + '/public/uploads'
@@ -84,9 +84,12 @@ async function connectToMongo() {
 }
 
 const COOKIE_NAME = 'ts_token'
-const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret-change-me')
+// No insecure fallback: a missing JWT_SECRET must fail closed (tokens become
+// unforgeable/invalid) rather than fall back to a publicly-known default.
+const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || '')
 
 async function signToken(payload) {
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured')
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -141,8 +144,14 @@ async function ensureAdmin(db) {
   const existing = await db.collection('users').findOne({ role: 'admin' })
   if (existing) return
   const username = (process.env.ADMIN_USERNAME || 'hutch').toLowerCase()
-  const password = process.env.ADMIN_PASSWORD || 'admin1234'
+  const password = process.env.ADMIN_PASSWORD
   const email = process.env.ADMIN_EMAIL || 'admin@tensorstrength.com'
+  // Never seed a guessable default admin password. If it's not configured,
+  // skip seeding rather than create a weak, publicly-known credential.
+  if (!password) {
+    console.error('ADMIN_PASSWORD not set — skipping admin seed.')
+    return
+  }
   const passwordHash = await bcrypt.hash(password, 10)
   await db.collection('users').insertOne({
     id: uuidv4(),
@@ -151,6 +160,8 @@ async function ensureAdmin(db) {
     passwordHash,
     role: 'admin',
     portalAccess: true,
+    emailVerified: true,
+    authProvider: 'local',
     createdAt: new Date(),
   })
 }
@@ -295,7 +306,11 @@ async function getStripeSession(sessionId) {
 
 // Helper function to handle CORS
 function handleCORS(response) {
-  response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
+  // Pin the allowed origin to our own app origin — a wildcard '*' combined with
+  // Allow-Credentials is invalid in browsers and overly permissive.
+  const allowOrigin = process.env.NEXT_PUBLIC_BASE_URL || process.env.CORS_ORIGINS || '*'
+  response.headers.set('Access-Control-Allow-Origin', allowOrigin)
+  response.headers.set('Vary', 'Origin')
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   response.headers.set('Access-Control-Allow-Credentials', 'true')
@@ -336,10 +351,13 @@ async function handleRoute(request, { params }) {
       const me = await getCurrentUser(request, db)
       if (!me) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const meta = await db.collection('uploads').findOne({ key })
-      if (meta && meta.visibility === 'private') {
-        let allowed = me.role === 'admin' || me.id === meta.ownerId
-        if (!allowed && meta.ownerId) {
-          const owner = await db.collection('users').findOne({ id: meta.ownerId })
+      // Deny-by-default: anything that is not explicitly marked 'public' is private.
+      // (A missing ACL doc is treated as private and only the admin may read it.)
+      const isPublic = !!meta && meta.visibility === 'public'
+      if (!isPublic) {
+        let allowed = me.role === 'admin' || (!!meta && me.id === meta.ownerId)
+        if (!allowed && meta && meta.ownerId) {
+          const owner = await db.collection('users').findOne({ id: String(meta.ownerId) })
           // Allow the two parties of an assigned trainer<->client relationship.
           if (owner && (owner.assignedTrainerId === me.id || me.assignedTrainerId === owner.id)) {
             allowed = true
@@ -347,14 +365,36 @@ async function handleRoute(request, { params }) {
         }
         if (!allowed) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
+      // Never trust the stored/client Content-Type: derive a safe type from the
+      // (allowlisted) extension and force nosniff so a mislabelled file can never
+      // execute as HTML/JS on our own origin (SEC-001).
+      const ext = (key.split('.').pop() || '').toLowerCase()
+      const TYPE_MAP = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+        gif: 'image/gif', heic: 'image/heic', heif: 'image/heif',
+        mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', m4v: 'video/x-m4v',
+        pdf: 'application/pdf',
+        doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xls: 'application/vnd.ms-excel',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        csv: 'text/csv', txt: 'text/plain',
+      }
+      const INLINE_OK = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'heic', 'heif', 'mp4', 'mov', 'webm', 'm4v', 'pdf'])
+      const safeType = TYPE_MAP[ext]
+      if (!safeType) return handleCORS(NextResponse.json({ error: 'Unsupported file type' }, { status: 400 }))
+      const baseName = (key.split('/').pop() || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const disposition = (INLINE_OK.has(ext) ? 'inline' : 'attachment') + '; filename="' + baseName + '"'
       try {
         const obj = await getS3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }))
         const bytes = await obj.Body.transformToByteArray()
         return new NextResponse(Buffer.from(bytes), {
           status: 200,
           headers: {
-            'Content-Type': obj.ContentType || 'application/octet-stream',
+            'Content-Type': safeType,
             'Content-Length': String(bytes.length),
+            'Content-Disposition': disposition,
+            'X-Content-Type-Options': 'nosniff',
             'Cache-Control': 'private, max-age=31536000, immutable',
           },
         })
@@ -391,6 +431,10 @@ async function handleRoute(request, { params }) {
         passwordHash,
         role: 'member',
         portalAccess: false,
+        // Local sign-ups are NOT email-verified (we don't own the inbox). This is
+        // used to safely resolve a later Google sign-in for the same address.
+        emailVerified: false,
+        authProvider: 'local',
         demoSource: (body.demoSource ? String(body.demoSource).slice(0, 80) : null),
         createdAt: new Date(),
       }
@@ -407,7 +451,7 @@ async function handleRoute(request, { params }) {
       const user = await db.collection('users').findOne({
         $or: [{ username: identifier }, { email: identifier }],
       })
-      if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
         return handleCORS(NextResponse.json(
           { error: 'Invalid username or password.' },
           { status: 401 }
@@ -465,16 +509,29 @@ async function handleRoute(request, { params }) {
           portalAccess: false,
           isTrainer: false,
           authProvider: 'google',
+          emailVerified: true,       // Google verified this address
           picture,
           createdAt: new Date(),
         }
         await db.collection('users').insertOne(user)
       } else {
-        // Keep provider metadata fresh; never overwrite role/portalAccess/isTrainer.
-        await db.collection('users').updateOne(
-          { id: user.id },
-          { $set: { authProvider: user.authProvider || 'google', picture: picture || user.picture || '', lastLoginAt: new Date() } }
-        )
+        // An account already exists for this Google-verified email. If it was a
+        // local (password) account that we never verified, the password could
+        // have been set by an attacker who pre-registered the victim's email
+        // (account pre-hijacking, SEC-002). Google proves ownership here, so we
+        // adopt the account and INVALIDATE any pre-existing local password.
+        const takeover = user.authProvider !== 'google' && !user.emailVerified
+        const setFields = {
+          authProvider: 'google',
+          emailVerified: true,
+          picture: picture || user.picture || '',
+          lastLoginAt: new Date(),
+        }
+        const update = { $set: setFields }
+        if (takeover && user.passwordHash) {
+          update.$unset = { passwordHash: '' }
+        }
+        await db.collection('users').updateOne({ id: user.id }, update)
         user = await db.collection('users').findOne({ id: user.id })
       }
       const token = await signToken({ id: user.id, role: user.role })
@@ -735,6 +792,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
       const body = await request.json()
+      body.id = typeof body.id === 'string' ? body.id : ''
       if (!body.id) {
         return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
       }
@@ -783,6 +841,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
       const body = await request.json()
+      body.id = typeof body.id === 'string' ? body.id : ''
       if (!body.id) {
         return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
       }
@@ -801,11 +860,19 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
       const body = await request.json()
+      // Whitelist only the fields the check-in form submits — never spread raw
+      // body (would let a member forge userId / seenByTrainer / trainerNote).
+      const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '')
       const checkin = {
         id: uuidv4(),
         userId: user.id,
         username: user.username,
-        ...body,
+        week: str(body.week, 80),
+        readiness: str(body.readiness, 200),
+        wins: str(body.wins, 4000),
+        struggles: str(body.struggles, 4000),
+        seenByTrainer: false,
+        trainerNote: '',
         createdAt: new Date(),
       }
       await db.collection('checkins').insertOne(checkin)
@@ -905,7 +972,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
       const body = await request.json()
-      if (!body.checkinId) {
+      if (!body.checkinId || typeof body.checkinId !== 'string') {
         return handleCORS(NextResponse.json({ error: 'checkinId is required' }, { status: 400 }))
       }
       const ci = await db.collection('checkins').findOne({ id: body.checkinId })
@@ -1239,7 +1306,7 @@ async function handleRoute(request, { params }) {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const body = await request.json()
-      const toUserId = body.toUserId
+      const toUserId = typeof body.toUserId === 'string' ? body.toUserId : ''
       const text = (body.body || '').trim()
       if (!toUserId || (!text && !body.mediaUrl)) {
         return handleCORS(NextResponse.json({ error: 'A recipient and a message or media are required.' }, { status: 400 }))
@@ -1895,6 +1962,10 @@ async function handleRoute(request, { params }) {
         if (!isImg && !isVid) {
           return handleCORS(NextResponse.json({ error: 'Only image or video files are allowed' }, { status: 400 }))
         }
+        // SVG can carry scripts — never accept it even though it is an image/* type.
+        if (mime === 'image/svg+xml') {
+          return handleCORS(NextResponse.json({ error: 'SVG images are not allowed.' }, { status: 400 }))
+        }
         const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }
         const ext = extMap[mime] || (isImg ? 'jpg' : 'mp4')
         const buffer = Buffer.from(await file.arrayBuffer())
@@ -1956,6 +2027,7 @@ async function handleRoute(request, { params }) {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const body = await request.json()
+      body.postId = typeof body.postId === 'string' ? body.postId : ''
       if (!body.postId || !(body.body?.trim() || body.mediaUrl)) {
         return handleCORS(NextResponse.json({ error: 'A reply message or media is required' }, { status: 400 }))
       }
@@ -1981,6 +2053,7 @@ async function handleRoute(request, { params }) {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const body = await request.json()
+      body.postId = typeof body.postId === 'string' ? body.postId : ''
       const post = await db.collection('forum_posts').findOne({ id: body.postId })
       if (!post) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
       const liked = (post.likes || []).includes(user.id)
@@ -1996,6 +2069,7 @@ async function handleRoute(request, { params }) {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const body = await request.json()
+      body.id = typeof body.id === 'string' ? body.id : ''
       const post = await db.collection('forum_posts').findOne({ id: body.id })
       if (!post) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
       if (post.userId !== user.id && user.role !== 'admin') {
