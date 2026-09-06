@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { cloudSet } from "@/lib/cloud";
 
 type Sex = "male" | "female";
 type Goal = "cut" | "maintain" | "bulk";
@@ -169,9 +170,9 @@ export default function MacroCalculator() {
               type="button"
               onClick={() => {
                 try {
-                  localStorage.setItem(
+                  cloudSet(
                     "ts-nutrition-goal",
-                    JSON.stringify({ calories: result.calories, protein: result.protein, carbs: result.carbs, fat: result.fat })
+                    { calories: result.calories, protein: result.protein, carbs: result.carbs, fat: result.fat }
                   );
                   setSaved(true);
                   setTimeout(() => setSaved(false), 2500);
@@ -182,7 +183,7 @@ export default function MacroCalculator() {
               {saved ? "✓ Saved as tracker goals" : "Use as my tracker goals →"}
             </button>
             <p className="mt-2 text-[10px] uppercase tracking-wider text-bone/40 text-center">
-              Sets your Nutrition Tracker daily targets on this device.
+              Sets your Nutrition Tracker daily targets across your devices.
             </p>
           </>
         ) : (

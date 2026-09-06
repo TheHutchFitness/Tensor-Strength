@@ -97,6 +97,70 @@ async function deleteUpload(db, url) {
   await db.collection('uploads').deleteOne({ key }).catch(() => {})
 }
 
+// ---- Forum notifications & @mentions ----
+// Insert a notification for a recipient (skips self-notifications).
+async function pushNotification(db, { recipientId, actorId, actorName, type, postId, postTitle, replyId, snippet }) {
+  if (!recipientId || recipientId === actorId) return
+  await db.collection('forum_notifications').insertOne({
+    id: uuidv4(),
+    userId: recipientId,
+    actorId: actorId || null,
+    actorName: actorName || 'Someone',
+    type, // 'mention' | 'reply' | 'best-answer'
+    postId: postId || null,
+    postTitle: postTitle || '',
+    replyId: replyId || null,
+    snippet: (snippet || '').slice(0, 140),
+    read: false,
+    createdAt: new Date(),
+  }).catch(() => {})
+}
+
+// Scan free text for @mentions of known usernames (which may contain spaces) and
+// notify each mentioned member. Matching is case-insensitive and exact on the
+// stored username. Returns nothing; best-effort.
+async function notifyMentions(db, { text, actor, postId, postTitle, replyId }) {
+  if (!text || !text.includes('@')) return
+  const lower = text.toLowerCase()
+  const users = await db.collection('users').find({}, { projection: { id: 1, username: 1 } }).limit(500).toArray()
+  const seen = new Set()
+  for (const u of users) {
+    if (!u.username || u.id === actor?.id) continue
+    const token = ('@' + u.username).toLowerCase()
+    if (lower.includes(token) && !seen.has(u.id)) {
+      seen.add(u.id)
+      await pushNotification(db, {
+        recipientId: u.id,
+        actorId: actor?.id,
+        actorName: actor?.username,
+        type: 'mention',
+        postId, postTitle, replyId,
+        snippet: text,
+      })
+    }
+  }
+}
+
+// Toggle a single user's emoji reaction on a target document (post or reply).
+// Reactions are stored as { [emoji]: [userId, ...] } on the document.
+const ALLOWED_EMOJI = ['👍', '🔥', '💪', '👏', '😂', '❤️']
+async function toggleReaction(db, collection, targetId, emoji, userId) {
+  if (!ALLOWED_EMOJI.includes(emoji)) return null
+  const doc = await db.collection(collection).findOne({ id: targetId })
+  if (!doc) return null
+  const reactions = doc.reactions || {}
+  const arr = Array.isArray(reactions[emoji]) ? reactions[emoji] : []
+  if (arr.includes(userId)) {
+    reactions[emoji] = arr.filter((u) => u !== userId)
+    if (reactions[emoji].length === 0) delete reactions[emoji]
+  } else {
+    reactions[emoji] = [...arr, userId]
+  }
+  await db.collection(collection).updateOne({ id: targetId }, { $set: { reactions } })
+  return reactions
+}
+
+
 // MongoDB connection
 let client
 let db
@@ -146,7 +210,16 @@ async function verifyToken(token) {
 
 function publicUser(u) {
   if (!u) return null
-  const { _id, passwordHash, ...rest } = u
+  // Strip DB internals, the password hash, and coach-only/internal fields that
+  // must never be returned to the account owner (e.g. private notes a trainer
+  // writes ABOUT a client live on the client's user doc).
+  const {
+    _id,
+    passwordHash,
+    coachNotes,
+    coachNotesUpdatedAt,
+    ...rest
+  } = u
   return rest
 }
 
@@ -732,6 +805,42 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, workouts, templates }))
     }
 
+    // ---------------- GENERIC PER-USER CLOUD STORE ----------------
+    // A namespaced key/value store scoped to the logged-in user so client tools
+    // (nutrition log, PRs, bodyweight, habits, custom foods, coach templates, etc.)
+    // persist server-side and follow the member across devices. localStorage is
+    // used only as a fast local cache on the client.
+    if (route === '/client/store' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const key = request.nextUrl.searchParams.get('key')
+      if (key) {
+        const doc = await db.collection('user_store').findOne({ userId: user.id, key })
+        return handleCORS(NextResponse.json({ found: !!doc, value: doc ? doc.value : null }))
+      }
+      const docs = await db.collection('user_store').find({ userId: user.id }).limit(200).toArray()
+      const data = {}
+      for (const d of docs) data[d.key] = d.value
+      return handleCORS(NextResponse.json({ data }))
+    }
+    if (route === '/client/store' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const body = await request.json()
+      const key = typeof body.key === 'string' ? body.key.slice(0, 120) : ''
+      if (!key) return handleCORS(NextResponse.json({ error: 'A key is required' }, { status: 400 }))
+      // Guard against oversized payloads (protect the 16MB doc limit).
+      let size = 0
+      try { size = JSON.stringify(body.value ?? null).length } catch { size = 0 }
+      if (size > 2_000_000) return handleCORS(NextResponse.json({ error: 'Value too large' }, { status: 413 }))
+      await db.collection('user_store').updateOne(
+        { userId: user.id, key },
+        { $set: { userId: user.id, key, value: body.value ?? null, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
     // ---------------- COACH ASSIGN TEMPLATE (trainer -> client) ----------------
     // Trainer (or admin) pushes a template into a client's tracker.
     if (route === '/trainer/assign-template' && method === 'POST') {
@@ -826,7 +935,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
       const users = await db.collection('users')
-        .find({})
+        .find({}, { projection: { passwordHash: 0, coachNotes: 0, coachNotesUpdatedAt: 0 } })
         .sort({ createdAt: -1 })
         .limit(1000)
         .toArray()
@@ -1136,7 +1245,7 @@ async function handleRoute(request, { params }) {
             .filter((e) => e.name)
         : []
       // clientId null => broadcast to all of this trainer's clients
-      let clientId = body.clientId || null
+      let clientId = typeof body.clientId === 'string' ? body.clientId : null
       if (clientId) {
         const c = await db.collection('users').findOne({ id: clientId })
         if (!c || c.assignedTrainerId !== user.id) {
@@ -1213,7 +1322,7 @@ async function handleRoute(request, { params }) {
             f: Number(i.f) || 0,
           })).filter((i) => i.name)
         : []
-      let clientId = b.clientId || null
+      let clientId = typeof b.clientId === 'string' ? b.clientId : null
       if (clientId) {
         const c = await db.collection('users').findOne({ id: clientId })
         if (!c || c.assignedTrainerId !== user.id) {
@@ -1790,7 +1899,7 @@ async function handleRoute(request, { params }) {
       if (!body.url || !body.name) {
         return handleCORS(NextResponse.json({ error: 'A file url and name are required.' }, { status: 400 }))
       }
-      let clientId = body.clientId || null
+      let clientId = typeof body.clientId === 'string' ? body.clientId : null
       if (clientId) {
         const c = await db.collection('users').findOne({ id: clientId })
         if (!c || c.assignedTrainerId !== user.id) {
@@ -2359,6 +2468,7 @@ async function handleRoute(request, { params }) {
         createdAt: new Date(),
       }
       await db.collection('forum_posts').insertOne(post)
+      await notifyMentions(db, { text: post.title + ' ' + post.body, actor: user, postId: post.id, postTitle: post.title })
       const { _id, ...clean } = post
       return handleCORS(NextResponse.json({ post: clean }))
     }
@@ -2396,8 +2506,94 @@ async function handleRoute(request, { params }) {
       }
       await db.collection('forum_replies').insertOne(reply)
       await db.collection('forum_posts').updateOne({ id: body.postId }, { $inc: { replyCount: 1 } })
+      // Notify the original poster that someone replied, plus any @mentions.
+      await pushNotification(db, {
+        recipientId: post.userId,
+        actorId: user.id,
+        actorName: user.username,
+        type: 'reply',
+        postId: post.id,
+        postTitle: post.title,
+        replyId: reply.id,
+        snippet: reply.body,
+      })
+      await notifyMentions(db, { text: reply.body, actor: user, postId: post.id, postTitle: post.title, replyId: reply.id })
       const { _id, ...clean } = reply
       return handleCORS(NextResponse.json({ reply: clean }))
+    }
+
+    if (route === '/forum/best-answer' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const postId = typeof body.postId === 'string' ? body.postId : ''
+      const replyId = body.replyId === null ? null : (typeof body.replyId === 'string' ? body.replyId : '')
+      const post = await db.collection('forum_posts').findOne({ id: postId })
+      if (!post) return handleCORS(NextResponse.json({ error: 'Post not found' }, { status: 404 }))
+      // Only the original poster, a trainer, or an admin may mark the best answer.
+      if (post.userId !== user.id && !user.isTrainer && user.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      await db.collection('forum_posts').updateOne({ id: postId }, { $set: { bestAnswerId: replyId || null } })
+      // Notify the reply's author that their answer was marked as best.
+      if (replyId) {
+        const reply = await db.collection('forum_replies').findOne({ id: replyId })
+        if (reply) {
+          await pushNotification(db, {
+            recipientId: reply.userId,
+            actorId: user.id,
+            actorName: user.username,
+            type: 'best-answer',
+            postId,
+            postTitle: post.title,
+            replyId,
+            snippet: reply.body,
+          })
+        }
+      }
+      return handleCORS(NextResponse.json({ ok: true, bestAnswerId: replyId || null }))
+    }
+
+    if (route === '/forum/members' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const users = await db.collection('users').find({}, { projection: { username: 1, isTrainer: 1, role: 1 } }).limit(500).toArray()
+      const members = users
+        .filter((u) => u.username)
+        .map((u) => ({ username: u.username, isCoach: !!u.isTrainer || u.role === 'admin' }))
+      return handleCORS(NextResponse.json({ members }))
+    }
+
+    if (route === '/forum/notifications' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const items = await db.collection('forum_notifications')
+        .find({ userId: user.id }).sort({ createdAt: -1 }).limit(50).toArray()
+      const unread = items.filter((n) => !n.read).length
+      return handleCORS(NextResponse.json({ notifications: items.map(({ _id, ...n }) => n), unread }))
+    }
+
+    if (route === '/forum/notifications/read' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const filter = { userId: user.id }
+      if (typeof body.id === 'string' && body.id) filter.id = body.id
+      await db.collection('forum_notifications').updateMany(filter, { $set: { read: true } })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    if (route === '/forum/react' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const targetType = body.targetType === 'reply' ? 'reply' : 'post'
+      const targetId = typeof body.targetId === 'string' ? body.targetId : ''
+      const emoji = typeof body.emoji === 'string' ? body.emoji : ''
+      const collection = targetType === 'reply' ? 'forum_replies' : 'forum_posts'
+      const reactions = await toggleReaction(db, collection, targetId, emoji, user.id)
+      if (reactions === null) return handleCORS(NextResponse.json({ error: 'Invalid target or emoji' }, { status: 400 }))
+      return handleCORS(NextResponse.json({ reactions }))
     }
 
     if (route === '/forum/like' && method === 'POST') {

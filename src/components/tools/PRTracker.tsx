@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { estimateRank, type Sex } from "./rankEstimator";
+import { useCloudState } from "@/lib/cloud";
 
 type PR = {
   id: string;
@@ -30,31 +31,13 @@ function liftKey(name: string): string {
 }
 
 export default function PRTracker() {
-  const [prs, setPrs] = useState<PR[]>([]);
+  const [prs, save] = useCloudState<PR[]>(STORAGE_KEY, []);
   const [lift, setLift] = useState("Back Squat");
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("1");
   const [unit, setUnit] = useState<"lb" | "kg">("lb");
   const [date, setDate] = useState("");
-  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setPrs(JSON.parse(raw));
-      const p = localStorage.getItem(PROFILE_KEY);
-      if (p) setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(p) });
-    } catch {}
-  }, []);
-
-  function save(list: PR[]) {
-    setPrs(list);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  }
-  function saveProfile(p: Profile) {
-    setProfile(p);
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-  }
+  const [profile, saveProfile] = useCloudState<Profile>(PROFILE_KEY, DEFAULT_PROFILE);
 
   function add(e: React.FormEvent) {
     e.preventDefault();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useCloudState } from "@/lib/cloud";
 
 type Tab = "records" | "calendar" | "bodyweight" | "habits" | "deload" | "warmup" | "timer" | "plate";
 const card = "border border-bone/15 bg-ink/20 p-5";
@@ -138,12 +139,10 @@ function Warmup() {
 /* ---------- Bodyweight & measurements ---------- */
 function Bodyweight() {
   const KEY = "ts-bodyweight";
-  const [rows, setRows] = useState<{ date: string; weight: number; waist?: number }[]>([]);
+  const [rows, save] = useCloudState<{ date: string; weight: number; waist?: number }[]>(KEY, []);
   const [weight, setWeight] = useState("");
   const [waist, setWaist] = useState("");
 
-  useEffect(() => { try { const s = localStorage.getItem(KEY); if (s) setRows(JSON.parse(s)); } catch {} }, []);
-  const save = (next: any[]) => { setRows(next); localStorage.setItem(KEY, JSON.stringify(next)); };
   const add = () => {
     const w = parseFloat(weight); if (!w) return;
     const date = new Date().toISOString().slice(0, 10);
@@ -196,19 +195,11 @@ function Bodyweight() {
 /* ---------- Habit / streak tracker ---------- */
 function Habits() {
   const HK = "ts-habits", LK = "ts-habit-log";
-  const [habits, setHabits] = useState<string[]>([]);
-  const [log, setLog] = useState<Record<string, string[]>>({});
+  const [habits, saveH] = useCloudState<string[]>(HK, ["Hit protein goal", "10k steps", "8h sleep", "Water"]);
+  const [log, saveL] = useCloudState<Record<string, string[]>>(LK, {});
   const [name, setName] = useState("");
   const today = new Date().toISOString().slice(0, 10);
 
-  useEffect(() => {
-    try {
-      const h = localStorage.getItem(HK); if (h) setHabits(JSON.parse(h)); else setHabits(["Hit protein goal", "10k steps", "8h sleep", "Water"]);
-      const l = localStorage.getItem(LK); if (l) setLog(JSON.parse(l));
-    } catch {}
-  }, []);
-  const saveH = (n: string[]) => { setHabits(n); localStorage.setItem(HK, JSON.stringify(n)); };
-  const saveL = (n: Record<string, string[]>) => { setLog(n); localStorage.setItem(LK, JSON.stringify(n)); };
   const toggle = (h: string) => {
     const day = log[today] || [];
     const next = { ...log, [today]: day.includes(h) ? day.filter((x) => x !== h) : [...day, h] };

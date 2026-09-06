@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { exercises } from "@/data/exercises";
+import { useCloudState } from "@/lib/cloud";
 
 // All categories present in the data, plus "All" for no filter.
 const categories = ["All", ...Array.from(new Set(exercises.map((e) => e.category)))];
@@ -18,25 +19,14 @@ export default function ExerciseLibrary() {
   const [filter, setFilter] = useState<string>("All");
   const [query, setQuery] = useState<string>("");
   const [openName, setOpenName] = useState<string | null>(null);
-  const [faves, setFaves] = useState<string[]>([]);
+  const [faves, setFaves] = useCloudState<string[]>(FAVES_KEY, []);
   const [onlyFaves, setOnlyFaves] = useState<boolean>(false);
-
-  // Load favourites from localStorage on mount.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(FAVES_KEY);
-      if (raw) setFaves(JSON.parse(raw));
-    } catch {}
-  }, []);
 
   const toggleFave = (name: string) => {
     setFaves((prev) => {
       const next = prev.includes(name)
         ? prev.filter((n) => n !== name)
         : [...prev, name];
-      try {
-        localStorage.setItem(FAVES_KEY, JSON.stringify(next));
-      } catch {}
       return next;
     });
   };

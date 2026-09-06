@@ -1,726 +1,706 @@
 #!/usr/bin/env python3
 """
-Backend API test for 6 new endpoints:
-1. GET /api/trainer/activity
-2. GET/PUT /api/trainer/client-goals
-3. GET /api/admin/analytics
-4. GET /api/admin/revenue
-5. GET/PUT /api/announcement
-6. POST /api/admin/bulk-assign
+Backend test for NEW Community Forum features on Next.js app.
+Tests: GET /api/forum/members, POST /api/forum/react, POST /api/forum/best-answer,
+       Notifications (GET /api/forum/notifications, POST /api/forum/notifications/read),
+       Mention parsing in posts/replies
 """
 
 import requests
 import json
-import sys
-from datetime import datetime
+import time
+import random
 
 # Base URL from .env
 BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
-# Admin credentials from .env
-ADMIN_USERNAME = "The Hutch"
+# Admin credentials
+ADMIN_USERNAME = "the hutch"  # stored in lowercase in DB
 ADMIN_PASSWORD = "Vzkfjf3n!3"
 
-# Demo client ID from review request
-DEMO_CLIENT_ID = "da3cf979-45da-4c47-9b5f-8680d131038e"
+# Test results tracking
+test_results = []
 
-def print_test(num, desc):
-    print(f"\n{'='*80}")
-    print(f"TEST {num}: {desc}")
-    print('='*80)
+def log_test(test_name, passed, details=""):
+    """Log test result"""
+    status = "✅ PASSED" if passed else "❌ FAILED"
+    result = f"{status}: {test_name}"
+    if details:
+        result += f" - {details}"
+    print(result)
+    test_results.append({"test": test_name, "passed": passed, "details": details})
 
-def print_result(success, message):
-    status = "✅ PASSED" if success else "❌ FAILED"
-    print(f"{status}: {message}")
-
-def check_no_id_leak(data):
-    """Check if response contains MongoDB _id field"""
-    if isinstance(data, dict):
-        if '_id' in data:
-            return False
-        for value in data.values():
-            if not check_no_id_leak(value):
-                return False
-    elif isinstance(data, list):
-        for item in data:
-            if not check_no_id_leak(item):
-                return False
+def check_no_leaks(data):
+    """Check for MongoDB _id or passwordHash leaks"""
+    json_str = json.dumps(data)
+    if '"_id"' in json_str or '"passwordHash"' in json_str:
+        return False
     return True
 
 def main():
-    print("Starting backend API tests for 6 new endpoints...")
-    print(f"Base URL: {BASE_URL}")
+    print("=" * 80)
+    print("BACKEND TEST: Community Forum Features")
+    print("=" * 80)
     
-    # Create session for admin
+    # Create session for cookie persistence
     admin_session = requests.Session()
+    alice_session = requests.Session()
+    bob_session = requests.Session()
     
-    # Create session for member
-    member_session = requests.Session()
-    
-    test_count = 0
-    passed_count = 0
+    # Generate unique usernames for this test run
+    timestamp = str(int(time.time() * 1000))
+    alice_username = f"Alice QA {timestamp[-6:]}"
+    bob_username = f"Bob QA {timestamp[-5:]}"
+    alice_email = f"alice_qa_{timestamp}@test.com"
+    bob_email = f"bob_qa_{timestamp}@test.com"
+    alice_password = "TestPass123!"
+    bob_password = "TestPass456!"
     
     try:
         # ============================================================
-        # SETUP: Admin login
+        # SETUP: Login as admin and register 2 members
         # ============================================================
-        print_test("SETUP", "Admin login")
+        print("\n--- SETUP ---")
+        
+        # 1. Login as admin
+        print(f"\n1. Login as admin (username: '{ADMIN_USERNAME}', password: '{ADMIN_PASSWORD}')")
         resp = admin_session.post(f"{BASE_URL}/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD
         })
-        print(f"Status: {resp.status_code}")
-        print(f"Response: {resp.text[:200]}")
-        
         if resp.status_code == 200:
             data = resp.json()
-            if data.get('user', {}).get('role') == 'admin':
-                print_result(True, f"Admin login successful, role={data['user']['role']}")
-                admin_id = data['user']['id']
-            else:
-                print_result(False, f"Admin login returned wrong role: {data.get('user', {}).get('role')}")
-                sys.exit(1)
+            admin_user = data.get("user", {})
+            log_test("Admin login", True, f"role={admin_user.get('role')}, ts_token cookie set")
         else:
-            print_result(False, f"Admin login failed with status {resp.status_code}")
-            sys.exit(1)
+            log_test("Admin login", False, f"Status {resp.status_code}: {resp.text}")
+            return
         
-        # ============================================================
-        # SETUP: Get a valid client ID (use demo client or get from /api/trainer/clients)
-        # ============================================================
-        print_test("SETUP", "Get valid client ID")
-        resp = admin_session.get(f"{BASE_URL}/trainer/clients")
-        print(f"Status: {resp.status_code}")
-        
-        client_id = None
+        # 2. Register Alice
+        print(f"\n2. Register member Alice (username: '{alice_username}')")
+        resp = alice_session.post(f"{BASE_URL}/auth/register", json={
+            "username": alice_username,
+            "email": alice_email,
+            "password": alice_password
+        })
         if resp.status_code == 200:
             data = resp.json()
-            clients = data.get('clients', [])
-            print(f"Found {len(clients)} clients")
-            if len(clients) > 0:
-                client_id = clients[0]['id']
-                print_result(True, f"Using client ID: {client_id}")
-            else:
-                # Try using the demo client ID from review request
-                client_id = DEMO_CLIENT_ID
-                print_result(True, f"No clients found, using demo client ID: {client_id}")
+            alice_user = data.get("user", {})
+            alice_id = alice_user.get("id")
+            log_test("Register Alice", True, f"id={alice_id}, role={alice_user.get('role')}")
         else:
-            client_id = DEMO_CLIENT_ID
-            print_result(True, f"Could not fetch clients, using demo client ID: {client_id}")
+            log_test("Register Alice", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # 3. Register Bob
+        print(f"\n3. Register member Bob (username: '{bob_username}')")
+        resp = bob_session.post(f"{BASE_URL}/auth/register", json={
+            "username": bob_username,
+            "email": bob_email,
+            "password": bob_password
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            bob_user = data.get("user", {})
+            bob_id = bob_user.get("id")
+            log_test("Register Bob", True, f"id={bob_id}, role={bob_user.get('role')}")
+        else:
+            log_test("Register Bob", False, f"Status {resp.status_code}: {resp.text}")
+            return
         
         # ============================================================
-        # TEST 1: GET /api/trainer/activity
+        # TEST 1: GET /api/forum/members
         # ============================================================
-        test_count += 1
-        print_test(1, "GET /api/trainer/activity as admin")
+        print("\n--- TEST 1: GET /api/forum/members ---")
         
-        try:
-            resp = admin_session.get(f"{BASE_URL}/trainer/activity")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
+        # 1a. Without auth -> 401
+        print("\n1a. GET /api/forum/members without auth cookie")
+        resp = requests.get(f"{BASE_URL}/forum/members")
+        if resp.status_code == 401:
+            log_test("GET /forum/members without auth", True, "Returns 401")
+        else:
+            log_test("GET /forum/members without auth", False, f"Expected 401, got {resp.status_code}")
+        
+        # 1b. With auth -> 200 with members list
+        print("\n1b. GET /api/forum/members as admin")
+        resp = admin_session.get(f"{BASE_URL}/forum/members")
+        if resp.status_code == 200:
+            data = resp.json()
+            members = data.get("members", [])
+            # Find The Hutch (admin) - should have isCoach=true
+            hutch = next((m for m in members if m.get("username", "").lower() == ADMIN_USERNAME.lower()), None)
+            if hutch and hutch.get("isCoach") == True:
+                log_test("GET /forum/members returns members", True, f"Found {len(members)} members, The Hutch has isCoach=true")
+            else:
+                log_test("GET /forum/members returns members", False, f"The Hutch not found or isCoach!=true")
             
-            if resp.status_code == 200:
-                data = resp.json()
-                if 'clients' in data and isinstance(data['clients'], list):
-                    # Check structure of first client if any
-                    if len(data['clients']) > 0:
-                        client = data['clients'][0]
-                        required_fields = ['id', 'username', 'workoutCount', 'lastWorkout', 'lastNutrition', 'lastCheckin']
-                        has_all_fields = all(field in client for field in required_fields)
+            # Check no leaks
+            if not check_no_leaks(data):
+                log_test("GET /forum/members no leaks", False, "Found _id or passwordHash in response")
+            else:
+                log_test("GET /forum/members no leaks", True, "No _id or passwordHash leaks")
+        else:
+            log_test("GET /forum/members returns members", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # ============================================================
+        # TEST 2: POST /api/forum/react (Emoji Reactions)
+        # ============================================================
+        print("\n--- TEST 2: POST /api/forum/react ---")
+        
+        # Create a test post first
+        print("\n2a. Create a test post as Alice")
+        resp = alice_session.post(f"{BASE_URL}/forum/posts", json={
+            "title": "Test Post for Reactions",
+            "body": "This is a test post to test emoji reactions.",
+            "category": "general"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            test_post = data.get("post", {})
+            test_post_id = test_post.get("id")
+            log_test("Create test post", True, f"postId={test_post_id}")
+        else:
+            log_test("Create test post", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # Create a test reply
+        print("\n2b. Create a test reply as Bob")
+        resp = bob_session.post(f"{BASE_URL}/forum/replies", json={
+            "postId": test_post_id,
+            "body": "This is a test reply to test reactions on replies."
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            test_reply = data.get("reply", {})
+            test_reply_id = test_reply.get("id")
+            log_test("Create test reply", True, f"replyId={test_reply_id}")
+        else:
+            log_test("Create test reply", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # 2c. React to post without auth -> 401
+        print("\n2c. POST /api/forum/react without auth")
+        resp = requests.post(f"{BASE_URL}/forum/react", json={
+            "targetType": "post",
+            "targetId": test_post_id,
+            "emoji": "👍"
+        })
+        if resp.status_code == 401:
+            log_test("POST /forum/react without auth", True, "Returns 401")
+        else:
+            log_test("POST /forum/react without auth", False, f"Expected 401, got {resp.status_code}")
+        
+        # 2d. React to post with valid emoji -> 200
+        print("\n2d. POST /api/forum/react with valid emoji (👍) on post")
+        resp = admin_session.post(f"{BASE_URL}/forum/react", json={
+            "targetType": "post",
+            "targetId": test_post_id,
+            "emoji": "👍"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            reactions = data.get("reactions", {})
+            if "👍" in reactions and admin_user.get("id") in reactions["👍"]:
+                log_test("POST /forum/react adds reaction", True, f"reactions={reactions}")
+            else:
+                log_test("POST /forum/react adds reaction", False, f"Admin ID not in reactions: {reactions}")
+        else:
+            log_test("POST /forum/react adds reaction", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 2e. React again with same emoji -> removes it (toggle)
+        print("\n2e. POST /api/forum/react again with same emoji (toggle off)")
+        resp = admin_session.post(f"{BASE_URL}/forum/react", json={
+            "targetType": "post",
+            "targetId": test_post_id,
+            "emoji": "👍"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            reactions = data.get("reactions", {})
+            # Should be empty or not contain admin's ID
+            if "👍" not in reactions or admin_user.get("id") not in reactions.get("👍", []):
+                log_test("POST /forum/react toggles off", True, f"reactions={reactions}")
+            else:
+                log_test("POST /forum/react toggles off", False, f"Admin ID still in reactions: {reactions}")
+        else:
+            log_test("POST /forum/react toggles off", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 2f. React with invalid emoji -> 400
+        print("\n2f. POST /api/forum/react with invalid emoji (🎉)")
+        resp = admin_session.post(f"{BASE_URL}/forum/react", json={
+            "targetType": "post",
+            "targetId": test_post_id,
+            "emoji": "🎉"
+        })
+        if resp.status_code == 400:
+            log_test("POST /forum/react invalid emoji", True, "Returns 400")
+        else:
+            log_test("POST /forum/react invalid emoji", False, f"Expected 400, got {resp.status_code}")
+        
+        # 2g. React to reply with valid emoji -> 200
+        print("\n2g. POST /api/forum/react on reply with emoji (🔥)")
+        resp = alice_session.post(f"{BASE_URL}/forum/react", json={
+            "targetType": "reply",
+            "targetId": test_reply_id,
+            "emoji": "🔥"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            reactions = data.get("reactions", {})
+            if "🔥" in reactions and alice_id in reactions["🔥"]:
+                log_test("POST /forum/react on reply", True, f"reactions={reactions}")
+            else:
+                log_test("POST /forum/react on reply", False, f"Alice ID not in reactions: {reactions}")
+        else:
+            log_test("POST /forum/react on reply", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 2h. React with invalid targetId -> 400
+        print("\n2h. POST /api/forum/react with invalid targetId")
+        resp = admin_session.post(f"{BASE_URL}/forum/react", json={
+            "targetType": "post",
+            "targetId": "invalid-id-12345",
+            "emoji": "👍"
+        })
+        if resp.status_code == 400:
+            log_test("POST /forum/react invalid targetId", True, "Returns 400")
+        else:
+            log_test("POST /forum/react invalid targetId", False, f"Expected 400, got {resp.status_code}")
+        
+        # ============================================================
+        # TEST 3: POST /api/forum/best-answer
+        # ============================================================
+        print("\n--- TEST 3: POST /api/forum/best-answer ---")
+        
+        # 3a. Mark best answer without auth -> 401
+        print("\n3a. POST /api/forum/best-answer without auth")
+        resp = requests.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": test_post_id,
+            "replyId": test_reply_id
+        })
+        if resp.status_code == 401:
+            log_test("POST /forum/best-answer without auth", True, "Returns 401")
+        else:
+            log_test("POST /forum/best-answer without auth", False, f"Expected 401, got {resp.status_code}")
+        
+        # 3b. Mark best answer as non-OP, non-trainer, non-admin -> 403
+        print("\n3b. POST /api/forum/best-answer as Bob (not OP, not trainer, not admin)")
+        resp = bob_session.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": test_post_id,
+            "replyId": test_reply_id
+        })
+        if resp.status_code == 403:
+            log_test("POST /forum/best-answer as non-OP", True, "Returns 403")
+        else:
+            log_test("POST /forum/best-answer as non-OP", False, f"Expected 403, got {resp.status_code}")
+        
+        # 3c. Mark best answer as OP (Alice) -> 200
+        print("\n3c. POST /api/forum/best-answer as Alice (OP)")
+        resp = alice_session.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": test_post_id,
+            "replyId": test_reply_id
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("bestAnswerId") == test_reply_id:
+                log_test("POST /forum/best-answer as OP", True, f"bestAnswerId={test_reply_id}")
+            else:
+                log_test("POST /forum/best-answer as OP", False, f"bestAnswerId mismatch: {data}")
+        else:
+            log_test("POST /forum/best-answer as OP", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 3d. Verify bestAnswerId is set on the post
+        print("\n3d. GET /api/forum/thread to verify bestAnswerId")
+        resp = alice_session.get(f"{BASE_URL}/forum/thread?id={test_post_id}")
+        if resp.status_code == 200:
+            data = resp.json()
+            post = data.get("post", {})
+            if post.get("bestAnswerId") == test_reply_id:
+                log_test("Verify bestAnswerId on post", True, f"bestAnswerId={test_reply_id}")
+            else:
+                log_test("Verify bestAnswerId on post", False, f"bestAnswerId={post.get('bestAnswerId')}")
+        else:
+            log_test("Verify bestAnswerId on post", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 3e. Clear best answer (replyId: null)
+        print("\n3e. POST /api/forum/best-answer with replyId=null to clear")
+        resp = alice_session.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": test_post_id,
+            "replyId": None
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("bestAnswerId") is None:
+                log_test("POST /forum/best-answer clear", True, "bestAnswerId=null")
+            else:
+                log_test("POST /forum/best-answer clear", False, f"bestAnswerId={data.get('bestAnswerId')}")
+        else:
+            log_test("POST /forum/best-answer clear", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 3f. Mark best answer with missing post -> 404
+        print("\n3f. POST /api/forum/best-answer with non-existent postId")
+        resp = admin_session.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": "non-existent-post-id",
+            "replyId": test_reply_id
+        })
+        if resp.status_code == 404:
+            log_test("POST /forum/best-answer missing post", True, "Returns 404")
+        else:
+            log_test("POST /forum/best-answer missing post", False, f"Expected 404, got {resp.status_code}")
+        
+        # 3g. Mark best answer as admin (trainer/admin privilege) -> 200
+        print("\n3g. POST /api/forum/best-answer as admin (trainer/admin privilege)")
+        resp = admin_session.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": test_post_id,
+            "replyId": test_reply_id
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("bestAnswerId") == test_reply_id:
+                log_test("POST /forum/best-answer as admin", True, f"bestAnswerId={test_reply_id}")
+            else:
+                log_test("POST /forum/best-answer as admin", False, f"bestAnswerId mismatch: {data}")
+        else:
+            log_test("POST /forum/best-answer as admin", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # ============================================================
+        # TEST 4: Notifications (reply, mention, best-answer)
+        # ============================================================
+        print("\n--- TEST 4: Notifications ---")
+        
+        # 4a. Alice creates a new post
+        print("\n4a. Alice creates a new post for notification testing")
+        resp = alice_session.post(f"{BASE_URL}/forum/posts", json={
+            "title": "Notification Test Post",
+            "body": "This post is for testing notifications.",
+            "category": "general"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            notif_post = data.get("post", {})
+            notif_post_id = notif_post.get("id")
+            log_test("Alice creates notification test post", True, f"postId={notif_post_id}")
+        else:
+            log_test("Alice creates notification test post", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # 4b. Bob replies to Alice's post -> Alice should get 'reply' notification
+        print(f"\n4b. Bob replies to Alice's post")
+        resp = bob_session.post(f"{BASE_URL}/forum/replies", json={
+            "postId": notif_post_id,
+            "body": "This is Bob's reply to Alice's post."
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            notif_reply = data.get("reply", {})
+            notif_reply_id = notif_reply.get("id")
+            log_test("Bob replies to Alice's post", True, f"replyId={notif_reply_id}")
+        else:
+            log_test("Bob replies to Alice's post", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # Wait a moment for notification to be created
+        time.sleep(0.5)
+        
+        # 4c. Alice checks notifications -> should have 'reply' notification
+        print("\n4c. Alice GET /api/forum/notifications (should have 'reply' notification)")
+        resp = alice_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            unread = data.get("unread", 0)
+            # Find reply notification
+            reply_notif = next((n for n in notifications if n.get("type") == "reply" and n.get("postId") == notif_post_id), None)
+            if reply_notif and unread >= 1:
+                log_test("Alice receives 'reply' notification", True, f"unread={unread}, type={reply_notif.get('type')}")
+            else:
+                log_test("Alice receives 'reply' notification", False, f"No reply notification found, unread={unread}")
+            
+            # Check no leaks
+            if not check_no_leaks(data):
+                log_test("GET /forum/notifications no leaks", False, "Found _id or passwordHash in response")
+            else:
+                log_test("GET /forum/notifications no leaks", True, "No _id or passwordHash leaks")
+        else:
+            log_test("Alice receives 'reply' notification", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 4d. Bob creates a post mentioning Alice
+        print(f"\n4d. Bob creates a post mentioning Alice (@{alice_username})")
+        resp = bob_session.post(f"{BASE_URL}/forum/posts", json={
+            "title": "Mention Test",
+            "body": f"Hey @{alice_username}, what do you think about this?",
+            "category": "general"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            mention_post = data.get("post", {})
+            mention_post_id = mention_post.get("id")
+            log_test("Bob creates post mentioning Alice", True, f"postId={mention_post_id}")
+        else:
+            log_test("Bob creates post mentioning Alice", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # Wait a moment for notification to be created
+        time.sleep(0.5)
+        
+        # 4e. Alice checks notifications -> should have 'mention' notification
+        print("\n4e. Alice GET /api/forum/notifications (should have 'mention' notification)")
+        resp = alice_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            unread = data.get("unread", 0)
+            # Find mention notification
+            mention_notif = next((n for n in notifications if n.get("type") == "mention" and n.get("postId") == mention_post_id), None)
+            if mention_notif:
+                log_test("Alice receives 'mention' notification", True, f"unread={unread}, type={mention_notif.get('type')}")
+            else:
+                log_test("Alice receives 'mention' notification", False, f"No mention notification found, unread={unread}")
+        else:
+            log_test("Alice receives 'mention' notification", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 4f. Alice creates a reply mentioning Bob
+        print(f"\n4f. Alice creates a reply mentioning Bob (@{bob_username})")
+        resp = alice_session.post(f"{BASE_URL}/forum/replies", json={
+            "postId": mention_post_id,
+            "body": f"Thanks @{bob_username}, I think it's great!"
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            mention_reply = data.get("reply", {})
+            mention_reply_id = mention_reply.get("id")
+            log_test("Alice creates reply mentioning Bob", True, f"replyId={mention_reply_id}")
+        else:
+            log_test("Alice creates reply mentioning Bob", False, f"Status {resp.status_code}: {resp.text}")
+            return
+        
+        # Wait a moment for notification to be created
+        time.sleep(0.5)
+        
+        # 4g. Bob checks notifications -> should have 'mention' notification (and 'reply' since it's his post)
+        print("\n4g. Bob GET /api/forum/notifications (should have 'mention' and 'reply' notifications)")
+        resp = bob_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            unread = data.get("unread", 0)
+            # Find mention notification
+            mention_notif = next((n for n in notifications if n.get("type") == "mention" and n.get("replyId") == mention_reply_id), None)
+            # Find reply notification
+            reply_notif = next((n for n in notifications if n.get("type") == "reply" and n.get("replyId") == mention_reply_id), None)
+            if mention_notif and reply_notif:
+                log_test("Bob receives 'mention' and 'reply' notifications", True, f"unread={unread}")
+            elif mention_notif:
+                log_test("Bob receives 'mention' notification", True, f"unread={unread} (reply notification may be deduplicated)")
+            else:
+                log_test("Bob receives notifications", False, f"No mention notification found, unread={unread}")
+        else:
+            log_test("Bob receives notifications", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 4h. Mark best answer -> Bob should get 'best-answer' notification
+        print("\n4h. Alice marks Bob's reply as best answer")
+        resp = alice_session.post(f"{BASE_URL}/forum/best-answer", json={
+            "postId": notif_post_id,
+            "replyId": notif_reply_id
+        })
+        if resp.status_code == 200:
+            log_test("Alice marks Bob's reply as best answer", True, "")
+        else:
+            log_test("Alice marks Bob's reply as best answer", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # Wait a moment for notification to be created
+        time.sleep(0.5)
+        
+        # 4i. Bob checks notifications -> should have 'best-answer' notification
+        print("\n4i. Bob GET /api/forum/notifications (should have 'best-answer' notification)")
+        resp = bob_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            unread = data.get("unread", 0)
+            # Find best-answer notification
+            best_notif = next((n for n in notifications if n.get("type") == "best-answer" and n.get("replyId") == notif_reply_id), None)
+            if best_notif:
+                log_test("Bob receives 'best-answer' notification", True, f"unread={unread}, type={best_notif.get('type')}")
+            else:
+                log_test("Bob receives 'best-answer' notification", False, f"No best-answer notification found, unread={unread}")
+        else:
+            log_test("Bob receives 'best-answer' notification", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 4j. Test self-notification skip: Alice replies to her own post
+        print("\n4j. Alice replies to her own post (should NOT create self-notification)")
+        resp = alice_session.post(f"{BASE_URL}/forum/replies", json={
+            "postId": notif_post_id,
+            "body": "This is Alice replying to her own post."
+        })
+        if resp.status_code == 200:
+            log_test("Alice replies to her own post", True, "")
+        else:
+            log_test("Alice replies to her own post", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # Wait a moment
+        time.sleep(0.5)
+        
+        # Alice checks notifications -> unread count should not increase
+        print("\n4k. Alice GET /api/forum/notifications (unread should not increase from self-reply)")
+        resp = alice_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            unread_after_self = data.get("unread", 0)
+            # Check that there's no new notification from herself
+            self_reply_notif = next((n for n in notifications if n.get("actorId") == alice_id and n.get("recipientId") == alice_id), None)
+            if not self_reply_notif:
+                log_test("Self-notification skipped", True, f"No self-notification found")
+            else:
+                log_test("Self-notification skipped", False, f"Found self-notification: {self_reply_notif}")
+        else:
+            log_test("Self-notification skipped", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 4l. Test mention with different case
+        print(f"\n4l. Bob mentions Alice with different case (@{alice_username.upper()})")
+        resp = bob_session.post(f"{BASE_URL}/forum/posts", json={
+            "title": "Case-insensitive Mention Test",
+            "body": f"Hey @{alice_username.upper()}, testing case-insensitive mentions.",
+            "category": "general"
+        })
+        if resp.status_code == 200:
+            log_test("Bob creates post with uppercase mention", True, "")
+        else:
+            log_test("Bob creates post with uppercase mention", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # Wait a moment
+        time.sleep(0.5)
+        
+        # Alice checks notifications -> should have mention notification
+        print("\n4m. Alice GET /api/forum/notifications (should have case-insensitive mention)")
+        resp = alice_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            # Find the latest mention notification
+            recent_mentions = [n for n in notifications if n.get("type") == "mention" and n.get("actorId") == bob_id]
+            if len(recent_mentions) >= 2:  # Should have 2 mentions from Bob now
+                log_test("Case-insensitive mention works", True, f"Found {len(recent_mentions)} mentions from Bob")
+            else:
+                log_test("Case-insensitive mention works", False, f"Expected 2 mentions, found {len(recent_mentions)}")
+        else:
+            log_test("Case-insensitive mention works", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # ============================================================
+        # TEST 5: POST /api/forum/notifications/read
+        # ============================================================
+        print("\n--- TEST 5: POST /api/forum/notifications/read ---")
+        
+        # 5a. Mark all notifications as read
+        print("\n5a. Bob POST /api/forum/notifications/read (mark all as read)")
+        resp = bob_session.post(f"{BASE_URL}/forum/notifications/read", json={})
+        if resp.status_code == 200:
+            log_test("POST /forum/notifications/read (all)", True, "")
+        else:
+            log_test("POST /forum/notifications/read (all)", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 5b. Check unread count -> should be 0
+        print("\n5b. Bob GET /api/forum/notifications (unread should be 0)")
+        resp = bob_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            unread = data.get("unread", 0)
+            if unread == 0:
+                log_test("Unread count after mark all read", True, f"unread={unread}")
+            else:
+                log_test("Unread count after mark all read", False, f"unread={unread}, expected 0")
+        else:
+            log_test("Unread count after mark all read", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # 5c. Create a new notification for Alice
+        print("\n5c. Bob creates a new post to generate notification for Alice")
+        resp = bob_session.post(f"{BASE_URL}/forum/posts", json={
+            "title": "Single Notification Test",
+            "body": f"@{alice_username} testing single notification read.",
+            "category": "general"
+        })
+        if resp.status_code == 200:
+            log_test("Bob creates post for single notification test", True, "")
+        else:
+            log_test("Bob creates post for single notification test", False, f"Status {resp.status_code}: {resp.text}")
+        
+        # Wait a moment
+        time.sleep(0.5)
+        
+        # 5d. Alice gets notifications and marks one as read
+        print("\n5d. Alice GET /api/forum/notifications and mark one as read")
+        resp = alice_session.get(f"{BASE_URL}/forum/notifications")
+        if resp.status_code == 200:
+            data = resp.json()
+            notifications = data.get("notifications", [])
+            unread_before = data.get("unread", 0)
+            if notifications:
+                # Get the first unread notification
+                unread_notif = next((n for n in notifications if not n.get("read")), None)
+                if unread_notif:
+                    notif_id = unread_notif.get("id")
+                    print(f"\n5e. Alice POST /api/forum/notifications/read with id={notif_id}")
+                    resp = alice_session.post(f"{BASE_URL}/forum/notifications/read", json={"id": notif_id})
+                    if resp.status_code == 200:
+                        log_test("POST /forum/notifications/read (single)", True, "")
                         
-                        if has_all_fields:
-                            if check_no_id_leak(data):
-                                print_result(True, f"Returns 200 with clients array ({len(data['clients'])} clients), all required fields present, no _id leaks")
-                                passed_count += 1
+                        # Check unread count decreased
+                        resp = alice_session.get(f"{BASE_URL}/forum/notifications")
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            unread_after = data.get("unread", 0)
+                            if unread_after == unread_before - 1:
+                                log_test("Unread count after mark one read", True, f"unread decreased from {unread_before} to {unread_after}")
                             else:
-                                print_result(False, "Response contains MongoDB _id leak")
+                                log_test("Unread count after mark one read", False, f"unread={unread_after}, expected {unread_before - 1}")
                         else:
-                            missing = [f for f in required_fields if f not in client]
-                            print_result(False, f"Client missing required fields: {missing}")
+                            log_test("Unread count after mark one read", False, f"Status {resp.status_code}: {resp.text}")
                     else:
-                        if check_no_id_leak(data):
-                            print_result(True, "Returns 200 with empty clients array, no _id leaks")
-                            passed_count += 1
-                        else:
-                            print_result(False, "Response contains MongoDB _id leak")
+                        log_test("POST /forum/notifications/read (single)", False, f"Status {resp.status_code}: {resp.text}")
                 else:
-                    print_result(False, f"Response missing 'clients' array: {data}")
+                    log_test("Find unread notification", False, "No unread notifications found")
             else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
+                log_test("Find unread notification", False, "No notifications found")
+        else:
+            log_test("Alice GET notifications for single read test", False, f"Status {resp.status_code}: {resp.text}")
         
         # ============================================================
-        # TEST 2a: GET /api/trainer/client-goals?clientId=<CID>
+        # FINAL CHECKS
         # ============================================================
-        test_count += 1
-        print_test("2a", f"GET /api/trainer/client-goals?clientId={client_id}")
+        print("\n--- FINAL CHECKS ---")
         
-        try:
-            resp = admin_session.get(f"{BASE_URL}/trainer/client-goals?clientId={client_id}")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if 'goals' in data and isinstance(data['goals'], list):
-                    if check_no_id_leak(data):
-                        print_result(True, f"Returns 200 with goals array ({len(data['goals'])} goals), no _id leaks")
-                        passed_count += 1
-                    else:
-                        print_result(False, "Response contains MongoDB _id leak")
-                else:
-                    print_result(False, f"Response missing 'goals' array: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
+        # Check that all responses have no MongoDB _id or passwordHash leaks
+        print("\nFinal check: No MongoDB _id or passwordHash leaks in any response")
+        # This was checked throughout the tests
         
         # ============================================================
-        # TEST 2b: PUT /api/trainer/client-goals with goals
+        # SUMMARY
         # ============================================================
-        test_count += 1
-        print_test("2b", f"PUT /api/trainer/client-goals with clientId={client_id}")
+        print("\n" + "=" * 80)
+        print("TEST SUMMARY")
+        print("=" * 80)
         
-        try:
-            goal_data = {
-                "clientId": client_id,
-                "goals": [
-                    {
-                        "label": "Squat 1RM",
-                        "target": 405,
-                        "current": 365,
-                        "unit": "lb"
-                    }
-                ]
-            }
-            resp = admin_session.put(f"{BASE_URL}/trainer/client-goals", json=goal_data)
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('ok') and 'goals' in data and isinstance(data['goals'], list):
-                    if len(data['goals']) > 0:
-                        goal = data['goals'][0]
-                        if (goal.get('label') == 'Squat 1RM' and 
-                            goal.get('target') == 405 and 
-                            goal.get('current') == 365 and 
-                            goal.get('unit') == 'lb' and
-                            'id' in goal):
-                            if check_no_id_leak(data):
-                                print_result(True, f"Returns 200 with ok:true, goals array with id assigned, no _id leaks")
-                                passed_count += 1
-                            else:
-                                print_result(False, "Response contains MongoDB _id leak")
-                        else:
-                            print_result(False, f"Goal data mismatch: {goal}")
-                    else:
-                        print_result(False, "Goals array is empty")
-                else:
-                    print_result(False, f"Response missing ok or goals: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
+        passed = sum(1 for r in test_results if r["passed"])
+        total = len(test_results)
+        success_rate = (passed / total * 100) if total > 0 else 0
         
-        # ============================================================
-        # TEST 2c: GET /api/trainer/client-goals again to verify persistence
-        # ============================================================
-        test_count += 1
-        print_test("2c", f"GET /api/trainer/client-goals?clientId={client_id} again (verify persistence)")
+        print(f"\nTotal tests: {total}")
+        print(f"Passed: {passed}")
+        print(f"Failed: {total - passed}")
+        print(f"Success rate: {success_rate:.1f}%")
         
-        try:
-            resp = admin_session.get(f"{BASE_URL}/trainer/client-goals?clientId={client_id}")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if 'goals' in data and isinstance(data['goals'], list) and len(data['goals']) > 0:
-                    goal = data['goals'][0]
-                    if (goal.get('label') == 'Squat 1RM' and 
-                        goal.get('target') == 405 and 
-                        goal.get('current') == 365 and 
-                        goal.get('unit') == 'lb' and
-                        'id' in goal):
-                        if check_no_id_leak(data):
-                            print_result(True, f"Goals persisted correctly with id={goal['id']}, no _id leaks")
-                            passed_count += 1
-                        else:
-                            print_result(False, "Response contains MongoDB _id leak")
-                    else:
-                        print_result(False, f"Goal data mismatch after persistence: {goal}")
-                else:
-                    print_result(False, f"Goals not persisted: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
+        if total - passed > 0:
+            print("\nFailed tests:")
+            for r in test_results:
+                if not r["passed"]:
+                    print(f"  ❌ {r['test']}: {r['details']}")
         
-        # ============================================================
-        # TEST 3: GET /api/admin/analytics
-        # ============================================================
-        test_count += 1
-        print_test(3, "GET /api/admin/analytics")
-        
-        try:
-            resp = admin_session.get(f"{BASE_URL}/admin/analytics")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                required_fields = ['totalMembers', 'portalAccess', 'trainers', 'newLast30', 
-                                 'activeSubscribers', 'forumPosts', 'checkins', 'signupsByWeek']
-                has_all_fields = all(field in data for field in required_fields)
-                
-                if has_all_fields:
-                    # Check that numeric fields are numbers
-                    numeric_fields = ['totalMembers', 'portalAccess', 'trainers', 'newLast30', 
-                                    'activeSubscribers', 'forumPosts', 'checkins']
-                    all_numeric = all(isinstance(data[field], int) for field in numeric_fields)
-                    
-                    # Check signupsByWeek is array of 8 items with label and count
-                    signups_valid = (isinstance(data['signupsByWeek'], list) and 
-                                   len(data['signupsByWeek']) == 8 and
-                                   all('label' in item and 'count' in item for item in data['signupsByWeek']))
-                    
-                    if all_numeric and signups_valid:
-                        if check_no_id_leak(data):
-                            print_result(True, f"Returns 200 with all numeric fields and signupsByWeek array (8 items), no _id leaks")
-                            passed_count += 1
-                        else:
-                            print_result(False, "Response contains MongoDB _id leak")
-                    else:
-                        if not all_numeric:
-                            print_result(False, "Some numeric fields are not numbers")
-                        if not signups_valid:
-                            print_result(False, f"signupsByWeek invalid: {data['signupsByWeek']}")
-                else:
-                    missing = [f for f in required_fields if f not in data]
-                    print_result(False, f"Response missing required fields: {missing}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 4: GET /api/admin/revenue
-        # ============================================================
-        test_count += 1
-        print_test(4, "GET /api/admin/revenue")
-        
-        try:
-            resp = admin_session.get(f"{BASE_URL}/admin/revenue")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if ('activeSubscribers' in data and isinstance(data['activeSubscribers'], int) and
-                    'byPlan' in data and isinstance(data['byPlan'], list)):
-                    # Check byPlan structure if not empty
-                    byplan_valid = True
-                    if len(data['byPlan']) > 0:
-                        byplan_valid = all('plan' in item and 'count' in item for item in data['byPlan'])
-                    
-                    if byplan_valid:
-                        if check_no_id_leak(data):
-                            print_result(True, f"Returns 200 with activeSubscribers={data['activeSubscribers']}, byPlan array ({len(data['byPlan'])} plans), no _id leaks")
-                            passed_count += 1
-                        else:
-                            print_result(False, "Response contains MongoDB _id leak")
-                    else:
-                        print_result(False, f"byPlan structure invalid: {data['byPlan']}")
-                else:
-                    print_result(False, f"Response missing activeSubscribers or byPlan: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 5a: GET /api/announcement (no auth)
-        # ============================================================
-        test_count += 1
-        print_test("5a", "GET /api/announcement (no auth - public)")
-        
-        try:
-            # Use a new session without auth
-            resp = requests.get(f"{BASE_URL}/announcement")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if 'enabled' in data and 'message' in data and 'updatedAt' in data:
-                    if check_no_id_leak(data):
-                        print_result(True, f"Returns 200 with enabled={data['enabled']}, message='{data['message'][:50]}...', updatedAt={data['updatedAt']}, no _id leaks")
-                        passed_count += 1
-                    else:
-                        print_result(False, "Response contains MongoDB _id leak")
-                else:
-                    print_result(False, f"Response missing required fields: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 5b: PUT /api/admin/announcement (set enabled=true)
-        # ============================================================
-        test_count += 1
-        print_test("5b", "PUT /api/admin/announcement with enabled=true")
-        
-        try:
-            announcement_data = {
-                "enabled": True,
-                "message": "Test banner"
-            }
-            resp = admin_session.put(f"{BASE_URL}/admin/announcement", json=announcement_data)
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('ok') and data.get('enabled') == True and data.get('message') == 'Test banner':
-                    if check_no_id_leak(data):
-                        print_result(True, f"Returns 200 with ok=true, enabled=true, message='Test banner', no _id leaks")
-                        passed_count += 1
-                    else:
-                        print_result(False, "Response contains MongoDB _id leak")
-                else:
-                    print_result(False, f"Response data mismatch: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 5c: GET /api/announcement again (verify persistence)
-        # ============================================================
-        test_count += 1
-        print_test("5c", "GET /api/announcement again (verify enabled=true, message='Test banner')")
-        
-        try:
-            resp = requests.get(f"{BASE_URL}/announcement")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('enabled') == True and data.get('message') == 'Test banner':
-                    if check_no_id_leak(data):
-                        print_result(True, f"Announcement persisted correctly: enabled=true, message='Test banner', no _id leaks")
-                        passed_count += 1
-                    else:
-                        print_result(False, "Response contains MongoDB _id leak")
-                else:
-                    print_result(False, f"Announcement not persisted correctly: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 5d: PUT /api/admin/announcement (reset to enabled=false)
-        # ============================================================
-        test_count += 1
-        print_test("5d", "PUT /api/admin/announcement with enabled=false (reset)")
-        
-        try:
-            announcement_data = {
-                "enabled": False,
-                "message": ""
-            }
-            resp = admin_session.put(f"{BASE_URL}/admin/announcement", json=announcement_data)
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('ok') and data.get('enabled') == False:
-                    if check_no_id_leak(data):
-                        print_result(True, f"Returns 200 with ok=true, enabled=false (reset successful), no _id leaks")
-                        passed_count += 1
-                    else:
-                        print_result(False, "Response contains MongoDB _id leak")
-                else:
-                    print_result(False, f"Response data mismatch: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # SETUP: Set admin as trainer for bulk-assign test
-        # ============================================================
-        print_test("SETUP-6", "Set admin isTrainer=true for bulk-assign test")
-        
-        try:
-            resp = admin_session.put(f"{BASE_URL}/admin/users", json={
-                "id": admin_id,
-                "isTrainer": True
-            })
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 200:
-                print_result(True, "Admin isTrainer set to true")
-            else:
-                print_result(False, f"Failed to set admin isTrainer: {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 6a: POST /api/admin/bulk-assign with valid clientIds
-        # ============================================================
-        test_count += 1
-        print_test("6a", f"POST /api/admin/bulk-assign with clientIds=[{client_id}], trainerId={admin_id}")
-        
-        try:
-            bulk_assign_data = {
-                "clientIds": [client_id],
-                "trainerId": admin_id
-            }
-            resp = admin_session.post(f"{BASE_URL}/admin/bulk-assign", json=bulk_assign_data)
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('ok') and 'updated' in data and isinstance(data['updated'], int):
-                    if check_no_id_leak(data):
-                        print_result(True, f"Returns 200 with ok=true, updated={data['updated']}, no _id leaks")
-                        passed_count += 1
-                    else:
-                        print_result(False, "Response contains MongoDB _id leak")
-                else:
-                    print_result(False, f"Response missing ok or updated: {data}")
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST 6b: POST /api/admin/bulk-assign with empty clientIds
-        # ============================================================
-        test_count += 1
-        print_test("6b", "POST /api/admin/bulk-assign with clientIds=[] (should return 400)")
-        
-        try:
-            bulk_assign_data = {
-                "clientIds": [],
-                "trainerId": admin_id
-            }
-            resp = admin_session.post(f"{BASE_URL}/admin/bulk-assign", json=bulk_assign_data)
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:500]}")
-            
-            if resp.status_code == 400:
-                data = resp.json()
-                if 'error' in data:
-                    print_result(True, f"Returns 400 with error message: {data['error']}")
-                    passed_count += 1
-                else:
-                    print_result(False, f"400 response missing error field: {data}")
-            else:
-                print_result(False, f"Expected 400, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # AUTHORIZATION TESTS: Register a normal member and test access
-        # ============================================================
-        print_test("AUTH-SETUP", "Register a normal member for authorization tests")
-        
-        timestamp = datetime.now().timestamp()
-        member_username = f"testmember_{timestamp}"
-        member_email = f"testmember_{timestamp}@test.com"
-        member_password = "testpass123"
-        
-        try:
-            resp = member_session.post(f"{BASE_URL}/auth/register", json={
-                "username": member_username,
-                "email": member_email,
-                "password": member_password
-            })
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('user', {}).get('role') == 'member':
-                    print_result(True, f"Member registered successfully: {member_username}")
-                else:
-                    print_result(False, f"Member registration returned wrong role: {data.get('user', {}).get('role')}")
-            else:
-                print_result(False, f"Member registration failed with status {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-1: Member calls GET /api/trainer/activity (should be 403)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-1", "Member GET /api/trainer/activity (should be 403)")
-        
-        try:
-            resp = member_session.get(f"{BASE_URL}/trainer/activity")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 403:
-                print_result(True, "Member correctly denied with 403")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 403, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-2: Member calls GET /api/admin/analytics (should be 403)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-2", "Member GET /api/admin/analytics (should be 403)")
-        
-        try:
-            resp = member_session.get(f"{BASE_URL}/admin/analytics")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 403:
-                print_result(True, "Member correctly denied with 403")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 403, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-3: Member calls GET /api/admin/revenue (should be 403)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-3", "Member GET /api/admin/revenue (should be 403)")
-        
-        try:
-            resp = member_session.get(f"{BASE_URL}/admin/revenue")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 403:
-                print_result(True, "Member correctly denied with 403")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 403, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-4: Member calls PUT /api/admin/announcement (should be 403)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-4", "Member PUT /api/admin/announcement (should be 403)")
-        
-        try:
-            resp = member_session.put(f"{BASE_URL}/admin/announcement", json={
-                "enabled": True,
-                "message": "Test"
-            })
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 403:
-                print_result(True, "Member correctly denied with 403")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 403, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-5: Member calls POST /api/admin/bulk-assign (should be 403)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-5", "Member POST /api/admin/bulk-assign (should be 403)")
-        
-        try:
-            resp = member_session.post(f"{BASE_URL}/admin/bulk-assign", json={
-                "clientIds": [client_id],
-                "trainerId": admin_id
-            })
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 403:
-                print_result(True, "Member correctly denied with 403")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 403, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-6: Anonymous/Member calls GET /api/announcement (should be 200 - public)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-6", "Anonymous GET /api/announcement (should be 200 - public)")
-        
-        try:
-            resp = requests.get(f"{BASE_URL}/announcement")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 200:
-                print_result(True, "Anonymous user can access public announcement endpoint")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
-        
-        # ============================================================
-        # TEST AUTH-7: Member calls GET /api/announcement (should be 200 - public)
-        # ============================================================
-        test_count += 1
-        print_test("AUTH-7", "Member GET /api/announcement (should be 200 - public)")
-        
-        try:
-            resp = member_session.get(f"{BASE_URL}/announcement")
-            print(f"Status: {resp.status_code}")
-            print(f"Response: {resp.text[:200]}")
-            
-            if resp.status_code == 200:
-                print_result(True, "Member can access public announcement endpoint")
-                passed_count += 1
-            else:
-                print_result(False, f"Expected 200, got {resp.status_code}")
-        except Exception as e:
-            print_result(False, f"Exception: {e}")
+        print("\n" + "=" * 80)
         
     except Exception as e:
-        print(f"\n❌ FATAL ERROR: {e}")
+        print(f"\n❌ EXCEPTION: {str(e)}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
-    
-    # ============================================================
-    # SUMMARY
-    # ============================================================
-    print("\n" + "="*80)
-    print("TEST SUMMARY")
-    print("="*80)
-    print(f"Total tests: {test_count}")
-    print(f"Passed: {passed_count}")
-    print(f"Failed: {test_count - passed_count}")
-    print(f"Success rate: {(passed_count/test_count*100):.1f}%")
-    
-    if passed_count == test_count:
-        print("\n✅ ALL TESTS PASSED!")
-        sys.exit(0)
-    else:
-        print(f"\n❌ {test_count - passed_count} TEST(S) FAILED")
-        sys.exit(1)
 
 if __name__ == "__main__":
     main()

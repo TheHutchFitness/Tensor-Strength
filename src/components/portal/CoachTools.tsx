@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useCloudState } from "@/lib/cloud";
 
 type Client = { id: string; username: string; email: string };
 type ToolTab = "progress" | "activity" | "needs" | "volume" | "onerm" | "plate" | "macros" | "goals" | "intake" | "assign" | "templates" | "timer" | "reference" | "broadcast" | "notes";
@@ -801,13 +802,9 @@ function VolumeReport({ clients }: { clients: Client[] }) {
 /* -------------------- Message Templates (canned replies) -------------------- */
 function MessageTemplates() {
   const KEY = "ts-coach-templates";
-  const [items, setItems] = useState<string[]>([]);
+  const [items, save] = useCloudState<string[]>(KEY, ["Great work this week — proud of the consistency. Keep it up!", "Don't forget to log your check-in before Sunday night.", "Bump the top set 5 lb next session if it moved well."]);
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(-1);
-  useEffect(() => {
-    try { const s = localStorage.getItem(KEY); setItems(s ? JSON.parse(s) : ["Great work this week — proud of the consistency. Keep it up!", "Don't forget to log your check-in before Sunday night.", "Bump the top set 5 lb next session if it moved well."]); } catch {}
-  }, []);
-  const save = (n: string[]) => { setItems(n); localStorage.setItem(KEY, JSON.stringify(n)); };
   return (
     <div className="grid gap-4 max-w-xl">
       <p className="text-bone/60 text-sm">Save canned replies and copy them into any client chat with one tap.</p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cloudSet } from "@/lib/cloud";
 import {
   exercises as ALL_EXERCISES,
   splits as SPLITS,
@@ -168,6 +169,15 @@ export default function WorkoutLog() {
             localStorage.setItem(TEMPLATE_KEY, JSON.stringify(d.templates));
           }
         }
+        // Custom exercises sync via the generic per-user store.
+        const cs = await fetch(`/api/client/store?key=${encodeURIComponent(CUSTOM_KEY)}`);
+        if (cs.ok) {
+          const cd = await cs.json();
+          if (cd.found && Array.isArray(cd.value)) {
+            setCustomExercises(cd.value);
+            localStorage.setItem(CUSTOM_KEY, JSON.stringify(cd.value));
+          }
+        }
       } catch {}
       cloudReady.current = true;
     })();
@@ -198,6 +208,7 @@ export default function WorkoutLog() {
   function persistCustom(list: Exercise[]) {
     setCustomExercises(list);
     localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
+    cloudSet(CUSTOM_KEY, list);
   }
   function persistTemplates(list: Template[]) {
     setTemplates(list);
@@ -438,6 +449,7 @@ export default function WorkoutLog() {
           t.id === currentTemplateId ? { ...t, exercises: cloneExercises(clean) } : t
         );
         localStorage.setItem(TEMPLATE_KEY, JSON.stringify(next));
+        pushTracker([w, ...workouts], next);
         return next;
       });
     }

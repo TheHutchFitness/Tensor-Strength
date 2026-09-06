@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useCloudState, cloudSet } from "@/lib/cloud";
 
 type Food = { name: string; cuisine: string; cal: number; p: number; c: number; f: number; diets: string[]; perItem?: boolean; serving?: string };
 type Entry = { id: string; name: string; label: string; cal: number; p: number; c: number; f: number };
@@ -228,22 +229,22 @@ function gramsOf(amount: number, unit: Unit) {
 }
 
 export default function NutritionTracker() {
-  const [allLogs, setAllLogs] = useState<Record<string, DayLog>>({});
+  const [allLogs, setAllLogs] = useCloudState<Record<string, DayLog>>(LOG_KEY, {});
   const [goal, setGoal] = useState<Goal>({ calories: 2200, protein: 170, carbs: 220, fat: 70 });
   const [date, setDate] = useState<Date>(new Date());
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState<Goal>(goal);
-  const [diet, setDiet] = useState("balanced");
+  const [diet, setDiet] = useCloudState<string>(DIET_KEY, "balanced");
   const [addTo, setAddTo] = useState<Meal | null>(null);
   const [amount, setAmount] = useState("100");
   const [unit, setUnit] = useState<Unit>("g");
   const [search, setSearch] = useState("");
   const [cuisine, setCuisine] = useState("all");
   const [manual, setManual] = useState({ name: "", cal: "", p: "", c: "", f: "" });
-  const [supps, setSupps] = useState<Record<string, string[]>>({});
-  const [customSupps, setCustomSupps] = useState<string[]>([]);
+  const [supps, setSupps] = useCloudState<Record<string, string[]>>("ts-supp-log", {});
+  const [customSupps, setCustomSupps] = useCloudState<string[]>("ts-supp-custom", []);
   const [newSupp, setNewSupp] = useState("");
-  const [savedMeals, setSavedMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
+  const [savedMeals, setSavedMeals] = useCloudState<{ id: string; name: string; items: Entry[] }[]>("ts-saved-meals", []);
   const [coachMeals, setCoachMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
   const [coachGoalNote, setCoachGoalNote] = useState("");
 
@@ -254,14 +255,29 @@ export default function NutritionTracker() {
       .catch(() => {});
   }, []);
 
-  // Apply nutrition targets pushed by the client's coach (once per new push).
+  // Hydrate the member's saved goal from the cloud store, then let the coach's
+  // pushed targets override it if they're newer (tracked by a synced marker).
   useEffect(() => {
-    fetch("/api/client/coach-goal")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/client/store?key=${encodeURIComponent(GOAL_KEY)}`);
+        if (res.ok) {
+          const d = await res.json();
+          if (d.found && d.value) { setGoal(d.value); setGoalDraft(d.value); }
+        }
+      } catch {}
+      try {
+        const res = await fetch("/api/client/coach-goal");
+        if (!res.ok) return;
+        const d = await res.json();
         const g = d?.goal;
         if (!g || !g.setAt) return;
-        if (localStorage.getItem("ts-nutrition-coach-at") === g.setAt) return;
+        let marker: string | null = null;
+        try {
+          const mr = await fetch(`/api/client/store?key=${encodeURIComponent("ts-nutrition-coach-at")}`);
+          if (mr.ok) { const md = await mr.json(); marker = md.found ? md.value : null; }
+        } catch {}
+        if (marker === g.setAt) return;
         const next = {
           calories: Number(g.calories) || 0,
           protein: Number(g.protein) || 0,
@@ -270,28 +286,11 @@ export default function NutritionTracker() {
         };
         setGoal(next);
         setGoalDraft(next);
-        localStorage.setItem(GOAL_KEY, JSON.stringify(next));
-        localStorage.setItem("ts-nutrition-coach-at", g.setAt);
+        cloudSet(GOAL_KEY, next);
+        cloudSet("ts-nutrition-coach-at", g.setAt);
         setCoachGoalNote(`Your coach${g.setByName ? " (" + g.setByName + ")" : ""} set these targets.`);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    try {
-      const l = localStorage.getItem(LOG_KEY);
-      if (l) setAllLogs(JSON.parse(l));
-      const g = localStorage.getItem(GOAL_KEY);
-      if (g) { const p = JSON.parse(g); setGoal(p); setGoalDraft(p); }
-      const d = localStorage.getItem(DIET_KEY);
-      if (d) setDiet(d);
-      const s = localStorage.getItem("ts-supp-log");
-      if (s) setSupps(JSON.parse(s));
-      const cs = localStorage.getItem("ts-supp-custom");
-      if (cs) setCustomSupps(JSON.parse(cs));
-      const sm = localStorage.getItem("ts-saved-meals");
-      if (sm) setSavedMeals(JSON.parse(sm));
-    } catch {}
+      } catch {}
+    })();
   }, []);
 
   const key = dateKey(date);
@@ -299,7 +298,6 @@ export default function NutritionTracker() {
 
   function persist(next: Record<string, DayLog>) {
     setAllLogs(next);
-    localStorage.setItem(LOG_KEY, JSON.stringify(next));
   }
   function addEntry(meal: Meal, entry: Entry) {
     const next = { ...allLogs, [key]: { ...emptyDay(), ...(allLogs[key] || {}) } };
@@ -358,12 +356,11 @@ export default function NutritionTracker() {
 
   function saveGoal() {
     setGoal(goalDraft);
-    localStorage.setItem(GOAL_KEY, JSON.stringify(goalDraft));
+    cloudSet(GOAL_KEY, goalDraft);
     setEditingGoal(false);
   }
   function changeDiet(d: string) {
     setDiet(d);
-    localStorage.setItem(DIET_KEY, d);
   }
 
   const takenToday = supps[key] || [];
@@ -374,7 +371,6 @@ export default function NutritionTracker() {
       [key]: current.includes(name) ? current.filter((x) => x !== name) : [...current, name],
     };
     setSupps(next);
-    localStorage.setItem("ts-supp-log", JSON.stringify(next));
   }
   function addCustomSupp() {
     const n = newSupp.trim();
@@ -384,7 +380,6 @@ export default function NutritionTracker() {
     }
     const next = [...customSupps, n];
     setCustomSupps(next);
-    localStorage.setItem("ts-supp-custom", JSON.stringify(next));
     toggleSupp(n);
     setNewSupp("");
   }
@@ -396,7 +391,6 @@ export default function NutritionTracker() {
     if (!name || !name.trim()) return;
     const next = [...savedMeals, { id: uid(), name: name.trim(), items }];
     setSavedMeals(next);
-    localStorage.setItem("ts-saved-meals", JSON.stringify(next));
   }
   function applyMeal(meal: Meal, sm: { items: Entry[] }) {
     const next = { ...allLogs, [key]: { ...emptyDay(), ...(allLogs[key] || {}) } };
@@ -406,7 +400,6 @@ export default function NutritionTracker() {
   function deleteMeal(id: string) {
     const next = savedMeals.filter((m) => m.id !== id);
     setSavedMeals(next);
-    localStorage.setItem("ts-saved-meals", JSON.stringify(next));
   }
 
   // Weekly summary (last 7 days) computed from the local log.

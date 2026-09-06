@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useCloudState } from "@/lib/cloud";
 
 type Tab = "foods" | "recipes" | "water" | "cycle" | "adherence";
 const card = "border border-bone/15 bg-ink/20 p-5";
@@ -17,10 +18,8 @@ const num = (v: any) => Number(v) || 0;
 /* ---------- Custom Foods Library ---------- */
 function CustomFoods() {
   const KEY = "ts-custom-foods";
-  const [foods, setFoods] = useState<any[]>([]);
+  const [foods, save] = useCloudState<any[]>(KEY, []);
   const [f, setF] = useState({ name: "", cal: "", p: "", c: "", fat: "" });
-  useEffect(() => setFoods(read(KEY, [])), []);
-  const save = (n: any[]) => { setFoods(n); write(KEY, n); };
   const add = () => { if (!f.name.trim()) return; save([...foods, { id: Math.random().toString(36).slice(2), name: f.name.trim(), cal: num(f.cal), p: num(f.p), c: num(f.c), f: num(f.fat) }]); setF({ name: "", cal: "", p: "", c: "", fat: "" }); };
   return (
     <div className="grid gap-4 max-w-xl">
@@ -48,13 +47,11 @@ function CustomFoods() {
 /* ---------- Recipe Builder ---------- */
 function Recipes() {
   const KEY = "ts-recipes";
-  const [recipes, setRecipes] = useState<any[]>([]);
+  const [recipes, save] = useCloudState<any[]>(KEY, []);
   const [name, setName] = useState("");
   const [servings, setServings] = useState("1");
   const [items, setItems] = useState<any[]>([]);
   const [it, setIt] = useState({ name: "", cal: "", p: "", c: "", fat: "" });
-  useEffect(() => setRecipes(read(KEY, [])), []);
-  const save = (n: any[]) => { setRecipes(n); write(KEY, n); };
   const totals = items.reduce((t, x) => ({ cal: t.cal + num(x.cal), p: t.p + num(x.p), c: t.c + num(x.c), f: t.f + num(x.f) }), { cal: 0, p: 0, c: 0, f: 0 });
   const s = Math.max(1, num(servings));
   const per = { cal: Math.round(totals.cal / s), p: Math.round(totals.p / s), c: Math.round(totals.c / s), f: Math.round(totals.f / s) };
@@ -93,15 +90,13 @@ function Recipes() {
 function Water() {
   const KEY = "ts-water", GKEY = "ts-water-goal";
   const today = new Date().toISOString().slice(0, 10);
-  const [log, setLog] = useState<Record<string, number>>({});
-  const [goal, setGoal] = useState(8);
-  useEffect(() => { setLog(read(KEY, {})); setGoal(read(GKEY, 8)); }, []);
-  const set = (n: Record<string, number>) => { setLog(n); write(KEY, n); };
+  const [log, set] = useCloudState<Record<string, number>>(KEY, {});
+  const [goal, setGoal] = useCloudState<number>(GKEY, 8);
   const count = log[today] || 0;
   const bump = (d: number) => set({ ...log, [today]: Math.max(0, count + d) });
   return (
     <div className="grid gap-4 max-w-md">
-      <div><label className={label}>Daily goal (cups / glasses)</label><input className={input + " max-w-[120px]"} inputMode="numeric" value={goal} onChange={(e) => { const g = num(e.target.value); setGoal(g); write(GKEY, g); }} /></div>
+      <div><label className={label}>Daily goal (cups / glasses)</label><input className={input + " max-w-[120px]"} inputMode="numeric" value={goal} onChange={(e) => { setGoal(num(e.target.value)); }} /></div>
       <div className={card + " text-center"}>
         <p className="text-5xl font-display text-electric">{count}<span className="text-lg text-bone/40"> / {goal}</span></p>
         <div className="flex justify-center gap-1 my-3 flex-wrap">
@@ -120,9 +115,7 @@ function Water() {
 /* ---------- Macro Cycling ---------- */
 function Cycle() {
   const KEY = "ts-macro-cycle";
-  const [plan, setPlan] = useState<Record<string, any>>({});
-  useEffect(() => setPlan(read(KEY, {})), []);
-  const save = (n: any) => { setPlan(n); write(KEY, n); };
+  const [plan, save] = useCloudState<Record<string, any>>(KEY, {});
   const todayKey = DAYS[(new Date().getDay() + 6) % 7];
   const upd = (day: string, k: string, v: string) => save({ ...plan, [day]: { ...(plan[day] || {}), [k]: num(v) } });
   return (

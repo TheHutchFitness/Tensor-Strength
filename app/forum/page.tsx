@@ -6,8 +6,10 @@ import Tour from "@/components/portal/Tour";
 import Footer from "@/components/Footer";
 
 type Media = { url: string; type: "image" | "video" } | null;
+type Reactions = Record<string, string[]>;
 type Post = {
   id: string;
+  userId?: string;
   username: string;
   title: string;
   body: string;
@@ -16,6 +18,8 @@ type Post = {
   mediaType: string | null;
   replyCount: number;
   likes?: string[];
+  bestAnswerId?: string | null;
+  reactions?: Reactions;
   createdAt: string;
 };
 
@@ -29,10 +33,25 @@ const CATEGORIES = [
 const catLabel = (id?: string) => CATEGORIES.find((c) => c.id === (id || "general"))?.label || "General Discussions";
 type Reply = {
   id: string;
+  userId?: string;
   username: string;
   body: string;
   mediaUrl: string | null;
   mediaType: string | null;
+  reactions?: Reactions;
+  createdAt: string;
+};
+
+const EMOJIS = ["👍", "🔥", "💪", "👏", "😂", "❤️"];
+
+type Notification = {
+  id: string;
+  actorName: string;
+  type: "mention" | "reply" | "best-answer";
+  postId: string | null;
+  postTitle: string;
+  snippet: string;
+  read: boolean;
   createdAt: string;
 };
 
@@ -86,10 +105,181 @@ function MediaPicker({ media, setMedia }: { media: Media; setMedia: (m: Media) =
   );
 }
 
+function ReactionBar({
+  reactions,
+  meId,
+  onReact,
+}: {
+  reactions?: Reactions;
+  meId?: string;
+  onReact: (emoji: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = Object.entries(reactions || {}).filter(([, u]) => (u || []).length > 0);
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {active.map(([emoji, users]) => {
+        const mine = !!(meId && users.includes(meId));
+        return (
+          <button
+            key={emoji}
+            onClick={() => onReact(emoji)}
+            className={
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors " +
+              (mine ? "border-electric text-electric bg-electric/10" : "border-bone/20 text-bone/60 hover:border-electric")
+            }
+          >
+            <span>{emoji}</span>
+            <span className="font-display">{users.length}</span>
+          </button>
+        );
+      })}
+      <div className="relative">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="rounded-full border border-bone/20 text-bone/50 hover:text-electric hover:border-electric px-2 py-0.5 text-xs transition-colors"
+          title="Add reaction"
+        >
+          + 😀
+        </button>
+        {open && (
+          <div className="absolute z-20 mt-1 flex gap-1 rounded-md border border-bone/20 bg-ink p-1.5 shadow-xl">
+            {EMOJIS.map((e) => (
+              <button
+                key={e}
+                onClick={() => {
+                  onReact(e);
+                  setOpen(false);
+                }}
+                className="text-lg hover:scale-125 transition-transform"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// A textarea with @mention autocomplete driven by a members list.
+function MentionTextarea({
+  value,
+  onChange,
+  members,
+  placeholder,
+  rows = 3,
+  className = "",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  members: { username: string; isCoach: boolean }[];
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}) {
+  const [suggest, setSuggest] = useState<{ username: string; isCoach: boolean }[]>([]);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  function recompute(text: string, caret: number) {
+    const upto = text.slice(0, caret);
+    const at = upto.lastIndexOf("@");
+    if (at === -1) return setSuggest([]);
+    // Only trigger if @ is at start or preceded by whitespace.
+    if (at > 0 && !/\s/.test(upto[at - 1])) return setSuggest([]);
+    const query = upto.slice(at + 1).toLowerCase();
+    if (query.length > 30 || query.includes("\n")) return setSuggest([]);
+    const matches = members
+      .filter((m) => m.username.toLowerCase().startsWith(query))
+      .slice(0, 6);
+    setSuggest(query.length === 0 ? members.slice(0, 6) : matches);
+  }
+
+  function pick(username: string) {
+    const el = ref.current;
+    const caret = el ? el.selectionStart : value.length;
+    const upto = value.slice(0, caret);
+    const at = upto.lastIndexOf("@");
+    const next = value.slice(0, at) + "@" + username + " " + value.slice(caret);
+    onChange(next);
+    setSuggest([]);
+    setTimeout(() => el?.focus(), 0);
+  }
+
+  return (
+    <div className="relative">
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          recompute(e.target.value, e.target.selectionStart);
+        }}
+        onKeyUp={(e) => recompute((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+        onBlur={() => setTimeout(() => setSuggest([]), 150)}
+        rows={rows}
+        placeholder={placeholder}
+        className={className}
+      />
+      {suggest.length > 0 && (
+        <div className="absolute z-30 mt-1 w-64 max-h-56 overflow-auto rounded-md border border-bone/20 bg-ink shadow-xl">
+          {suggest.map((m) => (
+            <button
+              key={m.username}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(m.username);
+              }}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-bone/80 hover:bg-electric/10 hover:text-electric"
+            >
+              <span>@{m.username}</span>
+              {m.isCoach && <span className="text-[9px] font-display uppercase tracking-wider text-electric">Coach</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Render body text with @mentions of known members highlighted.
+function highlightMentions(text: string, members: { username: string }[]) {
+  if (!text) return null;
+  if (!members.length || !text.includes("@")) return text;
+  // Longest usernames first so multi-word names win over prefixes.
+  const names = members.map((m) => m.username).sort((a, b) => b.length - a.length);
+  const parts: (string | JSX.Element)[] = [];
+  let i = 0;
+  let key = 0;
+  while (i < text.length) {
+    if (text[i] === "@") {
+      const rest = text.slice(i + 1);
+      const hit = names.find((n) => rest.toLowerCase().startsWith(n.toLowerCase()));
+      if (hit) {
+        parts.push(
+          <span key={key++} className="text-electric font-medium">
+            @{text.slice(i + 1, i + 1 + hit.length)}
+          </span>
+        );
+        i += 1 + hit.length;
+        continue;
+      }
+    }
+    // accumulate a run of plain text
+    const last = parts[parts.length - 1];
+    if (typeof last === "string") parts[parts.length - 1] = last + text[i];
+    else parts.push(text[i]);
+    i++;
+  }
+  return parts;
+}
+
 export default function ForumPage() {
   const [loading, setLoading] = useState(true);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [me, setMe] = useState<{ id: string; role: string } | null>(null);
+  const [me, setMe] = useState<{ id: string; role: string; isTrainer?: boolean } | null>(null);
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [thread, setThread] = useState<{ post: Post; replies: Reply[] } | null>(null);
@@ -106,6 +296,11 @@ export default function ForumPage() {
   const [replyMedia, setReplyMedia] = useState<Media>(null);
   const [replying, setReplying] = useState(false);
 
+  const [members, setMembers] = useState<{ username: string; isCoach: boolean }[]>([]);
+  const [notifs, setNotifs] = useState<Notification[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+
   async function loadPosts() {
     const res = await fetch("/api/forum/posts");
     if (res.status === 401) {
@@ -116,13 +311,75 @@ export default function ForumPage() {
     setPosts(data.posts || []);
     setLoading(false);
   }
+
+  async function loadNotifs() {
+    try {
+      const res = await fetch("/api/forum/notifications");
+      if (!res.ok) return;
+      const d = await res.json();
+      setNotifs(d.notifications || []);
+      setUnread(d.unread || 0);
+    } catch {}
+  }
+
   useEffect(() => {
     loadPosts();
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setMe(d?.user ? { id: d.user.id, role: d.user.role } : null))
+      .then((d) => setMe(d?.user ? { id: d.user.id, role: d.user.role, isTrainer: d.user.isTrainer } : null))
       .catch(() => {});
+    fetch("/api/forum/members")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMembers(d?.members || []))
+      .catch(() => {});
+    loadNotifs();
+    const t = setInterval(loadNotifs, 30000);
+    return () => clearInterval(t);
   }, []);
+
+  async function openNotifs() {
+    const willOpen = !notifOpen;
+    setNotifOpen(willOpen);
+    if (willOpen && unread > 0) {
+      await fetch("/api/forum/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      setUnread(0);
+      setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+    }
+  }
+
+  async function react(targetType: "post" | "reply", targetId: string, emoji: string) {
+    const res = await fetch("/api/forum/react", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetType, targetId, emoji }),
+    });
+    if (!res.ok) return;
+    const d = await res.json();
+    if (targetType === "post") {
+      setPosts((prev) => prev.map((p) => (p.id === targetId ? { ...p, reactions: d.reactions } : p)));
+      setThread((t) => (t && t.post.id === targetId ? { ...t, post: { ...t.post, reactions: d.reactions } } : t));
+    } else {
+      setThread((t) =>
+        t ? { ...t, replies: t.replies.map((r) => (r.id === targetId ? { ...r, reactions: d.reactions } : r)) } : t
+      );
+    }
+  }
+
+  async function markBestAnswer(replyId: string | null) {
+    if (!openId) return;
+    const res = await fetch("/api/forum/best-answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: openId, replyId }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setThread((t) => (t ? { ...t, post: { ...t.post, bestAnswerId: d.bestAnswerId } } : t));
+    } else {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error || "Could not update best answer");
+    }
+  }
 
   async function toggleLike(id: string) {
     const res = await fetch("/api/forum/like", {
@@ -248,9 +505,57 @@ export default function ForumPage() {
       />
       <main className="text-bone min-h-screen">
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-24">
-          <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-5">
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm">
             Community Forum
           </p>
+          <div className="relative">
+            <button
+              onClick={openNotifs}
+              className="relative border border-bone/20 hover:border-electric text-bone/70 hover:text-electric px-3 py-1.5 rounded-md transition-colors"
+              title="Notifications"
+            >
+              <span className="text-lg leading-none">🔔</span>
+              {unread > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-electric text-ink text-[10px] font-display flex items-center justify-center">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </button>
+            {notifOpen && (
+              <div className="absolute right-0 z-40 mt-2 w-80 max-h-96 overflow-auto rounded-md border border-bone/20 bg-ink shadow-2xl">
+                <div className="px-4 py-3 border-b border-bone/15 flex items-center justify-between">
+                  <span className="font-display uppercase tracking-wider text-electric text-xs">Notifications</span>
+                  <button onClick={() => setNotifOpen(false)} className="text-bone/40 hover:text-electric text-sm">✕</button>
+                </div>
+                {notifs.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-bone/50">Nothing yet. Mentions and replies will show up here.</p>
+                ) : (
+                  notifs.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        setNotifOpen(false);
+                        if (n.postId) openThread(n.postId);
+                      }}
+                      className={
+                        "block w-full text-left px-4 py-3 border-b border-bone/10 hover:bg-electric/5 transition-colors " +
+                        (n.read ? "" : "bg-electric/[0.04]")
+                      }
+                    >
+                      <p className="text-sm text-bone/80">
+                        <span className="text-electric font-display uppercase tracking-wider">{n.actorName}</span>{" "}
+                        {n.type === "mention" ? "mentioned you" : n.type === "best-answer" ? "marked your answer as best" : "replied to your post"}
+                      </p>
+                      {n.postTitle && <p className="text-xs text-bone/50 mt-0.5 truncate">on “{n.postTitle}”</p>}
+                      <p className="text-[10px] text-bone/40 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
           {!openId ? (
             <>
@@ -300,11 +605,12 @@ export default function ForumPage() {
                     ))}
                   </select>
                 </label>
-                <textarea
+                <MentionTextarea
                   value={body}
-                  onChange={(e) => setBody(e.target.value)}
+                  onChange={setBody}
+                  members={members}
                   rows={3}
-                  placeholder="Add details… (optional)"
+                  placeholder="Add details… Use @ to mention someone (optional)"
                   className={inputCls + " resize-none"}
                 />
                 <MediaPicker media={media} setMedia={setMedia} />
@@ -370,6 +676,9 @@ export default function ForumPage() {
                               </p>
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
+                              {p.bestAnswerId && (
+                                <span className="text-[10px] font-display uppercase tracking-wider text-emerald-400">✓ Answered</span>
+                              )}
                               {p.mediaType && (
                                 <span className="text-[10px] font-display uppercase tracking-wider text-electric">
                                   {p.mediaType === "video" ? "▶ video" : "▣ photo"}
@@ -379,7 +688,7 @@ export default function ForumPage() {
                             </div>
                           </div>
                         </button>
-                        <div className="mt-3 flex items-center gap-4 border-t border-bone/10 pt-3">
+                        <div className="mt-3 flex items-center gap-4 border-t border-bone/10 pt-3 flex-wrap">
                           <button
                             onClick={() => toggleLike(p.id)}
                             className={
@@ -389,6 +698,7 @@ export default function ForumPage() {
                           >
                             {liked ? "♥" : "♡"} {(p.likes || []).length} {(p.likes || []).length === 1 ? "like" : "likes"}
                           </button>
+                          <ReactionBar reactions={p.reactions} meId={me?.id} onReact={(e) => react("post", p.id, e)} />
                           {canDelete && (
                             <button
                               onClick={() => deletePost(p.id)}
@@ -426,32 +736,89 @@ export default function ForumPage() {
                   <p className="text-xs text-bone/50 mt-2">
                     by {thread.post.username} · {new Date(thread.post.createdAt).toLocaleString()}
                   </p>
-                  {thread.post.body && <p className="mt-4 text-bone/80 leading-relaxed whitespace-pre-wrap">{thread.post.body}</p>}
+                  {thread.post.body && (
+                    <p className="mt-4 text-bone/80 leading-relaxed whitespace-pre-wrap">
+                      {highlightMentions(thread.post.body, members)}
+                    </p>
+                  )}
                   {thread.post.mediaUrl && <MediaView url={thread.post.mediaUrl} type={thread.post.mediaType} />}
+                  <div className="mt-4">
+                    <ReactionBar reactions={thread.post.reactions} meId={me?.id} onReact={(e) => react("post", thread.post.id, e)} />
+                  </div>
 
                   <div className="mt-10 border-t border-bone/10 pt-6">
                     <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
                       {thread.replies.length} {thread.replies.length === 1 ? "Reply" : "Replies"}
                     </p>
                     <div className="grid gap-4">
-                      {thread.replies.map((r) => (
-                        <div key={r.id} className="border border-bone/15 bg-ink/30 p-5">
-                          <p className="text-xs text-bone/50">
-                            <span className="text-bone/80 font-display uppercase tracking-wider">{r.username}</span>{" "}
-                            · {new Date(r.createdAt).toLocaleString()}
-                          </p>
-                          {r.body && <p className="mt-2 text-bone/80 leading-relaxed whitespace-pre-wrap">{r.body}</p>}
-                          {r.mediaUrl && <MediaView url={r.mediaUrl} type={r.mediaType} />}
-                        </div>
-                      ))}
+                      {(() => {
+                        const canMarkBest = !!(
+                          me &&
+                          (me.id === thread.post.userId || me.isTrainer || me.role === "admin")
+                        );
+                        const sorted = [...thread.replies].sort((a, b) => {
+                          if (a.id === thread.post.bestAnswerId) return -1;
+                          if (b.id === thread.post.bestAnswerId) return 1;
+                          return 0;
+                        });
+                        return sorted.map((r) => {
+                          const isBest = thread.post.bestAnswerId === r.id;
+                          return (
+                            <div
+                              key={r.id}
+                              className={
+                                "border p-5 " +
+                                (isBest
+                                  ? "border-emerald-500/60 bg-emerald-500/[0.06]"
+                                  : "border-bone/15 bg-ink/30")
+                              }
+                            >
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <p className="text-xs text-bone/50">
+                                  <span className="text-bone/80 font-display uppercase tracking-wider">{r.username}</span>{" "}
+                                  · {new Date(r.createdAt).toLocaleString()}
+                                </p>
+                                {isBest && (
+                                  <span className="text-[10px] font-display uppercase tracking-wider text-emerald-400 border border-emerald-500/40 rounded-full px-2 py-0.5">
+                                    ✓ Best Answer
+                                  </span>
+                                )}
+                              </div>
+                              {r.body && (
+                                <p className="mt-2 text-bone/80 leading-relaxed whitespace-pre-wrap">
+                                  {highlightMentions(r.body, members)}
+                                </p>
+                              )}
+                              {r.mediaUrl && <MediaView url={r.mediaUrl} type={r.mediaType} />}
+                              <div className="mt-3 flex items-center gap-4 flex-wrap">
+                                <ReactionBar reactions={r.reactions} meId={me?.id} onReact={(e) => react("reply", r.id, e)} />
+                                {canMarkBest && (
+                                  <button
+                                    onClick={() => markBestAnswer(isBest ? null : r.id)}
+                                    className={
+                                      "font-display uppercase tracking-wider text-[11px] transition-colors ml-auto " +
+                                      (isBest
+                                        ? "text-emerald-400 hover:text-bone/60"
+                                        : "text-bone/50 hover:text-emerald-400")
+                                    }
+                                  >
+                                    {isBest ? "Unmark best" : "★ Mark best answer"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
 
                     <form onSubmit={postReply} className="mt-8 border border-bone/15 bg-ink/30 p-6 grid gap-3">
-                      <textarea
+                      <MentionTextarea
                         value={replyBody}
-                        onChange={(e) => setReplyBody(e.target.value)}
+                        onChange={setReplyBody}
+                        members={members}
                         rows={3}
-                        placeholder="Write a reply…"
+                        placeholder="Write a reply… Use @ to mention someone"
                         className={inputCls + " resize-none"}
                       />
                       <MediaPicker media={replyMedia} setMedia={setReplyMedia} />

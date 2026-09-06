@@ -105,6 +105,90 @@
 user_problem_statement: "Migrate the Tensor Strength Next.js site to Emergent and add real server-side authentication: entire site gated behind login, self-registration for members, an admin (Hutch) who can approve/revoke each member's Client Portal access. Replace the old client-side passcode gate on /clients with the new auth."
 
 backend:
+  - task: "Client Cloud Store (GET/PUT /api/client/store)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Generic per-user key/value store so client tools sync across devices. PUT {key, value} upserts into user_store scoped to userId (unique per userId+key). GET ?key=k returns {found, value}; GET without key returns {data:{k:v}} for all keys (limit 200). Requires auth (401 otherwise). PUT requires non-empty key (400). Rejects values > 2MB (413). Two different users must NOT see each other's keys."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 22 tests (100% success rate). COMPREHENSIVE CLIENT CLOUD STORE TESTING: AUTHENTICATION (2 tests): (1) PUT /api/client/store without auth cookie returns 401 with error 'Unauthorized'. (2) GET /api/client/store without auth cookie returns 401 with error 'Unauthorized'. VALIDATION (2 tests): (3) PUT without key field returns 400 with error 'A key is required'. (4) PUT with empty key string returns 400 with error 'A key is required'. BASIC OPERATIONS (3 tests): (5) PUT with string value returns 200 {ok:true}. (6) PUT with array value (bodyweight data) returns 200 {ok:true}. (7) PUT with number value returns 200 {ok:true}. RETRIEVAL (4 tests): (8) GET with key 'ts-test-string' returns {found:true, value:'Hello World'} - exact value preserved. (9) GET with key 'ts-bodyweight' returns {found:true, value:[array]} - array with 2 objects preserved exactly. (10) GET with key 'ts-counter' returns {found:true, value:42} - number value preserved. (11) GET with key never set returns {found:false, value:null}. ALL KEYS (1 test): (12) GET without key parameter returns {data:{...}} containing all 3 keys set by user (ts-test-string, ts-bodyweight, ts-counter). UPSERT (1 test): (13) PUT same key 'ts-upsert-test' twice with different values, GET returns latest value 'second value (updated)' - no duplication, upsert working correctly. SIZE LIMIT (1 test): (14) PUT with value > 2MB (2,000,001 bytes) returns 413 with error 'Value too large'. PER-USER ISOLATION (6 tests - CRITICAL): (15) Member A PUT key 'ts-water' with value {\"2025-01-01\":5} returns 200. (16) Member B GET key 'ts-water' returns {found:false, value:null} - Member B CANNOT see Member A's data (isolation working). (17) Member B PUT key 'ts-water' with different value {\"2025-01-01\":8} returns 200. (18) Member A GET key 'ts-water' still returns {found:true, value:{\"2025-01-01\":5}} - Member A's data NOT overwritten by Member B (isolation working). (19) Member B GET key 'ts-water' returns {found:true, value:{\"2025-01-01\":8}} - Member B sees only their own value (isolation working). (20) Member A GET all keys returns only Member A's data including ts-water with value 5, NOT Member B's value 8 (isolation working). VALUE TYPES VERIFIED: String, number, array, object all stored and retrieved exactly as submitted. No MongoDB _id leaks detected in any response. All status codes correct (200, 400, 401, 413). PER-USER ISOLATION FULLY VERIFIED: Two different users with same key name store and retrieve completely separate values."
+  - task: "Forum - Best Answer (POST /api/forum/best-answer)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Sets/clears post.bestAnswerId. Only original poster, a trainer (isTrainer), or admin may mark. Returns 401 unauth, 404 missing post, 403 forbidden for others. When a replyId is set, pushes a 'best-answer' notification to the reply author."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 7 tests (100% success rate). COMPREHENSIVE BEST ANSWER TESTING: (1) POST /api/forum/best-answer without auth returns 401. (2) Non-OP, non-trainer, non-admin member attempting to mark best answer returns 403 (Forbidden). (3) Original poster (Alice) successfully marks reply as best answer, returns 200 with bestAnswerId. (4) GET /api/forum/thread verifies bestAnswerId is correctly set on the post. (5) Clearing best answer with replyId=null returns 200 with bestAnswerId=null. (6) Attempting to mark best answer on non-existent post returns 404. (7) Admin successfully marks best answer (trainer/admin privilege), returns 200. Best-answer notification correctly sent to reply author when marked. All status codes correct (200, 401, 403, 404). No MongoDB _id or passwordHash leaks detected."
+  - task: "Forum - Members list (GET /api/forum/members)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Returns [{username, isCoach}] for @mention autocomplete. Requires auth (401 otherwise). isCoach true when isTrainer or role=admin."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 3 tests (100% success rate). MEMBERS LIST TESTING: (1) GET /api/forum/members without auth cookie returns 401 (Authentication required). (2) GET /api/forum/members as authenticated admin returns 200 with members array containing {username, isCoach} objects. Found 57 members in database. (3) Verified 'The Hutch' (admin) has isCoach=true as expected (admin/trainer flag working correctly). (4) No MongoDB _id or passwordHash leaks detected in response. All members have username field, isCoach correctly set based on isTrainer or role=admin."
+  - task: "Forum - Notifications (GET /api/forum/notifications, POST /api/forum/notifications/read)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET returns current user's notifications (limit 50, newest first) with unread count. POST read marks all (or a specific {id}) as read. Notifications created on: reply to your post ('reply'), @mention in post/reply ('mention'), your reply marked best ('best-answer'). Self-notifications skipped."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 15 tests (100% success rate). COMPREHENSIVE NOTIFICATIONS TESTING: REPLY NOTIFICATIONS: (1) Bob replies to Alice's post, Alice receives 'reply' notification with unread count increased. (2) GET /api/forum/notifications returns notifications array sorted newest first (limit 50) with unread count. MENTION NOTIFICATIONS: (3) Bob creates post mentioning '@Alice QA 187001', Alice receives 'mention' notification. (4) Alice creates reply mentioning '@Bob QA 87001', Bob receives both 'mention' and 'reply' notifications (since it's his post). (5) Case-insensitive mentions work: Bob mentions '@ALICE QA 187001' (uppercase), Alice receives mention notification correctly. BEST-ANSWER NOTIFICATIONS: (6) Alice marks Bob's reply as best answer, Bob receives 'best-answer' notification. SELF-NOTIFICATION SKIP: (7) Alice replies to her own post, NO self-notification created (correctly skipped). MARK AS READ: (8) POST /api/forum/notifications/read with empty body marks all notifications as read, unread count becomes 0. (9) POST /api/forum/notifications/read with {id} marks single notification as read, unread count decreases by 1. All notification types working correctly (reply, mention, best-answer). No MongoDB _id or passwordHash leaks detected."
+  - task: "Forum - Emoji Reactions (POST /api/forum/react)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Toggles current user's reaction. Body {targetType:'post'|'reply', targetId, emoji}. Allowed emojis: 👍 🔥 💪 👏 😂 ❤️. Stores reactions map {emoji:[userIds]} on the post/reply doc, empty arrays pruned. Returns 400 for invalid emoji/target, 401 unauth. Returns updated reactions map."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 8 tests (100% success rate). COMPREHENSIVE EMOJI REACTIONS TESTING: (1) POST /api/forum/react without auth returns 401. (2) React to post with valid emoji (👍) returns 200 with reactions map containing user's ID in emoji array. (3) React again with same emoji toggles it off (removes user from array), empty arrays pruned from response. (4) React with invalid emoji (🎉 not in allowed list) returns 400. (5) React to reply with valid emoji (🔥) returns 200 with reactions map. (6) React with invalid targetId returns 400. ALLOWED EMOJIS VERIFIED: 👍 🔥 💪 👏 😂 ❤️ all work correctly. Toggle functionality working (add on first call, remove on second call). Works on both posts and replies (targetType: 'post' or 'reply'). Returns updated reactions map as {emoji: [userIds]}. No MongoDB _id or passwordHash leaks detected."
+  - task: "Forum - Mention parsing on post/reply create"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "On POST /api/forum/posts and /api/forum/replies, scans text for @<username> (exact, case-insensitive, usernames may contain spaces) against users collection and creates 'mention' notifications for each mentioned member. Reply creation also notifies the original poster."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 7 tests (100% success rate). COMPREHENSIVE MENTION PARSING TESTING: (1) Bob creates post with body containing '@Alice QA 187001' (username with spaces), Alice receives 'mention' notification correctly. (2) Alice creates reply with body containing '@Bob QA 87001', Bob receives 'mention' notification. (3) Case-insensitive matching works: Bob mentions '@ALICE QA 187001' (uppercase), Alice receives mention notification (matching is case-insensitive as specified). (4) Usernames with spaces are correctly parsed and matched (e.g., 'Alice QA 187001', 'Bob QA 87001'). (5) Self-mentions are skipped (no self-notification created). (6) Mention notifications include correct metadata: actorId, actorName, type='mention', postId, postTitle, replyId (if in reply), snippet (first 140 chars). (7) Reply creation triggers BOTH mention notification (if @username present) AND reply notification to original poster. All mention parsing working correctly with exact, case-insensitive username matching including spaces."
   - task: "Auth - register (POST /api/auth/register)"
     implemented: true
     working: true
@@ -267,6 +351,16 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+    -agent: "main"
+    -message: "NEW FORUM FEATURES to test (all under /api). Use cookie jar for httpOnly ts_token. Admin/Trainer login: username 'The Hutch' password 'Vzkfjf3n!3'. Register a couple of members to test cross-user notifications/mentions. Flows: (1) Member A creates a post; Member B replies -> A gets a 'reply' notification (GET /api/forum/notifications shows unread>=1). (2) Member B writes a reply/post body containing '@<A username>' -> A gets a 'mention' notification. Usernames may contain spaces (e.g. '@The Hutch'); matching is exact & case-insensitive. (3) POST /api/forum/react {targetType:'post'|'reply', targetId, emoji:'🔥'} toggles reaction; re-POST removes it; invalid emoji -> 400; returns updated reactions map. (4) POST /api/forum/best-answer {postId, replyId} by the OP/trainer/admin sets post.bestAnswerId and notifies reply author with 'best-answer'; a non-owner non-coach member -> 403; replyId:null clears it. (5) POST /api/forum/notifications/read marks all read (unread becomes 0); optional {id} marks one. (6) GET /api/forum/members returns [{username,isCoach}] and requires auth. Verify no _id leaks and self-notifications are skipped."
+    -agent: "testing"
+    -message: "✅ ALL NEW COMMUNITY FORUM BACKEND TESTS PASSED (40/40 - 100% success rate). Comprehensive testing completed covering all 5 forum features: MEMBERS LIST (3 tests): GET /api/forum/members requires auth (401 without cookie), returns members array with {username, isCoach} where isCoach=true for admin/trainers. EMOJI REACTIONS (8 tests): POST /api/forum/react toggles reactions on posts/replies, allowed emojis (👍 🔥 💪 👏 😂 ❤️) work, invalid emoji returns 400, toggle on/off working, empty arrays pruned. BEST ANSWER (7 tests): Only OP/trainer/admin can mark (403 for others), sets/clears post.bestAnswerId, sends 'best-answer' notification to reply author, 404 for missing post. NOTIFICATIONS (15 tests): Reply notifications work (Bob replies to Alice's post -> Alice gets 'reply' notification), mention notifications work with case-insensitive matching including usernames with spaces ('@Alice QA 187001'), best-answer notifications sent when reply marked, self-notifications correctly skipped, GET returns notifications sorted newest first with unread count, POST /read marks all or single notification as read. MENTION PARSING (7 tests): @username mentions in posts/replies create notifications, case-insensitive matching works, usernames with spaces parsed correctly. All status codes correct (200, 400, 401, 403, 404). No MongoDB _id or passwordHash leaks detected in any response. NOTE: Admin username is 'the hutch' (lowercase) in database, login requires username field (not identifier)."
+    -agent: "main"
+    -message: "Test the NEW generic per-user Cloud Store backend endpoints on the Next.js app. All routes are /api-prefixed and require auth via httpOnly cookie ts_token — use a cookie jar. CREDENTIALS: Admin: username 'The Hutch', password 'Vzkfjf3n!3'. Also register 2 fresh members via POST /api/auth/register to test per-user isolation. ENDPOINTS: 1) PUT /api/client/store body { key, value } - Requires auth (401 without cookie). Empty/missing key -> 400. Valid { key: 'ts-bodyweight', value: [{date:'2025-01-01', weight:200}] } -> 200 {ok:true}. value can be any JSON (object, array, number, string). A value larger than 2MB -> 413 (build a big string to test). 2) GET /api/client/store?key=<k> - Requires auth (401). After a PUT, returns { found: true, value: <exact value stored> }. For a key never set -> { found: false, value: null }. 3) GET /api/client/store (no key) - Returns { data: { key: value, ... } } containing all keys the current user has set. 4) PER-USER ISOLATION (critical): Login as Member A, PUT key 'ts-water' value {'2025-01-01':5}. Login as Member B, GET /api/client/store?key=ts-water -> found:false (must NOT see A's data). Then B PUTs its own value; A still sees only A's value. 5) UPSERT: PUT the same key twice with different values -> GET returns the latest value (not duplicated). 6) No MongoDB _id leaks in any response. Focus ONLY on /api/client/store. Do not retest forum/auth/payments."
+    -agent: "testing"
+    -message: "✅ ALL CLIENT CLOUD STORE BACKEND TESTS PASSED (22/22 - 100% success rate). Comprehensive testing completed covering all specified requirements: AUTHENTICATION (2 tests): PUT and GET /api/client/store without auth cookie both return 401 with error 'Unauthorized'. VALIDATION (2 tests): PUT without key field returns 400 'A key is required', PUT with empty key string returns 400 'A key is required'. BASIC OPERATIONS (3 tests): PUT with string/array/number values all return 200 {ok:true}. RETRIEVAL (4 tests): GET with key returns {found:true, value:<exact value>} for string/array/number values, GET with never-set key returns {found:false, value:null}. ALL KEYS (1 test): GET without key parameter returns {data:{key:value,...}} containing all keys for current user. UPSERT (1 test): PUT same key twice with different values, GET returns latest value (no duplication). SIZE LIMIT (1 test): PUT with value > 2MB returns 413 'Value too large'. PER-USER ISOLATION (6 tests - CRITICAL): Member A PUT 'ts-water' with value {\"2025-01-01\":5}. Member B GET 'ts-water' returns {found:false} - CANNOT see A's data. Member B PUT 'ts-water' with value {\"2025-01-01\":8}. Member A GET 'ts-water' still returns value 5 - NOT overwritten. Member B GET 'ts-water' returns value 8 - sees only own data. Member A GET all keys returns only A's data with ts-water=5, NOT B's value. VALUE TYPES VERIFIED: String, number, array, object all stored and retrieved exactly. No MongoDB _id leaks detected. All status codes correct (200, 400, 401, 413). PER-USER ISOLATION FULLY VERIFIED."
+
+agent_communication_history:
     -agent: "main"
     -message: "Please test the new auth backend on the /api routes. Admin is seeded from env (username: hutch, password: TensorStrength#2026). Cookie is httpOnly named ts_token - use a cookie jar/session to persist it across requests. Suggested flow: 1) register a new member -> expect member with portalAccess=false + cookie set; 2) GET /auth/me with that cookie -> returns the member; 3) duplicate register -> 409; 4) login as admin -> cookie; 5) GET /admin/users as admin -> list includes the new member; 6) PUT /admin/users {id, portalAccess:true} as admin -> member updated; 7) GET /admin/users as the member (non-admin) -> 403; 8) POST /checkins as member BEFORE approval -> 403, and AFTER approval (re-fetch me) -> 200; 9) bad login -> 401; 10) logout clears cookie so /auth/me -> 401. Note: all backend routes are prefixed with /api."
     -agent: "testing"
