@@ -9,6 +9,52 @@ const links = [
   { href: "/#tools", label: "Free Tools" },
 ];
 
+// Desktop grouped hover dropdowns. Each trigger still links to its main section;
+// the panel exposes the related sub-sections.
+const menus = [
+  {
+    label: "About",
+    href: "/#about",
+    items: [
+      { href: "/#about", label: "Our Approach" },
+      { href: "/#coaching", label: "Coaching Showcase" },
+      { href: "/#professionals", label: "Meet the Team" },
+      { href: "/#fit-effect", label: "The Fit Effect" },
+      { href: "/#pricing", label: "Pricing" },
+    ],
+  },
+  {
+    label: "Content",
+    href: "/#content",
+    items: [
+      { href: "/#content", label: "Latest Content" },
+      { href: "/#pr-board", label: "PR Board" },
+      { href: "/forum", label: "Community Forum" },
+    ],
+  },
+  {
+    label: "Weekly Programs",
+    href: "/#programs",
+    items: [
+      { href: "/#programs", label: "Weekly Programs" },
+      { href: "/#program-finder", label: "Program Finder" },
+      { href: "/#program", label: "Custom Program" },
+      { href: "/free-programs", label: "Free Programs" },
+    ],
+  },
+  {
+    label: "Free Tools",
+    href: "/#tools",
+    items: [
+      { href: "/?t=1rm#tools", label: "1-Rep Max" },
+      { href: "/?t=wilks#tools", label: "Wilks & DOTS" },
+      { href: "/?t=pr#tools", label: "PR Tracker" },
+      { href: "/macros", label: "Macro Calculator" },
+      { href: "/#tools", label: "Nearby Gyms" },
+    ],
+  },
+];
+
 type Me = { username: string; role: string; portalAccess: boolean; isTrainer?: boolean } | null;
 
 export default function Navbar() {
@@ -38,15 +84,37 @@ export default function Navbar() {
           />
         </a>
 
-        <ul className="hidden md:flex items-center gap-8">
-          {links.map((l) => (
-            <li key={l.href}>
+        <ul className="hidden md:flex items-center gap-6">
+          {menus.map((m) => (
+            <li key={m.label} className="relative group">
               <a
-                href={l.href}
-                className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors"
+                href={m.href}
+                className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors inline-flex items-center gap-1"
               >
-                {l.label}
+                {m.label}
+                <svg
+                  className="h-3 w-3 text-bone/50 group-hover:text-electric transition-colors"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </a>
+              {/* Hover panel — pt-2 keeps a bridge so the menu doesn't close on the gap */}
+              <div className="absolute left-0 top-full pt-3 hidden group-hover:block">
+                <div className="min-w-[230px] bg-ink/95 backdrop-blur border-2 border-electric/60 shadow-xl shadow-electric/10">
+                  {m.items.map((it, i) => (
+                    <a
+                      key={it.href + i}
+                      href={it.href}
+                      className="block px-4 py-3 font-display uppercase tracking-wider text-xs text-bone/80 hover:text-electric hover:bg-electric/5 transition-colors border-b border-bone/5 last:border-b-0"
+                    >
+                      {it.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
             </li>
           ))}
           <li>

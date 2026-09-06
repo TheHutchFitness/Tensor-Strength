@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import OneRepMaxCalculator from "./tools/OneRepMaxCalculator";
 import WilksDotsCalculator from "./tools/WilksDotsCalculator";
 import PRTracker from "./tools/PRTracker";
@@ -19,6 +19,13 @@ type TabId = (typeof tabs)[number]["id"];
 
 export default function Tools() {
   const [active, setActive] = useState<TabId>("1rm");
+
+  // Let the navbar's Free Tools dropdown deep-link to a specific calculator
+  // via /?t=wilks#tools etc.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("t");
+    if (t === "1rm" || t === "wilks" || t === "pr") setActive(t);
+  }, []);
 
   return (
     <section id="tools" className="py-24 md:py-32 relative overflow-hidden">
