@@ -110,86 +110,78 @@ export default function Navbar() {
         </ul>
 
         <button
-          className="md:hidden font-display uppercase text-sm tracking-wider"
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
+          aria-expanded={open}
+          className="md:hidden flex flex-col items-center justify-center gap-1 h-9 w-9 border border-bone/30 hover:border-electric transition-colors"
         >
-          {open ? "Close" : "Menu"}
+          <span className={"block h-0.5 w-5 bg-bone transition-transform " + (open ? "translate-y-[6px] rotate-45" : "")} />
+          <span className={"block h-0.5 w-5 bg-bone transition-opacity " + (open ? "opacity-0" : "")} />
+          <span className={"block h-0.5 w-5 bg-bone transition-transform " + (open ? "-translate-y-[6px] -rotate-45" : "")} />
         </button>
       </nav>
 
       {open && (
-        <ul className="md:hidden flex flex-col gap-1 px-6 pb-4 border-t border-bone/10">
+        <nav className="md:hidden flex flex-col px-6 pb-4 border-t border-bone/10 bg-ink/95">
           {links.map((l) => (
-            <li key={l.href}>
-              <a
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="block py-3 font-display uppercase tracking-wider hover:text-electric"
-              >
-                {l.label}
-              </a>
-            </li>
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-bone/5"
+            >
+              {l.label}
+            </a>
           ))}
-          <li>
-            <a
-              href="/clients"
-              onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider text-electric"
-            >
-              Client Portal →
-            </a>
-          </li>
-          <li>
-            <a
-              href="/forum"
-              onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider hover:text-electric"
-            >
-              Forum →
-            </a>
-          </li>
+          <a
+            href="/clients"
+            onClick={() => setOpen(false)}
+            className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-bone/5"
+          >
+            Client Portal →
+          </a>
+          <a
+            href="/forum"
+            onClick={() => setOpen(false)}
+            className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-bone/5"
+          >
+            Forum →
+          </a>
           {(me?.isTrainer || me?.role === "admin") && (
-            <li>
-              <a
-                href="/trainers"
-                onClick={() => setOpen(false)}
-                className="block py-3 font-display uppercase tracking-wider text-electric"
-              >
-                Trainers →
-              </a>
-            </li>
+            <a
+              href="/trainers"
+              onClick={() => setOpen(false)}
+              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-bone/5"
+            >
+              Trainers →
+            </a>
           )}
           {me?.role === "admin" && (
-            <li>
-              <a
-                href="/admin"
-                onClick={() => setOpen(false)}
-                className="block py-3 font-display uppercase tracking-wider text-electric"
-              >
-                Admin →
-              </a>
-            </li>
+            <a
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-bone/5"
+            >
+              Admin →
+            </a>
           )}
-          <li>
-            {me ? (
-              <button
-                onClick={logout}
-                className="block w-full text-left py-3 font-display uppercase tracking-wider text-bone/70"
-              >
-                Logout ({me.username})
-              </button>
-            ) : (
-              <a
-                href="/login"
-                onClick={() => setOpen(false)}
-                className="block py-3 font-display uppercase tracking-wider"
-              >
-                Sign In →
-              </a>
-            )}
-          </li>
-        </ul>
+          {me ? (
+            <button
+              onClick={logout}
+              className="block w-full text-left py-3 font-display uppercase tracking-wider text-sm text-bone/70 hover:text-electric transition-colors"
+            >
+              Logout ({me.username})
+            </button>
+          ) : (
+            <a
+              href="/login"
+              onClick={() => setOpen(false)}
+              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors"
+            >
+              Sign In →
+            </a>
+          )}
+        </nav>
       )}
     </header>
   );

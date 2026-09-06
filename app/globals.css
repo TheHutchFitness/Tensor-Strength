@@ -43,6 +43,22 @@ select {
   border-color: rgba(255, 254, 252, 0.2);
 }
 
+/* Brand every dropdown to match the Client Portal / Workout Tracker look:
+   Oswald display face, uppercase, wide tracking. Scoped to <select> so typed
+   text inputs keep their normal body font. */
+select {
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+select option {
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background-color: #150c38;
+  color: var(--color-bone);
+}
+
 input::placeholder,
 textarea::placeholder {
   color: rgba(255, 254, 252, 0.4) !important;
