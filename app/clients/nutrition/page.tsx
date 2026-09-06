@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import PortalHeader from "@/components/portal/PortalHeader";
 import NutritionTracker from "@/components/tools/NutritionTracker";
+import NutritionExtras from "@/components/tools/NutritionExtras";
 
 export default function NutritionPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
+  const [view, setView] = useState<"tracker" | "tools">("tracker");
 
   useEffect(() => {
     (async () => {
@@ -47,7 +49,14 @@ export default function NutritionPage() {
           </p>
         ) : (
           <div className="mt-10">
-            <NutritionTracker />
+            <div className="flex gap-2 mb-8">
+              {(["tracker", "tools"] as const).map((v) => (
+                <button key={v} onClick={() => setView(v)} className={"px-5 py-2.5 font-display uppercase tracking-wider text-sm transition-colors " + (view === v ? "bg-electric text-ink" : "text-bone/60 border border-bone/20 hover:text-electric")}>
+                  {v === "tracker" ? "Tracker" : "Nutrition Tools"}
+                </button>
+              ))}
+            </div>
+            {view === "tracker" ? <NutritionTracker /> : <NutritionExtras />}
           </div>
         )}
       </div>
