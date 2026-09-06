@@ -98,6 +98,7 @@ export default function ForumPage() {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("general");
   const [activeCategory, setActiveCategory] = useState("all");
+  const [sort, setSort] = useState<"recent" | "popular">("recent");
   const [media, setMedia] = useState<Media>(null);
   const [posting, setPosting] = useState(false);
 
@@ -175,7 +176,17 @@ export default function ForumPage() {
       (p.body || "").toLowerCase().includes(q) ||
       p.username.toLowerCase().includes(q)
     );
+  }).sort((a, b) => {
+    if (sort === "popular") return (b.likes?.length || 0) - (a.likes?.length || 0);
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
   });
+
+  // Helper leaderboard: members ranked by total likes received on their posts.
+  const leaderboard = (() => {
+    const tally: Record<string, number> = {};
+    for (const p of posts) tally[p.username] = (tally[p.username] || 0) + (p.likes?.length || 0);
+    return Object.entries(tally).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  })();
 
   async function openThread(id: string) {
     setOpenId(id);
@@ -313,6 +324,29 @@ export default function ForumPage() {
                 placeholder="Search posts…"
                 className="mt-10 w-full bg-ink/40 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none"
               />
+              {leaderboard.length > 0 && (
+                <div className="mt-4 border border-bone/15 bg-ink/20 p-4">
+                  <p className="font-display uppercase tracking-wider text-electric text-xs mb-2">🏆 Top helpers</p>
+                  <div className="flex flex-wrap gap-x-5 gap-y-1">
+                    {leaderboard.map(([name, n], i) => (
+                      <span key={name} className="text-sm text-bone/70">
+                        <span className="text-bone/40">{i + 1}.</span> <span className="font-display uppercase tracking-wider text-bone">{name}</span> <span className="text-electric">· {n} ♥</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-4 flex gap-2">
+                {(["recent", "popular"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSort(s)}
+                    className={"px-3 py-1.5 font-display uppercase tracking-wider text-[11px] transition-colors " + (sort === s ? "bg-electric text-ink" : "text-bone/60 border border-bone/20 hover:text-electric")}
+                  >
+                    {s === "recent" ? "Recent" : "Most liked"}
+                  </button>
+                ))}
+              </div>
               <div className="mt-4 grid gap-3">
                 {loading ? (
                   <p className="text-bone/50 font-display uppercase tracking-wider">Loading…</p>

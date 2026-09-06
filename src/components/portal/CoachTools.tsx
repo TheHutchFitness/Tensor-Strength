@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Client = { id: string; username: string; email: string };
-type ToolTab = "progress" | "activity" | "onerm" | "plate" | "macros" | "goals" | "timer" | "reference" | "broadcast" | "notes";
+type ToolTab = "progress" | "activity" | "needs" | "volume" | "onerm" | "plate" | "macros" | "goals" | "templates" | "timer" | "reference" | "broadcast" | "notes";
 
 const card = "border border-bone/15 bg-ink/20 p-5";
 const label = "block text-[11px] uppercase tracking-wider text-bone/50 mb-1 font-display";
@@ -707,6 +707,129 @@ function ReferenceTool() {
   );
 }
 
+/* -------------------- Needs Attention digest -------------------- */
+function NeedsAttention() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch("/api/trainer/activity").then((r) => (r.ok ? r.json() : { clients: [] })).then((d) => setRows(d.clients || [])).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+  const since = (v: string | null) => (v ? Math.floor((Date.now() - new Date(v).getTime()) / 86400000) : null);
+  const flags = rows.map((r) => {
+    const list: string[] = [];
+    const w = since(r.lastWorkout), c = since(r.lastCheckin), n = since(r.lastNutrition);
+    if (w === null || w >= 7) list.push(w === null ? "never logged a workout" : `no workout in ${w}d`);
+    if (c === null || c >= 10) list.push(c === null ? "never checked in" : `no check-in in ${c}d`);
+    if (n !== null && n >= 5) list.push(`no nutrition log in ${n}d`);
+    return { ...r, list };
+  }).filter((r) => r.list.length);
+  if (loading) return <p className="text-bone/50 font-display uppercase tracking-wider text-sm">Loading…</p>;
+  if (!flags.length) return <p className="text-electric font-display uppercase tracking-wider text-sm">✓ All clients are on track — nothing needs attention.</p>;
+  return (
+    <div className="grid gap-3 max-w-2xl">
+      <p className="text-bone/60 text-sm">{flags.length} client{flags.length === 1 ? "" : "s"} could use a nudge:</p>
+      {flags.map((r) => (
+        <div key={r.id} className={card + " border-amber-400/30"}>
+          <p className="font-display uppercase tracking-wider text-bone">{r.username}</p>
+          <ul className="mt-1 text-sm text-amber-400/90 list-disc list-inside">
+            {r.list.map((x: string, i: number) => (<li key={i}>{x}</li>))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* -------------------- Volume / Tonnage Report -------------------- */
+function VolumeReport({ clients }: { clients: Client[] }) {
+  const [clientId, setClientId] = useState("");
+  const [workouts, setWorkouts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!clientId) { setWorkouts([]); return; }
+    setLoading(true);
+    fetch(`/api/trainer/client-tracker?clientId=${encodeURIComponent(clientId)}`)
+      .then((r) => (r.ok ? r.json() : { workouts: [] })).then((d) => setWorkouts(d.workouts || [])).catch(() => {}).finally(() => setLoading(false));
+  }, [clientId]);
+
+  const weeks = useMemo(() => {
+    const buckets: Record<string, { sets: number; tonnage: number }> = {};
+    for (const w of workouts) {
+      const d = new Date(w.date); if (isNaN(d.getTime())) continue;
+      const monday = new Date(d); monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const key = monday.toISOString().slice(0, 10);
+      const b = (buckets[key] = buckets[key] || { sets: 0, tonnage: 0 });
+      for (const ex of w.exercises || []) for (const s of ex.sets || []) {
+        const wt = parseFloat(s.weight), rp = parseFloat(s.reps);
+        if (wt > 0 && rp > 0) { b.sets += 1; b.tonnage += wt * rp; }
+      }
+    }
+    return Object.entries(buckets).sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
+  }, [workouts]);
+  const maxT = Math.max(1, ...weeks.map(([, v]) => v.tonnage));
+
+  return (
+    <div className="grid gap-4 max-w-2xl">
+      <div>
+        <label className={label}>Client</label>
+        <select className={input + " sm:max-w-xs"} value={clientId} onChange={(e) => setClientId(e.target.value)}>
+          <option value="">Select a client…</option>
+          {clients.map((c) => (<option key={c.id} value={c.id}>{c.username}</option>))}
+        </select>
+      </div>
+      {!clientId ? <p className="text-bone/50 text-sm">Pick a client to see weekly training volume.</p>
+        : loading ? <p className="text-bone/50 font-display uppercase tracking-wider text-sm">Loading…</p>
+        : weeks.length === 0 ? <p className="text-bone/50 text-sm">No logged sets with weight &amp; reps yet.</p>
+        : (
+          <div className={card}>
+            <p className="font-display uppercase tracking-wider text-bone/60 text-xs mb-4">Weekly tonnage (weight × reps) · last 8 weeks</p>
+            <div className="grid gap-2">
+              {weeks.map(([wk, v]) => (
+                <div key={wk} className="flex items-center gap-3">
+                  <span className="text-bone/50 text-xs w-20 shrink-0">{wk.slice(5)}</span>
+                  <div className="flex-1 h-4 bg-ink/60 border border-bone/10"><div className="h-full bg-electric" style={{ width: (v.tonnage / maxT) * 100 + "%" }} /></div>
+                  <span className="font-display text-bone text-xs w-28 text-right">{Math.round(v.tonnage).toLocaleString()} lb · {v.sets} sets</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+    </div>
+  );
+}
+
+/* -------------------- Message Templates (canned replies) -------------------- */
+function MessageTemplates() {
+  const KEY = "ts-coach-templates";
+  const [items, setItems] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [copied, setCopied] = useState(-1);
+  useEffect(() => {
+    try { const s = localStorage.getItem(KEY); setItems(s ? JSON.parse(s) : ["Great work this week — proud of the consistency. Keep it up!", "Don't forget to log your check-in before Sunday night.", "Bump the top set 5 lb next session if it moved well."]); } catch {}
+  }, []);
+  const save = (n: string[]) => { setItems(n); localStorage.setItem(KEY, JSON.stringify(n)); };
+  return (
+    <div className="grid gap-4 max-w-xl">
+      <p className="text-bone/60 text-sm">Save canned replies and copy them into any client chat with one tap.</p>
+      <div className="flex gap-2">
+        <input className={input} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="New template…" />
+        <button className={ghost} onClick={() => { if (draft.trim()) { save([...items, draft.trim()]); setDraft(""); } }}>Add</button>
+      </div>
+      <div className="grid gap-2">
+        {items.map((t, i) => (
+          <div key={i} className={card + " flex items-start justify-between gap-3"}>
+            <p className="text-bone/80 text-sm">{t}</p>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => { navigator.clipboard?.writeText(t); setCopied(i); setTimeout(() => setCopied(-1), 1500); }} className="text-electric font-display uppercase text-[10px] tracking-wider">{copied === i ? "Copied!" : "Copy"}</button>
+              <button onClick={() => save(items.filter((_, j) => j !== i))} className="text-bone/40 hover:text-electric">✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* -------------------- Container -------------------- */
 export default function CoachTools() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -722,10 +845,13 @@ export default function CoachTools() {
   const tools: { id: ToolTab; label: string }[] = [
     { id: "progress", label: "Progress Dashboard" },
     { id: "activity", label: "Activity Board" },
+    { id: "needs", label: "Needs Attention" },
+    { id: "volume", label: "Volume Report" },
     { id: "goals", label: "Goals" },
     { id: "onerm", label: "1RM & %" },
     { id: "plate", label: "Plate Calc" },
     { id: "macros", label: "Macro / TDEE" },
+    { id: "templates", label: "Message Templates" },
     { id: "timer", label: "Timer" },
     { id: "reference", label: "RPE & Tempo" },
     { id: "broadcast", label: "Broadcast" },
@@ -760,10 +886,13 @@ export default function CoachTools() {
 
       {tool === "progress" && <ProgressDashboard clients={clients} />}
       {tool === "activity" && <ActivityBoard />}
+      {tool === "needs" && <NeedsAttention />}
+      {tool === "volume" && <VolumeReport clients={clients} />}
       {tool === "goals" && <GoalsTool clients={clients} />}
       {tool === "onerm" && <OneRMTool />}
       {tool === "plate" && <PlateTool />}
       {tool === "macros" && <MacroTool clients={clients} />}
+      {tool === "templates" && <MessageTemplates />}
       {tool === "timer" && <TimerTool />}
       {tool === "reference" && <ReferenceTool />}
       {tool === "broadcast" && <BroadcastTool clients={clients} />}
