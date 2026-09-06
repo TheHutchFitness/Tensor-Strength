@@ -1499,6 +1499,33 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, goals }))
     }
 
+    // ---- Coach Tools: per-client intake / onboarding checklist ----
+    if (route === '/trainer/client-intake' && (method === 'GET' || method === 'PUT')) {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const own = async (cid) => {
+        const c = await db.collection('users').findOne({ id: String(cid || '') })
+        return c && (user.role === 'admin' || c.assignedTrainerId === user.id) ? c : null
+      }
+      if (method === 'GET') {
+        const c = await own(request.nextUrl.searchParams.get('clientId'))
+        if (!c) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+        return handleCORS(NextResponse.json({ items: Array.isArray(c.intakeChecklist) ? c.intakeChecklist : [] }))
+      }
+      const body = await request.json()
+      const c = await own(body.clientId)
+      if (!c) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const items = (Array.isArray(body.items) ? body.items : []).slice(0, 50).map((it) => ({
+        id: typeof it.id === 'string' ? it.id : uuidv4(),
+        label: String(it.label || '').slice(0, 160),
+        done: !!it.done,
+      }))
+      await db.collection('users').updateOne({ id: c.id }, { $set: { intakeChecklist: items } })
+      return handleCORS(NextResponse.json({ ok: true, items }))
+    }
+
     // ---- Admin: analytics summary ----
     if (route === '/admin/analytics' && method === 'GET') {
       const user = await getCurrentUser(request, db)

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Client = { id: string; username: string; email: string };
-type ToolTab = "progress" | "activity" | "needs" | "volume" | "onerm" | "plate" | "macros" | "goals" | "templates" | "timer" | "reference" | "broadcast" | "notes";
+type ToolTab = "progress" | "activity" | "needs" | "volume" | "onerm" | "plate" | "macros" | "goals" | "intake" | "assign" | "templates" | "timer" | "reference" | "broadcast" | "notes";
 
 const card = "border border-bone/15 bg-ink/20 p-5";
 const label = "block text-[11px] uppercase tracking-wider text-bone/50 mb-1 font-display";
@@ -830,6 +830,109 @@ function MessageTemplates() {
   );
 }
 
+/* -------------------- Intake / Onboarding Checklist -------------------- */
+function IntakeChecklist({ clients }: { clients: Client[] }) {
+  const DEFAULTS = ["Signed waiver / PAR-Q", "Goals & timeline set", "Injury / limitation review", "Equipment access confirmed", "Starting stats & photos", "First program assigned", "Nutrition targets set"];
+  const [clientId, setClientId] = useState("");
+  const [items, setItems] = useState<any[]>([]);
+  const [flash, setFlash] = useState("");
+  useEffect(() => {
+    if (!clientId) { setItems([]); return; }
+    fetch(`/api/trainer/client-intake?clientId=${encodeURIComponent(clientId)}`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setItems(d.items?.length ? d.items : DEFAULTS.map((label) => ({ id: Math.random().toString(36).slice(2), label, done: false }))))
+      .catch(() => {});
+  }, [clientId]);
+  const save = async (next: any[]) => {
+    setItems(next);
+    const res = await fetch("/api/trainer/client-intake", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId, items: next }) });
+    if (res.ok) { setFlash("✓ Saved"); setTimeout(() => setFlash(""), 1500); }
+  };
+  const done = items.filter((i) => i.done).length;
+  return (
+    <div className="grid gap-4 max-w-xl">
+      <div>
+        <label className={label}>Client</label>
+        <select className={input + " sm:max-w-xs"} value={clientId} onChange={(e) => setClientId(e.target.value)}>
+          <option value="">Select a client…</option>
+          {clients.map((c) => (<option key={c.id} value={c.id}>{c.username}</option>))}
+        </select>
+      </div>
+      {clientId && (
+        <>
+          <p className="text-electric font-display uppercase tracking-wider text-xs">{done}/{items.length} complete {flash && <span className="text-bone/50">· {flash}</span>}</p>
+          <div className="grid gap-2">
+            {items.map((it, i) => (
+              <div key={it.id} className={card + " flex items-center gap-3"}>
+                <button onClick={() => save(items.map((x, j) => (j === i ? { ...x, done: !x.done } : x)))} className={"h-5 w-5 border flex items-center justify-center text-xs shrink-0 " + (it.done ? "bg-electric text-ink border-electric" : "border-bone/40")}>{it.done ? "✓" : ""}</button>
+                <input className="flex-1 bg-transparent text-bone outline-none text-sm" value={it.label} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} onBlur={() => save(items)} />
+                <button onClick={() => save(items.filter((_, j) => j !== i))} className="text-bone/40 hover:text-electric shrink-0">✕</button>
+              </div>
+            ))}
+          </div>
+          <button className={ghost} onClick={() => save([...items, { id: Math.random().toString(36).slice(2), label: "New step", done: false }])}>+ Add step</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* -------------------- Assign a template to many clients -------------------- */
+function AssignToMany({ clients }: { clients: Client[] }) {
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [templateId, setTemplateId] = useState("");
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [flash, setFlash] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    fetch("/api/trainer/templates").then((r) => (r.ok ? r.json() : { templates: [] })).then((d) => setTemplates(d.templates || [])).catch(() => {});
+  }, []);
+  const chosen = templates.find((t) => t.id === templateId);
+  const ids = Object.keys(sel).filter((k) => sel[k]);
+  async function run() {
+    if (!chosen || !ids.length) return;
+    setBusy(true); setFlash("");
+    let ok = 0;
+    for (const clientId of ids) {
+      const res = await fetch("/api/trainer/assign-template", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId, template: chosen }) });
+      if (res.ok) ok++;
+    }
+    setBusy(false); setSel({}); setFlash(`✓ Sent to ${ok} client${ok === 1 ? "" : "s"}`); setTimeout(() => setFlash(""), 4000);
+  }
+  return (
+    <div className="grid gap-4 max-w-xl">
+      {templates.length === 0 ? (
+        <p className="text-bone/60 text-sm">Save a workout template first (in the Trainer &gt; Programs / template builder), then you can push it to several clients here.</p>
+      ) : (
+        <>
+          <div>
+            <label className={label}>Template to send</label>
+            <select className={input + " sm:max-w-md"} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              <option value="">Select a template…</option>
+              {templates.map((t) => (<option key={t.id} value={t.id}>{t.name} ({t.exercises?.length || 0} exercises)</option>))}
+            </select>
+          </div>
+          <div>
+            <label className={label}>Send to</label>
+            <div className={card + " grid gap-1.5 max-h-72 overflow-y-auto"}>
+              {clients.map((c) => (
+                <label key={c.id} className="flex items-center gap-2 text-sm text-bone/80 cursor-pointer py-1">
+                  <input type="checkbox" checked={!!sel[c.id]} onChange={(e) => setSel((s) => ({ ...s, [c.id]: e.target.checked }))} />
+                  <span className="font-display uppercase tracking-wider">{c.username}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className={btn} onClick={run} disabled={!templateId || !ids.length || busy}>{busy ? "Sending…" : `Push to ${ids.length} selected`}</button>
+            {flash && <span className="text-electric font-display uppercase tracking-wider text-xs">{flash}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* -------------------- Container -------------------- */
 export default function CoachTools() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -848,6 +951,8 @@ export default function CoachTools() {
     { id: "needs", label: "Needs Attention" },
     { id: "volume", label: "Volume Report" },
     { id: "goals", label: "Goals" },
+    { id: "intake", label: "Intake Checklist" },
+    { id: "assign", label: "Assign to Many" },
     { id: "onerm", label: "1RM & %" },
     { id: "plate", label: "Plate Calc" },
     { id: "macros", label: "Macro / TDEE" },
@@ -889,6 +994,8 @@ export default function CoachTools() {
       {tool === "needs" && <NeedsAttention />}
       {tool === "volume" && <VolumeReport clients={clients} />}
       {tool === "goals" && <GoalsTool clients={clients} />}
+      {tool === "intake" && <IntakeChecklist clients={clients} />}
+      {tool === "assign" && <AssignToMany clients={clients} />}
       {tool === "onerm" && <OneRMTool />}
       {tool === "plate" && <PlateTool />}
       {tool === "macros" && <MacroTool clients={clients} />}
