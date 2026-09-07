@@ -3,6 +3,8 @@
 // always matches the in-app program (including the plyometric progressions).
 
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
+import { readFile } from "fs/promises";
+import path from "path";
 import {
   hutchTouchSessions,
   HUTCH_TOUCH_PRIMARIES,
@@ -10,7 +12,11 @@ import {
 } from "@/data/hutchTouchProgram";
 
 const ELECTRIC = rgb(0, 0.53, 0.85);
+const ELECTRIC_BRIGHT = rgb(0, 0.659, 1); // #00A8FF for the dark cover
 const INK = rgb(0.09, 0.09, 0.13);
+const COVER_BG = rgb(0.039, 0.016, 0.125); // #0a0420 brand dark
+const BONE = rgb(0.96, 0.945, 0.91);
+const BONE_DIM = rgb(0.75, 0.74, 0.72);
 const MUTED = rgb(0.45, 0.47, 0.55);
 const RULE = rgb(0.82, 0.84, 0.9);
 
@@ -75,22 +81,81 @@ export async function buildHutchTouchPdf(): Promise<Uint8Array> {
     return lines.length ? lines : [""];
   };
 
-  // ---- Cover header ----
-  page.drawText("THE HUTCH TOUCH", { x: MARGIN, y: y - 26, size: 26, font: bold, color: INK });
-  y -= 44;
-  page.drawText("8-Week · 6-Day Push / Pull / Legs Performance Block", {
-    x: MARGIN, y, size: 12, font, color: ELECTRIC,
-  });
-  y -= 20;
-  const intro =
-    "Each week the primary strength lift and the power / plyometric movements rotate through a planned progression while the accessory and conditioning work stays consistent. Plyometrics are marked [PLYO] - perform them with max intent and a full reset between reps.";
-  for (const ln of wrap(intro, font, 9.5, CONTENT_W)) {
-    page.drawText(ln, { x: MARGIN, y, size: 9.5, font, color: MUTED });
-    y -= 13;
+  // ---- Branded cover page (dark, logo + brand colours) ----
+  const drawCentered = (text: string, cy: number, f: PDFFont, size: number, color: any) => {
+    const t = san(text);
+    const w = f.widthOfTextAtSize(t, size);
+    page.drawText(t, { x: (PAGE_W - w) / 2, y: cy, size, font: f, color });
+  };
+
+  // Full-bleed dark background.
+  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: COVER_BG });
+  // Top + bottom electric accent bars.
+  page.drawRectangle({ x: 0, y: PAGE_H - 6, width: PAGE_W, height: 6, color: ELECTRIC_BRIGHT });
+  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: 6, color: ELECTRIC_BRIGHT });
+
+  // Logo (embedded from /public). Best-effort — cover still renders without it.
+  let logoBottom = PAGE_H - 150;
+  try {
+    const logoBytes = await readFile(path.join(process.cwd(), "public", "tensor-strength-logo.jpg"));
+    const logo = await doc.embedJpg(logoBytes);
+    const size = 120;
+    const scaled = logo.scaleToFit(size, size);
+    page.drawImage(logo, {
+      x: (PAGE_W - scaled.width) / 2,
+      y: PAGE_H - 90 - scaled.height,
+      width: scaled.width,
+      height: scaled.height,
+    });
+    logoBottom = PAGE_H - 90 - scaled.height;
+  } catch {
+    logoBottom = PAGE_H - 120;
   }
-  y -= 6;
-  page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 1, color: RULE });
-  y -= 22;
+
+  let cy = logoBottom - 40;
+  drawCentered("TENSOR STRENGTH", cy, bold, 12, ELECTRIC_BRIGHT);
+  cy -= 46;
+  drawCentered("THE HUTCH TOUCH", cy, bold, 34, BONE);
+  cy -= 26;
+  drawCentered("8-Week  ·  6-Day  ·  Push / Pull / Legs", cy, font, 13, BONE_DIM);
+  cy -= 18;
+  drawCentered("Performance Block", cy, font, 13, BONE_DIM);
+
+  // Electric divider.
+  cy -= 30;
+  page.drawRectangle({ x: (PAGE_W - 90) / 2, y: cy, width: 90, height: 2, color: ELECTRIC_BRIGHT });
+
+  // Descriptor paragraph, centered.
+  cy -= 26;
+  const coverIntro =
+    "Hutch's real strength & power program. The primary lift and the plyometric movements progress every week while the accessory and conditioning work stays consistent. Plyometrics are marked [PLYO] — hit them with max intent and a full reset between reps.";
+  for (const ln of wrap(coverIntro, font, 11, CONTENT_W - 80)) {
+    drawCentered(ln, cy, font, 11, BONE_DIM);
+    cy -= 16;
+  }
+
+  // Three quick stat chips.
+  cy -= 26;
+  const stats = ["8 WEEKS", "6 DAYS / WEEK", "PUSH · PULL · LEGS"];
+  const chipGap = 14;
+  const chipPadX = 14;
+  const chipH = 26;
+  const chipSize = 10;
+  const chipWidths = stats.map((s) => bold.widthOfTextAtSize(san(s), chipSize) + chipPadX * 2);
+  const totalW = chipWidths.reduce((a, b) => a + b, 0) + chipGap * (stats.length - 1);
+  let cx = (PAGE_W - totalW) / 2;
+  stats.forEach((s, i) => {
+    const w = chipWidths[i];
+    page.drawRectangle({ x: cx, y: cy - chipH + 8, width: w, height: chipH, borderColor: ELECTRIC_BRIGHT, borderWidth: 1, color: rgb(0, 0.659, 1), opacity: 0.08 });
+    page.drawText(san(s), { x: cx + chipPadX, y: cy - chipH + 16, size: chipSize, font: bold, color: ELECTRIC_BRIGHT });
+    cx += w + chipGap;
+  });
+
+  // Cover footer.
+  drawCentered("tensorstrength.com  ·  Clients & Members", 40, font, 9, MUTED);
+
+  // ---- Program content begins on a fresh (white) page ----
+  newPage();
 
   const days: HutchTouchDay[] = ["Push", "Pull", "Legs"];
 
