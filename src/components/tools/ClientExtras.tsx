@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCloudState } from "@/lib/cloud";
 
-type Tab = "records" | "calendar" | "bodyweight" | "habits" | "deload" | "warmup" | "timer" | "plate";
+type Tab = "records" | "calendar" | "bodyweight" | "habits" | "deload" | "warmup" | "plate";
 const card = "border border-bone/15 bg-ink/20 p-5";
 const label = "block text-[11px] uppercase tracking-wider text-bone/50 mb-1 font-display";
 const input = "w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none min-w-0";
@@ -235,45 +235,6 @@ function Habits() {
   );
 }
 
-/* ---------- Rest / interval timer ---------- */
-function Timer() {
-  const [mode, setMode] = useState<"rest" | "interval">("rest");
-  const [rest, setRest] = useState(90);
-  const [work, setWork] = useState(30), [brk, setBrk] = useState(15), [rounds, setRounds] = useState(8);
-  const [running, setRunning] = useState(false), [remaining, setRemaining] = useState(90);
-  const [phase, setPhase] = useState<"work" | "break">("work"), [round, setRound] = useState(1);
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => {
-      setRemaining((s) => {
-        if (s > 1) return s - 1;
-        if (mode === "rest") { setRunning(false); return 0; }
-        setPhase((p) => { if (p === "work") return "break"; setRound((r) => { if (r >= rounds) { setRunning(false); return r; } return r + 1; }); return "work"; });
-        return phase === "work" ? brk : work;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [running, mode, phase, work, brk, rounds]);
-  const start = () => { if (mode === "rest") setRemaining(rest); else { setRemaining(work); setPhase("work"); setRound(1); } setRunning(true); };
-  const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  return (
-    <div className="grid gap-5 max-w-md">
-      <div className="flex gap-2">{(["rest", "interval"] as const).map((m) => (<button key={m} onClick={() => { setMode(m); setRunning(false); }} className={m === mode ? btn : ghost}>{m}</button>))}</div>
-      {mode === "rest" ? (
-        <div><label className={label}>Rest (seconds)</label><input className={input} inputMode="numeric" value={rest} onChange={(e) => setRest(parseInt(e.target.value) || 0)} /></div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          <div><label className={label}>Work (s)</label><input className={input} inputMode="numeric" value={work} onChange={(e) => setWork(parseInt(e.target.value) || 0)} /></div>
-          <div><label className={label}>Break (s)</label><input className={input} inputMode="numeric" value={brk} onChange={(e) => setBrk(parseInt(e.target.value) || 0)} /></div>
-          <div><label className={label}>Rounds</label><input className={input} inputMode="numeric" value={rounds} onChange={(e) => setRounds(parseInt(e.target.value) || 1)} /></div>
-        </div>
-      )}
-      <div className={card + " text-center"}><p className="text-6xl font-display text-electric">{mmss(remaining)}</p>{mode === "interval" && running && (<p className="text-[11px] uppercase tracking-wider text-bone/60 mt-1">{phase} · round {round}/{rounds}</p>)}</div>
-      <div className="flex gap-2">{!running ? <button className={btn} onClick={start}>Start</button> : <button className={btn} onClick={() => setRunning(false)}>Pause</button>}<button className={ghost} onClick={() => { setRunning(false); setRemaining(mode === "rest" ? rest : work); setRound(1); setPhase("work"); }}>Reset</button></div>
-    </div>
-  );
-}
-
 /* ---------- Plate calc + unit converter ---------- */
 function Plate() {
   const [unit, setUnit] = useState<"lb" | "kg">("lb");
@@ -317,7 +278,6 @@ export default function ClientExtras() {
     { id: "habits", label: "Habits & Streaks" },
     { id: "deload", label: "Readiness" },
     { id: "warmup", label: "Warm-up" },
-    { id: "timer", label: "Rest Timer" },
     { id: "plate", label: "Plate & Convert" },
   ];
   return (
@@ -333,7 +293,6 @@ export default function ClientExtras() {
       {t === "habits" && <Habits />}
       {t === "deload" && <Deload />}
       {t === "warmup" && <Warmup />}
-      {t === "timer" && <Timer />}
       {t === "plate" && <Plate />}
     </div>
   );

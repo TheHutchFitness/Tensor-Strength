@@ -49,9 +49,15 @@ const PUSH_PRIMARY_BY_WEEK: string[] = [
   "Larson Press", "Larson Press", "HBT Bench", "HBT Bench",
   "Tempo Bench", "Close-Grip Bench", "Regular Bench (Test)", "Regular Bench (Test)",
 ];
+// Upper-body plyometric / ballistic power that rotates + progresses each week.
+const PUSH_POWER_BY_WEEK: string[] = [
+  "Kneeling Plyo Push-Up", "Plyo Push-Up (Clap)", "Med-Ball Chest Pass", "Med-Ball Chest Pass",
+  "Depth Push-Up", "Depth Push-Up", "Max-Intent Med-Ball Throw", "Max-Intent Med-Ball Throw",
+];
 const PUSH_FIXED_PRE: Slot[] = [
   { exercise: "Ab Roller", sets: "2-3 × 8-15", load: "Controlled", notes: "Core / bracing" },
   { exercise: "Med-Ball Slam", sets: "3 × 3-5", load: "Max intent", notes: "Full reset between reps" },
+  { exercise: "Med-Ball Overhead Throw", sets: "3 × 3-5", load: "Max intent", notes: "Explosive hip + shoulder drive" },
   { exercise: "Stability + Scap Retractions", sets: "2 rounds", load: "Easy", notes: "Shoulder prep" },
   { exercise: "T-Bar Power Movement", sets: "2-3 × 3-5", load: "Explosive", notes: "Stop if speed falls" },
   { exercise: "Shoulder / Rotator Mobility", sets: "3-5 min", load: "Easy", notes: "Prepare ROM" },
@@ -86,6 +92,11 @@ const PULL_FIXED_PRE: Slot[] = [
   { exercise: "Hip Adduction / Abduction", sets: "1-2 × 12-20", load: "Easy", notes: "" },
   { exercise: "Explosive Step-Up", sets: "3 × 3 / side", load: "Max intent", notes: "Full reset" },
 ];
+// Ballistic hinge / pulling power that rotates + progresses each week.
+const PULL_POWER_BY_WEEK: string[] = [
+  "Kettlebell Swing", "Kettlebell Swing", "Broad Jump", "Broad Jump",
+  "Hang High Pull", "Hang High Pull", "Max-Intent Broad Jump", "Max-Intent Broad Jump",
+];
 const PULL_FIXED_POST: Slot[] = [
   { exercise: "Scapular Retractions", sets: "2 × 15-20", load: "RPE 6-8", notes: "" },
   { exercise: "Shrugs", sets: "2 × 15-20", load: "RPE 8-9", notes: "" },
@@ -100,6 +111,11 @@ const PULL_FIXED_POST: Slot[] = [
 const LEGS_POWER_BY_WEEK: string[] = [
   "Box Jump", "Box Jump", "Depth Drop → Box Jump", "Depth Drop → Box Jump",
   "Lateral Bound → Box Jump", "Lateral Bound → Box Jump", "Max-Intent Box Jump", "Max-Intent Box Jump",
+];
+// Second lower-body plyometric that complements the primary jump each week.
+const LEGS_POWER2_BY_WEEK: string[] = [
+  "Pogo Hops", "Pogo Hops", "Hurdle Hops", "Hurdle Hops",
+  "Tuck Jumps", "Tuck Jumps", "Single-Leg Bound", "Single-Leg Bound",
 ];
 const LEGS_PRIMARY_BY_WEEK: string[] = [
   "HBT Front Squat", "Tempo Front Squat", "Front Squat", "HBT Back Squat",
@@ -129,6 +145,7 @@ function withOrder(slots: Slot[], start: number): HutchTouchExercise[] {
 function buildPush(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
   const slots: Slot[] = [
     ...PUSH_FIXED_PRE,
+    { exercise: PUSH_POWER_BY_WEEK[week - 1], sets: "3 × 3-5", load: "Max intent", notes: "Upper-body plyometric — full reset between reps" },
     { exercise: PUSH_PRIMARY_BY_WEEK[week - 1], sets: "3-5 × 2-3", load: "RPE 7.5-9", notes: "Strength / performance — primary lift" },
     ...PUSH_FIXED_POST,
   ];
@@ -136,7 +153,12 @@ function buildPush(week: number): { week: number; day: HutchTouchDay; exercises:
 }
 
 function buildPull(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
-  const slots: Slot[] = [...PULL_FIXED_PRE, ...PULL_MAIN_BY_WEEK[week - 1], ...PULL_FIXED_POST];
+  const slots: Slot[] = [
+    ...PULL_FIXED_PRE,
+    { exercise: PULL_POWER_BY_WEEK[week - 1], sets: "3 × 3-5", load: "Max intent", notes: "Ballistic power — full reset between reps" },
+    ...PULL_MAIN_BY_WEEK[week - 1],
+    ...PULL_FIXED_POST,
+  ];
   return { week, day: "Pull", exercises: withOrder(slots, 1) };
 }
 
@@ -144,6 +166,7 @@ function buildLegs(week: number): { week: number; day: HutchTouchDay; exercises:
   const slots: Slot[] = [
     ...LEGS_FIXED_PRE,
     { exercise: LEGS_POWER_BY_WEEK[week - 1], sets: "3 × 2-3", load: "Max intent", notes: "Full reset between reps" },
+    { exercise: LEGS_POWER2_BY_WEEK[week - 1], sets: "3 × 3-5", load: "Max intent", notes: "Second plyometric — crisp, quiet landings" },
     { exercise: LEGS_PRIMARY_BY_WEEK[week - 1], sets: "3-4 × 2-3", load: "RPE 7.5-9", notes: "Strength / performance — primary lift" },
     ...LEGS_FIXED_POST,
   ];

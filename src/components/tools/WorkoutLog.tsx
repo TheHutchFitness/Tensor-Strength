@@ -75,6 +75,59 @@ export default function WorkoutLog() {
   const [sessionNotes, setSessionNotes] = useState("");
   const [savedFlash, setSavedFlash] = useState(false);
 
+  // ---- Integrated rest timer (lives inside the tracker, not a separate tool) ----
+  const [restDuration, setRestDuration] = useState(90); // last-used preset, seconds
+  const [restLeft, setRestLeft] = useState(0); // seconds remaining
+  const [restRunning, setRestRunning] = useState(false);
+
+  function beep() {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.62);
+      osc.onended = () => ctx.close().catch(() => {});
+    } catch {}
+  }
+
+  function startRest(secs?: number) {
+    const d = secs ?? restDuration;
+    setRestDuration(d);
+    setRestLeft(d);
+    setRestRunning(true);
+  }
+  function stopRest() {
+    setRestRunning(false);
+    setRestLeft(0);
+  }
+
+  useEffect(() => {
+    if (!restRunning) return;
+    const id = setInterval(() => {
+      setRestLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(id);
+          setRestRunning(false);
+          beep();
+          try { (navigator as any).vibrate?.([200, 80, 200]); } catch {}
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [restRunning]);
+
   // The Hutch Touch loader state
   const [hutchOpen, setHutchOpen] = useState(false);
   const [htWeek, setHtWeek] = useState(1);
@@ -801,9 +854,18 @@ export default function WorkoutLog() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => addSet(ex.id)} className="mt-3 font-display uppercase tracking-wider text-xs text-electric hover:text-bone">
-                  + Add Set
-                </button>
+                <div className="mt-3 flex items-center gap-4 flex-wrap">
+                  <button onClick={() => addSet(ex.id)} className="font-display uppercase tracking-wider text-xs text-electric hover:text-bone">
+                    + Add Set
+                  </button>
+                  <button
+                    onClick={() => startRest()}
+                    title={`Start a ${restDuration}s rest timer`}
+                    className="font-display uppercase tracking-wider text-xs text-bone/50 hover:text-electric"
+                  >
+                    ⏱ Rest {restDuration}s
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -845,6 +907,60 @@ export default function WorkoutLog() {
               ✓ Template saved — reuse it any time below.
             </p>
           )}
+        </div>
+      )}
+
+      {/* FLOATING REST TIMER — available throughout an active session */}
+      {(session.length > 0 || restRunning || restLeft > 0) && (
+        <div className="fixed inset-x-0 bottom-0 z-[70] pointer-events-none">
+          <div className="mx-auto max-w-2xl px-3 pb-3 pointer-events-auto">
+            <div
+              className={
+                "border-2 shadow-2xl backdrop-blur-md px-4 py-3 flex items-center gap-3 flex-wrap " +
+                (restRunning
+                  ? "border-electric bg-electric/15 shadow-electric/30"
+                  : restLeft === 0 && restRunning === false && restDuration > 0 && session.length > 0
+                  ? "border-bone/20 bg-ink/90"
+                  : "border-bone/20 bg-ink/90")
+              }
+            >
+              <span className="font-display uppercase tracking-wider text-[11px] text-electric shrink-0">⏱ Rest</span>
+
+              {restRunning || restLeft > 0 ? (
+                <>
+                  <span className={"font-display text-2xl tabular-nums " + (restLeft <= 5 ? "text-electric animate-pulse" : "text-bone")}>
+                    {Math.floor(restLeft / 60)}:{String(restLeft % 60).padStart(2, "0")}
+                  </span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button onClick={() => setRestLeft((n) => n + 15)} className="border border-bone/25 text-bone/70 px-2.5 py-1.5 text-xs font-display uppercase tracking-wider hover:border-electric hover:text-electric">
+                      +15s
+                    </button>
+                    <button
+                      onClick={() => setRestRunning((r) => !r)}
+                      className="border border-bone/25 text-bone/70 px-2.5 py-1.5 text-xs font-display uppercase tracking-wider hover:border-electric hover:text-electric"
+                    >
+                      {restRunning ? "Pause" : "Resume"}
+                    </button>
+                    <button onClick={stopRest} className="bg-electric text-ink px-3 py-1.5 text-xs font-display uppercase tracking-wider hover:bg-bone">
+                      Done
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 ml-auto flex-wrap">
+                  {[60, 90, 120, 180].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => startRest(s)}
+                      className="border border-bone/25 text-bone/70 px-3 py-1.5 text-xs font-display uppercase tracking-wider hover:border-electric hover:text-electric"
+                    >
+                      {s % 60 === 0 ? `${s / 60}m` : `${Math.floor(s / 60)}m ${s % 60}s`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
