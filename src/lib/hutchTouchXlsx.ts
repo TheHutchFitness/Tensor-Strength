@@ -43,6 +43,83 @@ export async function buildHutchTouchXlsx(opts: { clientName?: string } = {}): P
   const days: HutchTouchDay[] = ["Push", "Pull", "Legs"];
   const headers = ["Day", "#", "Exercise", "Sets / Reps", "Target Load", "Notes", "Actual Weight", "Actual Reps", "RPE"];
 
+  // ---- Overview sheet (first tab) — the 8-week plan at a glance ----
+  {
+    const note = (exs: any[], re: RegExp) => exs.find((e) => re.test(e.notes || ""))?.exercise || "—";
+    // The Pull main lift doesn't carry a "primary lift" note, so take the lift
+    // immediately after the ballistic-power slot.
+    const pullPrimary = (exs: any[]) => {
+      const i = exs.findIndex((e) => /ballistic power/i.test(e.notes || ""));
+      return i >= 0 && exs[i + 1] ? exs[i + 1].exercise : "—";
+    };
+    const ov = wb.addWorksheet("Overview", { views: [{ state: "frozen", ySplit: 4 }] });
+    const ovHeaders = ["Week", "Push · Primary", "Push · Plyo", "Pull · Primary", "Pull · Plyo", "Legs · Primary", "Legs · Plyo 1", "Legs · Plyo 2"];
+    ov.columns = [
+      { width: 7 }, { width: 20 }, { width: 22 }, { width: 18 }, { width: 22 }, { width: 20 }, { width: 18 }, { width: 20 },
+    ];
+
+    // Title row + logo.
+    ov.mergeCells(1, 1, 1, ovHeaders.length);
+    const ovTitle = ov.getCell(1, 1);
+    ovTitle.value = clientName
+      ? `THE HUTCH TOUCH — 8-Week Overview   ·   Prepared for ${clientName}`
+      : `THE HUTCH TOUCH — 8-Week Overview`;
+    ovTitle.font = { bold: true, size: 14, color: { argb: BONE } };
+    ovTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: INK } };
+    ovTitle.alignment = { vertical: "middle", horizontal: "left", indent: logoId != null ? 6 : 1 };
+    ov.getRow(1).height = 46;
+    if (logoId != null) {
+      ov.addImage(logoId, { tl: { col: 0.12, row: 0.12 } as any, ext: { width: 40, height: 40 } });
+    }
+
+    // Subtitle.
+    ov.mergeCells(2, 1, 2, ovHeaders.length);
+    const ovSub = ov.getCell(2, 1);
+    ovSub.value = "How the primary lifts and plyometrics rotate across the block. Full session detail is on the Week 1–8 tabs.";
+    ovSub.font = { italic: true, size: 9, color: { argb: "FF666666" } };
+    ov.getRow(2).height = 16;
+    ov.getRow(3).height = 4; // spacer
+
+    // Header row (row 4).
+    const ovHead = ov.getRow(4);
+    ovHeaders.forEach((h, i) => {
+      const c = ovHead.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 10, color: { argb: INK } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ELECTRIC } };
+      c.alignment = { vertical: "middle", horizontal: i === 0 ? "center" : "left", wrapText: true };
+      c.border = { bottom: { style: "thin", color: { argb: "FFAAAAAA" } } };
+    });
+    ovHead.height = 26;
+
+    for (let w = 1; w <= 8; w++) {
+      const push = hutchTouchSessions.find((s) => s.week === w && s.day === "Push" && s.variant === "A");
+      const pull = hutchTouchSessions.find((s) => s.week === w && s.day === "Pull" && s.variant === "A");
+      const legs = hutchTouchSessions.find((s) => s.week === w && s.day === "Legs" && s.variant === "A");
+      const row = ov.getRow(4 + w);
+      const vals = [
+        w,
+        note(push?.exercises || [], /primary lift/i),
+        note(push?.exercises || [], /upper-body plyometric/i),
+        pullPrimary(pull?.exercises || []),
+        note(pull?.exercises || [], /ballistic power/i),
+        note(legs?.exercises || [], /primary lift/i),
+        note(legs?.exercises || [], /full reset between reps/i),
+        note(legs?.exercises || [], /second plyometric/i),
+      ];
+      vals.forEach((v, i) => {
+        const c = row.getCell(i + 1);
+        c.value = v as any;
+        const isPlyoCol = i === 2 || i === 4 || i === 6 || i === 7;
+        c.font = { size: 10, bold: i === 0, color: { argb: isPlyoCol ? "FF0060A0" : "FF222222" } };
+        c.alignment = { vertical: "middle", horizontal: i === 0 ? "center" : "left", wrapText: true };
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: isPlyoCol ? PLYO_BG : w % 2 === 0 ? "FFF4F7FA" : "FFFFFFFF" } };
+        c.border = { bottom: { style: "hair", color: { argb: "FFDDDDDD" } } };
+      });
+      row.height = 20;
+    }
+  }
+
   for (let week = 1; week <= 8; week++) {
     const ws = wb.addWorksheet(`Week ${week}`, {
       views: [{ state: "frozen", ySplit: 3 }],
