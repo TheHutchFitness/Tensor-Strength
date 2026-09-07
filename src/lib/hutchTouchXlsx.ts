@@ -5,6 +5,8 @@
 // athlete to log their actual weight, reps and RPE.
 
 import ExcelJS from "exceljs";
+import { readFile } from "fs/promises";
+import path from "path";
 import {
   hutchTouchSessions,
   HUTCH_TOUCH_PRIMARIES,
@@ -29,6 +31,15 @@ export async function buildHutchTouchXlsx(opts: { clientName?: string } = {}): P
   wb.creator = "Tensor Strength";
   wb.title = "The Hutch Touch Tracker";
 
+  // Embed the brand logo once and reuse it across all week sheets (best-effort).
+  let logoId: number | null = null;
+  try {
+    const logoBytes = await readFile(path.join(process.cwd(), "public", "tensor-strength-logo.jpg"));
+    logoId = wb.addImage({ buffer: logoBytes as any, extension: "jpeg" });
+  } catch {
+    logoId = null;
+  }
+
   const days: HutchTouchDay[] = ["Push", "Pull", "Legs"];
   const headers = ["Day", "#", "Exercise", "Sets / Reps", "Target Load", "Notes", "Actual Weight", "Actual Reps", "RPE"];
 
@@ -49,8 +60,16 @@ export async function buildHutchTouchXlsx(opts: { clientName?: string } = {}): P
       : `THE HUTCH TOUCH — Week ${week}`;
     titleCell.font = { bold: true, size: 14, color: { argb: BONE } };
     titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: INK } };
-    titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
-    ws.getRow(1).height = 26;
+    titleCell.alignment = { vertical: "middle", horizontal: "left", indent: logoId != null ? 6 : 1 };
+    ws.getRow(1).height = 46;
+
+    // Brand logo anchored in the top-left of the dark title bar (matches the PDF).
+    if (logoId != null) {
+      ws.addImage(logoId, {
+        tl: { col: 0.12, row: 0.12 } as any,
+        ext: { width: 40, height: 40 },
+      });
+    }
 
     // Subtitle row.
     ws.mergeCells(2, 1, 2, headers.length);
