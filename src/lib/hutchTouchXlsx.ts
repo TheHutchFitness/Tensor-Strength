@@ -120,6 +120,88 @@ export async function buildHutchTouchXlsx(opts: { clientName?: string } = {}): P
     }
   }
 
+  // ---- Progress sheet — live in-cell bar graphs of logged top-set weights ----
+  {
+    const pg = wb.addWorksheet("Progress", { views: [{ state: "frozen", xSplit: 1, ySplit: 4 }] });
+    const weekCols = ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"];
+    pg.columns = [{ width: 30 }, ...weekCols.map(() => ({ width: 9 }))];
+
+    // Title + logo.
+    pg.mergeCells(1, 1, 1, 1 + weekCols.length);
+    const pgTitle = pg.getCell(1, 1);
+    pgTitle.value = clientName
+      ? `THE HUTCH TOUCH — Progress   ·   ${clientName}`
+      : `THE HUTCH TOUCH — Progress`;
+    pgTitle.font = { bold: true, size: 14, color: { argb: BONE } };
+    pgTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: INK } };
+    pgTitle.alignment = { vertical: "middle", horizontal: "left", indent: logoId != null ? 6 : 1 };
+    pg.getRow(1).height = 46;
+    if (logoId != null) {
+      pg.addImage(logoId, { tl: { col: 0.12, row: 0.12 } as any, ext: { width: 40, height: 40 } });
+    }
+
+    // Subtitle.
+    pg.mergeCells(2, 1, 2, 1 + weekCols.length);
+    const pgSub = pg.getCell(2, 1);
+    pgSub.value = "Enter your top-set working weight each week — the bars fill in automatically to show your progress.";
+    pgSub.font = { italic: true, size: 9, color: { argb: "FF666666" } };
+    pg.getRow(2).height = 16;
+    pg.getRow(3).height = 4;
+
+    // Header row (row 4).
+    const pgHead = pg.getRow(4);
+    ["Lift / Metric", ...weekCols].forEach((h, i) => {
+      const c = pgHead.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 10, color: { argb: INK } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ELECTRIC } };
+      c.alignment = { vertical: "middle", horizontal: i === 0 ? "left" : "center" };
+      c.border = { bottom: { style: "thin", color: { argb: "FFAAAAAA" } } };
+    });
+    pgHead.height = 18;
+
+    const trackRows = [
+      "Bench / Press — top set",
+      "Squat — top set",
+      "Sumo Deadlift — top set",
+      "Box Jump — height (in)",
+      "Broad Jump — distance (in)",
+      "Bodyweight",
+    ];
+    trackRows.forEach((label, idx) => {
+      const r = 5 + idx;
+      const row = pg.getRow(r);
+      row.getCell(1).value = label;
+      row.getCell(1).font = { size: 10, bold: true, color: { argb: "FF222222" } };
+      row.getCell(1).alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+      row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F7FA" } };
+      for (let c = 2; c <= 1 + weekCols.length; c++) {
+        const cell = row.getCell(c);
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = { bottom: { style: "hair", color: { argb: "FFDDDDDD" } }, right: { style: "hair", color: { argb: "FFEEEEEE" } } };
+        cell.numFmt = "0.#";
+      }
+      row.height = 22;
+
+      // Live data-bar "graph" across this lift's 8 weekly cells (scales to its
+      // own min/max so each lift's progression reads clearly).
+      const firstCol = pg.getColumn(2).letter;
+      const lastCol = pg.getColumn(1 + weekCols.length).letter;
+      pg.addConditionalFormatting({
+        ref: `${firstCol}${r}:${lastCol}${r}`,
+        rules: [
+          {
+            type: "dataBar",
+            cfvo: [{ type: "min" }, { type: "max" }],
+            color: { argb: ELECTRIC },
+            gradient: true,
+            border: false,
+          } as any,
+        ],
+      });
+    });
+  }
+
   for (let week = 1; week <= 8; week++) {
     const ws = wb.addWorksheet(`Week ${week}`, {
       views: [{ state: "frozen", ySplit: 3 }],
