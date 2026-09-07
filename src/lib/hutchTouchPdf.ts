@@ -35,7 +35,12 @@ function isPlyo(name: string) {
   return PLYO_HINTS.some((h) => n.includes(h));
 }
 
-export async function buildHutchTouchPdf(): Promise<Uint8Array> {
+export type HutchPdfOptions = { clientName?: string; startDate?: Date };
+
+export async function buildHutchTouchPdf(opts: HutchPdfOptions = {}): Promise<Uint8Array> {
+  const clientName = (opts.clientName || "").trim();
+  const startDate = opts.startDate || new Date();
+  const dateStr = startDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const doc = await PDFDocument.create();
   doc.setTitle("The Hutch Touch — 8-Week 6-Day PPL Performance Block");
   doc.setAuthor("Tensor Strength");
@@ -124,6 +129,17 @@ export async function buildHutchTouchPdf(): Promise<Uint8Array> {
   // Electric divider.
   cy -= 30;
   page.drawRectangle({ x: (PAGE_W - 90) / 2, y: cy, width: 90, height: 2, color: ELECTRIC_BRIGHT });
+
+  // Personalized band — bespoke handout for the signed-in client.
+  if (clientName) {
+    cy -= 26;
+    drawCentered(`PREPARED FOR ${clientName.toUpperCase()}`, cy, bold, 13, BONE);
+    cy -= 16;
+    drawCentered(`Start date · ${dateStr}`, cy, font, 10, ELECTRIC_BRIGHT);
+  } else {
+    cy -= 22;
+    drawCentered(`Start date · ${dateStr}`, cy, font, 10, ELECTRIC_BRIGHT);
+  }
 
   // Descriptor paragraph, centered.
   cy -= 26;
