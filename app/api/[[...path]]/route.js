@@ -7,6 +7,7 @@ import Stripe from 'stripe'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { buildHutchTouchPdf } from '../../../src/lib/hutchTouchPdf'
 
 // ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
 // When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
@@ -2102,6 +2103,16 @@ async function handleRoute(request, { params }) {
       }
       const f = route.endsWith('/pdf') ? HUTCH_FILES.pdf : HUTCH_FILES.tracker
       try {
+        // The PDF is generated on the fly from the live program data so it always
+        // matches the in-app program (including the plyometric progressions).
+        if (route.endsWith('/pdf')) {
+          const bytes = await buildHutchTouchPdf()
+          const headers = new Headers()
+          headers.set('Content-Type', 'application/pdf')
+          headers.set('Content-Disposition', `inline; filename="${f.name}"`)
+          headers.set('Cache-Control', 'private, no-store')
+          return new NextResponse(Buffer.from(bytes), { status: 200, headers })
+        }
         const r = await fetch(f.url)
         if (!r.ok) throw new Error('source fetch failed ' + r.status)
         const buf = Buffer.from(await r.arrayBuffer())
