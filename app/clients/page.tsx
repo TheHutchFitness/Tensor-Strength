@@ -10,7 +10,6 @@ import WilksDotsCalculator from "@/components/tools/WilksDotsCalculator";
 import PRTracker from "@/components/tools/PRTracker";
 import ClientCoaching from "@/components/portal/ClientCoaching";
 import WeeklyPrograms from "@/components/WeeklyPrograms";
-import HutchTouch from "@/components/HutchTouch";
 import PRSubmit from "@/components/PRSubmit";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
@@ -239,11 +238,6 @@ export default function ClientPortalPage() {
               {/* Weekly Programs */}
               <div className="mt-14 border-t border-bone/10 pt-12">
                 <WeeklyPrograms mode="portal" single />
-              </div>
-
-              {/* The Hutch Touch */}
-              <div className="mt-14 border-t border-bone/10 pt-12">
-                <HutchTouch mode="portal" />
               </div>
 
               {/* PR Board submission */}

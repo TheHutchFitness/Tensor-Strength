@@ -7,8 +7,9 @@ import ExerciseLibrary from "@/components/ExerciseLibrary";
 import WarmupLibrary from "@/components/WarmupLibrary";
 import TrainerPrograms from "@/components/portal/TrainerPrograms";
 import ClientExtras from "@/components/tools/ClientExtras";
+import HutchTouch from "@/components/HutchTouch";
 
-type Tab = "tracker" | "exercises" | "warmups" | "extras" | "build";
+type Tab = "tracker" | "exercises" | "warmups" | "extras" | "hutch" | "build";
 
 export default function WorkoutLogPage() {
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,7 @@ export default function WorkoutLogPage() {
     { id: "exercises", label: "Exercise Library" },
     { id: "warmups", label: "Warmups & Conditioning" },
     { id: "extras", label: "Tools" },
+    { id: "hutch", label: "The Hutch Touch" },
     ...(isTrainer ? [{ id: "build" as Tab, label: "Build for Clients" }] : []),
   ];
 
@@ -96,6 +98,8 @@ export default function WorkoutLogPage() {
                 </div>
                 <TrainerPrograms />
               </div>
+            ) : tab === "hutch" ? (
+              <HutchTouch mode="portal" />
             ) : (
               <div className="bg-ink/20 border border-bone/10 p-6 md:p-10">
                 {tab === "tracker" && <WorkoutLog />}

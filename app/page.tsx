@@ -4,7 +4,6 @@ import Hero from "@/components/Hero";
 import About from "@/components/About";
 import CoachingShowcase from "@/components/CoachingShowcase";
 import PRBoard from "@/components/PRBoard";
-import HutchTouch from "@/components/HutchTouch";
 import Content from "@/components/Content";
 import FitEffectCard from "@/components/FitEffectCard";
 import ProgramFinder from "@/components/ProgramFinder";
@@ -26,7 +25,6 @@ export default function Home() {
         <About />
         <CoachingShowcase />
         <PRBoard />
-        <HutchTouch mode="public" />
         <Content />
         <FitEffectCard />
         <ProgramFinder />
