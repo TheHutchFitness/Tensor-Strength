@@ -12,7 +12,6 @@ import ClientCoaching from "@/components/portal/ClientCoaching";
 import WeeklyPrograms from "@/components/WeeklyPrograms";
 import HutchTouch from "@/components/HutchTouch";
 import PRSubmit from "@/components/PRSubmit";
-import TawkTo, { TAWK_CONFIGURED } from "@/components/TawkTo";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
 
@@ -25,8 +24,6 @@ export default function ClientPortalPage() {
   const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr">("macros");
-
-  const chatReady = TAWK_CONFIGURED;
 
   useEffect(() => {
     (async () => {
@@ -143,7 +140,6 @@ export default function ClientPortalPage() {
           ) : (
             /* ---------- APPROVED — FULL PORTAL ---------- */
             <div>
-              {chatReady && <TawkTo />}
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                 Client Portal
               </p>
@@ -239,27 +235,6 @@ export default function ClientPortalPage() {
                   photos or videos to any post or reply.
                 </p>
               </a>
-
-              {/* Live chat */}
-              <div className="mt-10 border-2 border-bone/15 bg-ink/30 backdrop-blur-sm p-6">
-                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
-                  Live Chat
-                </p>
-                <div className="flex flex-col">
-                  <p className="font-display uppercase tracking-wider text-bone">
-                    Ask Hutch a question
-                  </p>
-                  <p className="text-sm text-bone/60 mt-2 leading-relaxed">
-                    Private 1:1 chat — use the floating chat button in the
-                    bottom-right corner. Hutch replies directly.
-                  </p>
-                  <p className="mt-3 text-xs text-bone/40">
-                    {chatReady
-                      ? "Chat is online — tap the bubble to start."
-                      : "Chat is being set up — check back shortly."}
-                  </p>
-                </div>
-              </div>
 
               {/* Weekly Programs */}
               <div className="mt-14 border-t border-bone/10 pt-12">

@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 const links = [
   { href: "/#about", label: "About" },
   { href: "/#content", label: "Content" },
-  { href: "/#programs", label: "Weekly Programs" },
-  { href: "/#tools", label: "Free Tools" },
+  { href: "/programs", label: "Free Programs" },
+  { href: "/free-tools", label: "Free Tools" },
 ];
 
 // Desktop grouped hover dropdowns. Each trigger still links to its main section;
@@ -33,24 +33,22 @@ const menus = [
     ],
   },
   {
-    label: "Weekly Programs",
-    href: "/#programs",
+    label: "Free Programs",
+    href: "/programs",
     items: [
-      { href: "/#programs", label: "Weekly Programs" },
+      { href: "/programs", label: "Free Programs" },
       { href: "/#program-finder", label: "Program Finder" },
       { href: "/#program", label: "Custom Program" },
-      { href: "/free-programs", label: "Free Programs" },
     ],
   },
   {
     label: "Free Tools",
-    href: "/#tools",
+    href: "/free-tools",
     items: [
-      { href: "/?t=1rm#tools", label: "1-Rep Max" },
-      { href: "/?t=wilks#tools", label: "Wilks & DOTS" },
-      { href: "/?t=pr#tools", label: "PR Tracker" },
-      { href: "/macros", label: "Macro Calculator" },
-      { href: "/#tools", label: "Nearby Gyms" },
+      { href: "/free-tools?t=1rm", label: "1-Rep Max" },
+      { href: "/free-tools?t=wilks", label: "Wilks & DOTS" },
+      { href: "/free-tools?t=pr", label: "PR Tracker" },
+      { href: "/free-tools?t=macros", label: "Macro Calculator" },
     ],
   },
 ];

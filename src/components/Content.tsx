@@ -5,19 +5,19 @@ const articles = [
     tag: "Training",
     title: "Why your accessory work is quietly building your main lifts",
     read: "Read PDF",
-    href: "https://us.chat-img.sintra.ai/0d1255aa-5bdd-49c7-9b93-64af3dfc8e4f/f5ae0249-4f4b-4ab2-985e-b0473a54539c/Tensor_Strength_Accessory_Lifts_Guide.pdf",
+    href: "/library/tensor-strength-accessory-lifts.pdf",
   },
   {
     tag: "Mindset",
     title: "Why consistency is king",
     read: "Read PDF",
-    href: "https://us.chat-img.sintra.ai/0d1255aa-5bdd-49c7-9b93-64af3dfc8e4f/2ff14d5d-84c4-4cce-a388-200867afdaee/Tensor_Strength_Consistency_Drives_Progress.pdf",
+    href: "/library/tensor-strength-consistency.pdf",
   },
   {
     tag: "Programming",
     title: "Progressive overload without destroying your joints",
     read: "Read PDF",
-    href: "https://us.chat-img.sintra.ai/0d1255aa-5bdd-49c7-9b93-64af3dfc8e4f/3764a730-fdd7-4743-aca1-8ec5b7286942/Tensor_Strength_Progressive_Overload_Guide.pdf",
+    href: "/library/tensor-strength-progressive-overload.pdf",
   },
 ];
 
@@ -67,30 +67,6 @@ export default function Content() {
               </Tag>
             );
           })}
-        </div>
-
-        {/* Social */}
-        <div className="mt-20 border-t-2 border-bone/10 pt-12">
-          <p className="glow font-display uppercase tracking-[0.3em] text-bone/50 text-sm mb-6">
-            Follow the work
-          </p>
-          <div className="flex flex-wrap gap-4">
-            {[
-              { label: "Instagram", href: "https://www.instagram.com/thehutchfitness?igsi=bXM0b2t2cXFydTBj" },
-              { label: "YouTube", href: "https://youtube.com/@thehutchtouchathletics?si=WWM0dNVbIvUjyskD" },
-              { label: "TikTok", href: "https://www.tiktok.com/@thehutchfitness?_r=1&_t=ZS-99GdmGtS3n7" },
-            ].map((s) => (
-              <a
-                key={s.label}
-                href={s.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-6 py-3 bg-ink text-bone font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
-              >
-                {s.label}
-              </a>
-            ))}
-          </div>
         </div>
       </div>
     </section>

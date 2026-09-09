@@ -214,12 +214,6 @@ export default function WeeklyPrograms({ mode, single }: { mode: Mode; single?: 
               the PDF, and get to work. Members get the 8-week Hutch Touch block, the full
               workout log, libraries, and check-ins in the portal.
             </p>
-            <a
-              href="/free-programs"
-              className="mt-8 inline-flex bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
-            >
-              Browse all free programs →
-            </a>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

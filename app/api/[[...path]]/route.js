@@ -257,7 +257,18 @@ function publicTrainerProfile(u) {
 // Ensure a single admin account exists (seeded from env)
 async function ensureAdmin(db) {
   const existing = await db.collection('users').findOne({ role: 'admin' })
-  if (existing) return
+  if (existing) {
+    // Admins double as trainers: they can be assigned clients and manage a
+    // public trainer profile just like a normal coach. Patch older admin
+    // records that predate this (idempotent).
+    if (existing.isTrainer !== true) {
+      await db.collection('users').updateOne(
+        { id: existing.id },
+        { $set: { isTrainer: true } }
+      )
+    }
+    return
+  }
   const username = (process.env.ADMIN_USERNAME || 'hutch').toLowerCase()
   const password = process.env.ADMIN_PASSWORD
   const email = process.env.ADMIN_EMAIL || 'admin@tensorstrength.com'
@@ -275,6 +286,8 @@ async function ensureAdmin(db) {
     passwordHash,
     role: 'admin',
     portalAccess: true,
+    // Admins act as trainers too — assignable clients + editable trainer profile.
+    isTrainer: true,
     emailVerified: true,
     authProvider: 'local',
     createdAt: new Date(),
@@ -1169,7 +1182,7 @@ async function handleRoute(request, { params }) {
 
     if (route === '/trainer/profile' && method === 'PUT') {
       const user = await getCurrentUser(request, db)
-      if (!user || !user.isTrainer) {
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
         return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
       }
       const body = await request.json()

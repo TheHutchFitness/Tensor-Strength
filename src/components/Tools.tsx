@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import OneRepMaxCalculator from "./tools/OneRepMaxCalculator";
 import WilksDotsCalculator from "./tools/WilksDotsCalculator";
 import PRTracker from "./tools/PRTracker";
-import NearbyGyms from "./NearbyGyms";
+import MacroCalculator from "./tools/MacroCalculator";
 
-// Public free tools. The Workout Log and Macro (nutrition) tracker have been
-// moved to the Client Portal (/clients) and the Tensor Strength app — they're
-// for active clients only.
+// Public free tools. The Workout Log has been moved to the Client Portal
+// (/clients) and the Tensor Strength app — it's for active clients only.
+// The Macro Calculator is free for everyone, right here.
 const tabs = [
   { id: "1rm", label: "1-Rep Max" },
   { id: "wilks", label: "Wilks & DOTS" },
   { id: "pr", label: "PR Tracker" },
+  { id: "macros", label: "Macro Calculator" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -24,7 +25,7 @@ export default function Tools() {
   // via /?t=wilks#tools etc.
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("t");
-    if (t === "1rm" || t === "wilks" || t === "pr") setActive(t);
+    if (t === "1rm" || t === "wilks" || t === "pr" || t === "macros") setActive(t);
   }, []);
 
   return (
@@ -41,8 +42,8 @@ export default function Tools() {
             <span className="text-electric">Track the work.</span>
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
-            Three free calculators to estimate your maxes, score your lifts, and chase down
-            PRs. No login — everything saves right on your device.
+            Four free calculators to estimate your maxes, score your lifts, chase down
+            PRs, and dial in your daily macros — free with your account, saved and synced across your devices.
           </p>
         </div>
 
@@ -88,9 +89,8 @@ export default function Tools() {
           {active === "1rm" && <OneRepMaxCalculator />}
           {active === "wilks" && <WilksDotsCalculator />}
           {active === "pr" && <PRTracker />}
+          {active === "macros" && <MacroCalculator />}
         </div>
-
-        <NearbyGyms />
       </div>
     </section>
   );
