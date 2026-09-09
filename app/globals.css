@@ -184,3 +184,10 @@ select:-webkit-autofill {
   }
 }
 
+/* Reserve space for the portal's fixed bottom tab bar on phones */
+@media (max-width: 767px) {
+  body.has-portal-tabbar {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+}
+

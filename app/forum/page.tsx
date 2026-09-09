@@ -619,7 +619,7 @@ export default function ForumPage() {
               </div>
 
               {/* New post */}
-              <form onSubmit={createPost} className="mt-8 border border-bone/15 bg-ink/30 p-6 grid gap-3">
+              <form onSubmit={createPost} className="mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 grid gap-3">
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -712,7 +712,7 @@ export default function ForumPage() {
                     const liked = !!(me && (p.likes || []).includes(me.id));
                     const canDelete = me && (me.id === (p as any).userId || me.role === "admin");
                     return (
-                      <div key={p.id} className="border border-bone/15 bg-ink/30 p-5 hover:border-electric transition-colors">
+                      <div key={p.id} className="border border-bone/15 bg-ink/30 p-4 sm:p-5 hover:border-electric transition-colors">
                         <button onClick={() => openThread(p.id)} className="text-left w-full">
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
@@ -793,11 +793,11 @@ export default function ForumPage() {
                     <ReactionBar reactions={thread.post.reactions} meId={me?.id} onReact={(e) => react("post", thread.post.id, e)} />
                   </div>
 
-                  <div className="mt-10 border-t border-bone/10 pt-6">
+                  <div className="mt-6 sm:mt-10 border-t border-bone/10 pt-5 sm:pt-6">
                     <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
                       {thread.replies.length} {thread.replies.length === 1 ? "Reply" : "Replies"}
                     </p>
-                    <div className="grid gap-4">
+                    <div className="grid gap-3 sm:gap-4">
                       {(() => {
                         const canMarkBest = !!(
                           me &&
@@ -815,7 +815,7 @@ export default function ForumPage() {
                               key={r.id}
                               id={`reply-${r.id}`}
                               className={
-                                "border p-5 transition-all rounded-sm " +
+                                "border p-4 sm:p-5 transition-all rounded-sm " +
                                 (isBest
                                   ? "border-emerald-500/60 bg-emerald-500/[0.06]"
                                   : "border-bone/15 bg-ink/30")
@@ -860,7 +860,7 @@ export default function ForumPage() {
                       })()}
                     </div>
 
-                    <form onSubmit={postReply} className="mt-8 border border-bone/15 bg-ink/30 p-6 grid gap-3">
+                    <form onSubmit={postReply} className="mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 grid gap-3">
                       <MentionTextarea
                         value={replyBody}
                         onChange={setReplyBody}

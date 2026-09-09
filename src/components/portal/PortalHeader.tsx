@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PortalTabBar from "./PortalTabBar";
 
 const NAV = [
   { href: "/clients/about", label: "About Me" },
@@ -19,6 +20,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => setMe(d?.user || null)).catch(() => {});
   }, []);
   return (
+    <>
     <header className="sticky top-0 z-50 bg-ink/90 backdrop-blur text-bone border-b-2 border-electric">
       <div className="mx-auto max-w-6xl px-6 py-3 flex items-center justify-between gap-4">
         {/* Logo (top-left) */}
@@ -100,5 +102,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
         </nav>
       )}
     </header>
+    <PortalTabBar />
+    </>
   );
 }

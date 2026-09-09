@@ -912,7 +912,7 @@ export default function WorkoutLog() {
 
       {/* FLOATING REST TIMER — available throughout an active session */}
       {(session.length > 0 || restRunning || restLeft > 0) && (
-        <div className="fixed inset-x-0 bottom-0 z-[70] pointer-events-none">
+        <div className="fixed inset-x-0 bottom-16 md:bottom-0 z-[70] pointer-events-none">
           <div className="mx-auto max-w-2xl px-3 pb-3 pointer-events-auto">
             <div
               className={
