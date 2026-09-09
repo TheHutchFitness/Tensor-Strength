@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import PortalTabBar from "./PortalTabBar";
 import InstallPrompt from "./InstallPrompt";
+import OfflineBadge from "./OfflineBadge";
 
 const NAV = [
   { href: "/clients/about", label: "About Me" },
@@ -105,6 +106,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
     </header>
     <PortalTabBar />
     <InstallPrompt />
+    <OfflineBadge />
     </>
   );
 }
