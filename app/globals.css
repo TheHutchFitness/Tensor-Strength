@@ -191,3 +191,9 @@ select:-webkit-autofill {
   }
 }
 
+/* Slide-up animation for the mobile forum composer sheet */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+

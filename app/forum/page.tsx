@@ -305,6 +305,7 @@ export default function ForumPage() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [focusReplyId, setFocusReplyId] = useState<string | null>(null);
   const [notifyClients, setNotifyClients] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   async function loadPosts() {
     const res = await fetch("/api/forum/posts");
@@ -492,6 +493,7 @@ export default function ForumPage() {
       setCategory("general");
       setMedia(null);
       setNotifyClients(false);
+      setComposerOpen(false);
       await loadPosts();
     }
     setPosting(false);
@@ -516,6 +518,60 @@ export default function ForumPage() {
   }
 
   const inputCls = "w-full bg-ink/40 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none";
+
+  // Composer fields — reused by the inline desktop form and the mobile sheet.
+  const composerFields = (
+    <>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Title — e.g. 'Squat form check' or 'Elbow pain on bench?'"
+        className={inputCls}
+      />
+      <label className="grid gap-1">
+        <span className="text-[10px] uppercase tracking-wider text-bone/50">Category — pick the best fit</span>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full bg-ink/60 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm"
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c.id} value={c.id}>{c.label}</option>
+          ))}
+        </select>
+      </label>
+      <MentionTextarea
+        value={body}
+        onChange={setBody}
+        members={members}
+        rows={3}
+        placeholder="Add details… Use @ to mention someone (optional)"
+        className={inputCls + " resize-none"}
+      />
+      <MediaPicker media={media} setMedia={setMedia} />
+      {me && (me.isTrainer || me.role === "admin") && (
+        <label className="flex items-center gap-3 border border-electric/40 bg-electric/5 px-4 py-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={notifyClients}
+            onChange={(e) => setNotifyClients(e.target.checked)}
+            className="h-4 w-4 accent-electric"
+          />
+          <span className="text-sm text-bone/80">
+            <span className="font-display uppercase tracking-wider text-electric">📢 Coach Broadcast</span>
+            <span className="block text-xs text-bone/50 mt-0.5">Notify all of your assigned clients about this post.</span>
+          </span>
+        </label>
+      )}
+      <button
+        type="submit"
+        disabled={posting}
+        className="mt-1 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
+      >
+        {posting ? "Posting…" : notifyClients ? "Post & Notify Clients" : "Post to Forum"}
+      </button>
+    </>
+  );
 
   return (
     <>
@@ -618,57 +674,33 @@ export default function ForumPage() {
                 ))}
               </div>
 
-              {/* New post */}
-              <form onSubmit={createPost} className="mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 grid gap-3">
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Title — e.g. 'Squat form check' or 'Elbow pain on bench?'"
-                  className={inputCls}
-                />
-                <label className="grid gap-1">
-                  <span className="text-[10px] uppercase tracking-wider text-bone/50">Category — pick the best fit</span>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-ink/60 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm"
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c.id} value={c.id}>{c.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <MentionTextarea
-                  value={body}
-                  onChange={setBody}
-                  members={members}
-                  rows={3}
-                  placeholder="Add details… Use @ to mention someone (optional)"
-                  className={inputCls + " resize-none"}
-                />
-                <MediaPicker media={media} setMedia={setMedia} />
-                {me && (me.isTrainer || me.role === "admin") && (
-                  <label className="flex items-center gap-3 border border-electric/40 bg-electric/5 px-4 py-3 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={notifyClients}
-                      onChange={(e) => setNotifyClients(e.target.checked)}
-                      className="h-4 w-4 accent-electric"
-                    />
-                    <span className="text-sm text-bone/80">
-                      <span className="font-display uppercase tracking-wider text-electric">📢 Coach Broadcast</span>
-                      <span className="block text-xs text-bone/50 mt-0.5">Notify all of your assigned clients about this post.</span>
-                    </span>
-                  </label>
-                )}
-                <button
-                  type="submit"
-                  disabled={posting}
-                  className="mt-1 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
-                >
-                  {posting ? "Posting…" : notifyClients ? "Post & Notify Clients" : "Post to Forum"}
-                </button>
+              {/* New post — inline on desktop */}
+              <form onSubmit={createPost} className="hidden md:grid mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 gap-3">
+                {composerFields}
               </form>
+
+              {/* Mobile: floating + button opens a slide-up composer sheet */}
+              <button
+                onClick={() => setComposerOpen(true)}
+                aria-label="New post"
+                className="md:hidden fixed right-4 bottom-20 z-[60] h-14 w-14 rounded-full bg-electric text-ink flex items-center justify-center shadow-xl shadow-electric/40 active:scale-95 transition-transform"
+              >
+                <span className="text-3xl leading-none -mt-0.5">+</span>
+              </button>
+              {composerOpen && (
+                <div className="md:hidden fixed inset-0 z-[80]">
+                  <div className="absolute inset-0 bg-black/60" onClick={() => setComposerOpen(false)} />
+                  <div className="absolute inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto bg-ink border-t-2 border-electric rounded-t-2xl p-4 pb-8 animate-[slideUp_.22s_ease-out]">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-display uppercase tracking-[0.2em] text-electric text-sm">New Post</span>
+                      <button onClick={() => setComposerOpen(false)} className="text-bone/50 hover:text-electric text-2xl leading-none">✕</button>
+                    </div>
+                    <form onSubmit={createPost} className="grid gap-3">
+                      {composerFields}
+                    </form>
+                  </div>
+                </div>
+              )}
 
               {/* Search + List */}
               <input
