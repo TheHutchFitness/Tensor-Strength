@@ -189,6 +189,9 @@ select:-webkit-autofill {
   body.has-portal-tabbar {
     padding-bottom: calc(4rem + env(safe-area-inset-bottom));
   }
+  body.has-site-tabbar {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
 }
 
 /* Slide-up animation for the mobile forum composer sheet */

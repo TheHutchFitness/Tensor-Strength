@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 const COOKIE_NAME = 'ts_token'
 
 // Routes that are always accessible without a session
-const PUBLIC_PATHS = ['/login', '/free-programs', '/programs', '/apply', '/macros', '/auth/emergent/callback', '/offline.html', '/manifest.webmanifest', '/sw.js']
+const PUBLIC_PATHS = ['/login', '/free-programs', '/programs', '/meet-the-team', '/professionals', '/apply', '/macros', '/auth/emergent/callback', '/offline.html', '/manifest.webmanifest', '/sw.js']
 
 export function middleware(request) {
   const { pathname } = request.nextUrl

@@ -29,7 +29,7 @@ export default function Hero() {
               Apply for Coaching
             </a>
             <a
-              href="#professionals"
+              href="/meet-the-team"
               className="border-2 border-bone px-8 py-4 font-display uppercase tracking-wider hover:bg-bone hover:text-ink transition-colors text-center"
             >
               Meet the Team
@@ -57,7 +57,7 @@ export default function Hero() {
               Apply
             </a>
             <a
-              href="#professionals"
+              href="/meet-the-team"
               className="font-display uppercase tracking-wider text-sm text-bone/80 border-b-2 border-bone/40 hover:text-electric hover:border-electric transition-colors"
             >
               Professionals

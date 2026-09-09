@@ -258,14 +258,20 @@ function publicTrainerProfile(u) {
 async function ensureAdmin(db) {
   const existing = await db.collection('users').findOne({ role: 'admin' })
   if (existing) {
-    // Admins double as trainers: they can be assigned clients and manage a
-    // public trainer profile just like a normal coach. Patch older admin
-    // records that predate this (idempotent).
-    if (existing.isTrainer !== true) {
-      await db.collection('users').updateOne(
-        { id: existing.id },
-        { $set: { isTrainer: true } }
-      )
+    // Admins double as the founder coach "Hutch": they can be assigned clients
+    // and are LINKED to the existing static Hutch profile (slug 'hutch'). We do
+    // NOT give the admin a separate DB trainer card. Idempotent migration.
+    const set = {}
+    const unset = {}
+    if (existing.isTrainer !== true) set.isTrainer = true
+    if (existing.slug !== 'hutch') set.slug = 'hutch'
+    if (existing.profileCompleted) unset.profileCompleted = ''
+    if (existing.trainerProfile) unset.trainerProfile = ''
+    const ops = {}
+    if (Object.keys(set).length) ops.$set = set
+    if (Object.keys(unset).length) ops.$unset = unset
+    if (Object.keys(ops).length) {
+      await db.collection('users').updateOne({ id: existing.id }, ops)
     }
     return
   }
@@ -286,8 +292,10 @@ async function ensureAdmin(db) {
     passwordHash,
     role: 'admin',
     portalAccess: true,
-    // Admins act as trainers too — assignable clients + editable trainer profile.
+    // Admins act as the founder coach (Hutch) — assignable clients, linked to
+    // the existing static Hutch profile (slug 'hutch'). No separate DB card.
     isTrainer: true,
+    slug: 'hutch',
     emailVerified: true,
     authProvider: 'local',
     createdAt: new Date(),

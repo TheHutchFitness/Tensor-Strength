@@ -3,7 +3,6 @@ import Announcement from "@/components/Announcement";
 import Hero from "@/components/Hero";
 import About from "@/components/About";
 import CoachingShowcase from "@/components/CoachingShowcase";
-import Professionals from "@/components/Professionals";
 import PRBoard from "@/components/PRBoard";
 import HutchTouch from "@/components/HutchTouch";
 import Content from "@/components/Content";
@@ -15,6 +14,7 @@ import EmailCapture from "@/components/EmailCapture";
 import MarketingExtras from "@/components/MarketingExtras";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
+import SiteTabBar from "@/components/SiteTabBar";
 
 export default function Home() {
   return (
@@ -25,7 +25,6 @@ export default function Home() {
         <Hero />
         <About />
         <CoachingShowcase />
-        <Professionals />
         <PRBoard />
         <HutchTouch mode="public" />
         <Content />
@@ -38,6 +37,7 @@ export default function Home() {
         <ContactForm />
       </main>
       <Footer />
+      <SiteTabBar />
     </>
   );
 }

@@ -18,7 +18,7 @@ const menus = [
     items: [
       { href: "/#about", label: "Our Approach" },
       { href: "/#coaching", label: "Coaching Showcase" },
-      { href: "/#professionals", label: "Meet the Team" },
+      { href: "/meet-the-team", label: "Meet the Team" },
       { href: "/#fit-effect", label: "The Fit Effect" },
       { href: "/#pricing", label: "Pricing" },
     ],
