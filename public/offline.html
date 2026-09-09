@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0420" />
+    <title>Offline · Tensor Strength</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; }
+      body {
+        background: #0a0420;
+        color: #f5f1e8;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .bar { position: fixed; left: 0; right: 0; height: 5px; background: #00a8ff; }
+      .top { top: 0; }
+      .bottom { bottom: 0; }
+      .card { max-width: 360px; }
+      img { width: 84px; height: 84px; border-radius: 16px; margin-bottom: 22px; }
+      .kicker {
+        color: #00a8ff; font-size: 12px; letter-spacing: 3px; text-transform: uppercase;
+        font-weight: 700; margin-bottom: 10px;
+      }
+      h1 { font-size: 26px; line-height: 1.15; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+      p { color: rgba(245,241,232,0.65); font-size: 15px; line-height: 1.5; margin-bottom: 26px; }
+      button {
+        background: #00a8ff; color: #0a0420; border: 0; cursor: pointer;
+        font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-size: 13px;
+        padding: 14px 28px; border-radius: 8px;
+      }
+      button:active { transform: scale(0.97); }
+      .hint { margin-top: 20px; font-size: 12px; color: rgba(245,241,232,0.4); }
+    </style>
+  </head>
+  <body>
+    <div class="bar top"></div>
+    <div class="card">
+      <img src="/icons/apple-touch-icon.png" alt="Tensor Strength" />
+      <div class="kicker">Tensor Strength</div>
+      <h1>You're offline</h1>
+      <p>Looks like you've lost your connection. Your logged data is saved — reconnect and everything will sync back up.</p>
+      <button onclick="location.reload()">Try Again</button>
+      <div class="hint">Reconnect to Wi-Fi or mobile data to continue.</div>
+    </div>
+    <div class="bar bottom"></div>
+    <script>
+      // Auto-reload as soon as the network comes back.
+      window.addEventListener("online", function () { location.reload(); });
+    </script>
+  </body>
+</html>
