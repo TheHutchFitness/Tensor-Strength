@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { cloudSet } from "@/lib/cloud";
+import { cloudSet, emitCloudSaved } from "@/lib/cloud";
 import {
   exercises as ALL_EXERCISES,
   splits as SPLITS,
@@ -245,7 +245,9 @@ export default function WorkoutLog() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workouts: nextWorkouts, templates: nextTemplates }),
-    }).catch(() => {});
+    })
+      .then((r) => { if (r.ok) emitCloudSaved(); })
+      .catch(() => {});
   }
 
   const library: Exercise[] = useMemo(

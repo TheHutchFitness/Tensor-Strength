@@ -71,7 +71,9 @@ export function useCloudState<T>(
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ key, value: next }),
-            }).catch(() => {});
+            })
+              .then((r) => { if (r.ok) emitCloudSaved(); })
+              .catch(() => {});
           }, 600);
         }
         return next;
@@ -81,6 +83,15 @@ export function useCloudState<T>(
   );
 
   return [value, update, ready];
+}
+
+/**
+ * Notify the UI that a cloud sync just completed (drives the "Saved ✓" tick).
+ */
+export function emitCloudSaved() {
+  try {
+    window.dispatchEvent(new CustomEvent("ts-cloud-saved"));
+  } catch {}
 }
 
 /**
@@ -95,5 +106,7 @@ export function cloudSet(key: string, value: any) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, value }),
-  }).catch(() => {});
+  })
+    .then((r) => { if (r.ok) emitCloudSaved(); })
+    .catch(() => {});
 }

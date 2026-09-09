@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import PortalTabBar from "./PortalTabBar";
 import InstallPrompt from "./InstallPrompt";
 import OfflineBadge from "./OfflineBadge";
+import SyncIndicator from "./SyncIndicator";
 
 const NAV = [
   { href: "/clients/about", label: "About Me" },
@@ -107,6 +108,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
     <PortalTabBar />
     <InstallPrompt />
     <OfflineBadge />
+    <SyncIndicator />
     </>
   );
 }
