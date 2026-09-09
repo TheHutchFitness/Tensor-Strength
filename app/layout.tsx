@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
 
@@ -6,12 +6,26 @@ export const metadata: Metadata = {
   title: "Tensor Strength — Strength & Performance Coaching",
   description:
     "Tensor Strength builds stronger, more capable athletes through expert coaching, proven training methods, and a no-BS approach to fitness.",
+  applicationName: "Tensor Strength",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Tensor Strength",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
   openGraph: {
     title: "Tensor Strength — Strength & Performance Coaching",
     description:
       "Build stronger, more capable athletes. Expert coaching, proven methods, no BS.",
     type: "website",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0420",
 };
 
 export default function RootLayout({

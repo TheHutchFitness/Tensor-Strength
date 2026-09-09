@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PortalTabBar from "./PortalTabBar";
+import InstallPrompt from "./InstallPrompt";
 
 const NAV = [
   { href: "/clients/about", label: "About Me" },
@@ -103,6 +104,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
       )}
     </header>
     <PortalTabBar />
+    <InstallPrompt />
     </>
   );
 }
