@@ -344,6 +344,7 @@ export default function ForumPage() {
       if (!pulling) return;
       pulling = false;
       if (pullRef.current >= THRESH) {
+        try { (navigator as any).vibrate?.(15); } catch {}
         setRefreshing(true);
         setP(45);
         await loadPosts();

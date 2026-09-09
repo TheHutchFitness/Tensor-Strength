@@ -197,3 +197,9 @@ select:-webkit-autofill {
   to { transform: translateY(0); }
 }
 
+/* Fade-in for transient hints/toasts */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
