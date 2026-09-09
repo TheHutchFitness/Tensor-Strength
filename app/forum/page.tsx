@@ -306,6 +306,61 @@ export default function ForumPage() {
   const [focusReplyId, setFocusReplyId] = useState<string | null>(null);
   const [notifyClients, setNotifyClients] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [pullDist, setPullDist] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullRef = useRef(0);
+
+  // Pull-to-refresh on the forum list (mobile). Only active in the list view.
+  useEffect(() => {
+    if (openId) return;
+    let startY = 0;
+    let pulling = false;
+    const THRESH = 70;
+    const setP = (d: number) => {
+      pullRef.current = d;
+      setPullDist(d);
+    };
+    const onStart = (e: TouchEvent) => {
+      if (window.scrollY > 0) {
+        pulling = false;
+        return;
+      }
+      startY = e.touches[0].clientY;
+      pulling = true;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!pulling) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 0 && window.scrollY <= 0) {
+        const d = Math.min(dy * 0.5, 90);
+        setP(d);
+        if (d > 5 && e.cancelable) e.preventDefault();
+      } else {
+        setP(0);
+      }
+    };
+    const onEnd = async () => {
+      if (!pulling) return;
+      pulling = false;
+      if (pullRef.current >= THRESH) {
+        setRefreshing(true);
+        setP(45);
+        await loadPosts();
+        setRefreshing(false);
+      }
+      setP(0);
+    };
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
 
   async function loadPosts() {
     const res = await fetch("/api/forum/posts");
@@ -511,6 +566,7 @@ export default function ForumPage() {
     if (res.ok) {
       setReplyBody("");
       setReplyMedia(null);
+      setReplyOpen(false);
       await openThread(openId!);
       await loadPosts();
     }
@@ -569,6 +625,28 @@ export default function ForumPage() {
         className="mt-1 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
       >
         {posting ? "Posting…" : notifyClients ? "Post & Notify Clients" : "Post to Forum"}
+      </button>
+    </>
+  );
+
+  // Reply fields — reused by the inline desktop form and the mobile sheet.
+  const replyFields = (
+    <>
+      <MentionTextarea
+        value={replyBody}
+        onChange={setReplyBody}
+        members={members}
+        rows={3}
+        placeholder="Write a reply… Use @ to mention someone"
+        className={inputCls + " resize-none"}
+      />
+      <MediaPicker media={replyMedia} setMedia={setReplyMedia} />
+      <button
+        type="submit"
+        disabled={replying}
+        className="mt-1 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
+      >
+        {replying ? "Posting…" : "Post Reply"}
       </button>
     </>
   );
@@ -648,6 +726,15 @@ export default function ForumPage() {
 
           {!openId ? (
             <>
+              {/* Pull-to-refresh indicator (mobile) */}
+              {pullDist > 0 && (
+                <div
+                  className="md:hidden -mt-2 mb-1 flex items-center justify-center overflow-hidden text-electric font-display uppercase tracking-wider text-[11px] transition-[height]"
+                  style={{ height: pullDist }}
+                >
+                  {refreshing ? "Refreshing…" : pullDist >= 70 ? "↑ Release to refresh" : "↓ Pull to refresh"}
+                </div>
+              )}
               <h1 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
                 Ask. Answer. <span className="text-electric">Improve.</span>
               </h1>
@@ -892,24 +979,34 @@ export default function ForumPage() {
                       })()}
                     </div>
 
-                    <form onSubmit={postReply} className="mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 grid gap-3">
-                      <MentionTextarea
-                        value={replyBody}
-                        onChange={setReplyBody}
-                        members={members}
-                        rows={3}
-                        placeholder="Write a reply… Use @ to mention someone"
-                        className={inputCls + " resize-none"}
-                      />
-                      <MediaPicker media={replyMedia} setMedia={setReplyMedia} />
-                      <button
-                        type="submit"
-                        disabled={replying}
-                        className="mt-1 bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60 w-fit"
-                      >
-                        {replying ? "Posting…" : "Post Reply"}
-                      </button>
+                    {/* Reply — inline on desktop */}
+                    <form onSubmit={postReply} className="hidden md:grid mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 gap-3">
+                      {replyFields}
                     </form>
+
+                    {/* Mobile: floating reply button opens a slide-up sheet */}
+                    <button
+                      onClick={() => setReplyOpen(true)}
+                      aria-label="Write a reply"
+                      className="md:hidden fixed right-4 bottom-20 z-[60] flex items-center gap-2 rounded-full bg-electric text-ink pl-4 pr-5 h-14 shadow-xl shadow-electric/40 active:scale-95 transition-transform"
+                    >
+                      <span className="text-2xl leading-none -mt-0.5">↩</span>
+                      <span className="font-display uppercase tracking-wider text-xs">Reply</span>
+                    </button>
+                    {replyOpen && (
+                      <div className="md:hidden fixed inset-0 z-[80]">
+                        <div className="absolute inset-0 bg-black/60" onClick={() => setReplyOpen(false)} />
+                        <div className="absolute inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto bg-ink border-t-2 border-electric rounded-t-2xl p-4 pb-8 animate-[slideUp_.22s_ease-out]">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="font-display uppercase tracking-[0.2em] text-electric text-sm">Write a Reply</span>
+                            <button onClick={() => setReplyOpen(false)} className="text-bone/50 hover:text-electric text-2xl leading-none">✕</button>
+                          </div>
+                          <form onSubmit={postReply} className="grid gap-3">
+                            {replyFields}
+                          </form>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

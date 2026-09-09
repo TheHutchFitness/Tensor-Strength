@@ -46,6 +46,48 @@ export default function PortalTabBar() {
     };
   }, [pathname]);
 
+  // Swipe left/right between portal sections on phones.
+  useEffect(() => {
+    let sx = 0, sy = 0, st = 0, tracking = false;
+    const inHorizScroll = (el: Element | null) => {
+      let n: Element | null = el;
+      while (n && n !== document.body) {
+        const cs = getComputedStyle(n);
+        if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && n.scrollWidth > n.clientWidth + 4) return true;
+        n = n.parentElement;
+      }
+      return false;
+    };
+    const onStart = (e: TouchEvent) => {
+      if (window.innerWidth >= 768 || e.touches.length !== 1 || inHorizScroll(e.target as Element)) {
+        tracking = false;
+        return;
+      }
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+      st = Date.now();
+      tracking = true;
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Date.now() - st > 700 || Math.abs(dx) < 90 || Math.abs(dy) > 45) return;
+      const idx = TABS.findIndex((tb) => tb.match(pathname));
+      if (idx === -1) return;
+      const next = dx < 0 ? idx + 1 : idx - 1;
+      if (next < 0 || next >= TABS.length) return;
+      window.location.href = TABS[next].href;
+    };
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchend", onEnd);
+    };
+  }, [pathname]);
+
   return (
     <nav
       className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur border-t-2 border-electric"
