@@ -203,7 +203,33 @@ export default function HutchTouch({ mode }: { mode: Mode }) {
               </div>
             ) : (
               // Portal: full session
-              <div className="p-5 overflow-x-auto">
+              <div className="p-5">
+                {/* Mobile: stacked cards (no awkward horizontal scroll) */}
+                <div className="sm:hidden grid gap-3">
+                  {session.exercises.map((ex) => (
+                    <div key={ex.order} className="border border-bone/10 bg-ink/30 rounded-md p-4">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-bone/40 font-display text-xs">#{ex.order}</span>
+                        <span className="text-bone/90 font-medium">{ex.exercise}</span>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-xs">
+                        <dt className="text-bone/40 font-display uppercase tracking-wider">Sets</dt>
+                        <dd className="text-bone/70 font-display">{ex.sets}</dd>
+                        <dt className="text-bone/40 font-display uppercase tracking-wider">Load</dt>
+                        <dd className="text-bone/70">{ex.load}</dd>
+                        {ex.notes ? (
+                          <>
+                            <dt className="text-bone/40 font-display uppercase tracking-wider">Notes</dt>
+                            <dd className="text-bone/60">{ex.notes}</dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tablet / desktop: full table */}
+                <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
                     <tr className="text-bone/50 text-[10px] uppercase tracking-wider">
@@ -226,6 +252,7 @@ export default function HutchTouch({ mode }: { mode: Mode }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
 
                 <div className="mt-5 border-t border-bone/15 pt-4 text-xs text-bone/50 leading-relaxed">
                   <p>

@@ -174,3 +174,13 @@ select:-webkit-autofill {
   .hover\:border-bone:hover { border-color: #FFFEFC; }
   .hover\:border-electric:hover { border-color: #00A8FF; }
 }
+
+/* Mobile: keep form controls at >=16px so iOS Safari doesn't auto-zoom on focus */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
