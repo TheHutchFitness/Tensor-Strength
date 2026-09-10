@@ -743,6 +743,10 @@ export default function ForumPage() {
                 Post a question, drop a form-check video, or help a teammate out. Attach a
                 photo or video on any post or reply.
               </p>
+              <p className="mt-3 inline-flex items-center gap-2 font-display uppercase tracking-wider text-xs text-bone/60">
+                <span className="h-2 w-2 rounded-full bg-electric animate-pulse" aria-hidden />
+                {members.length.toLocaleString()} {members.length === 1 ? "member" : "members"} in the community
+              </p>
 
               {/* Category nav */}
               <div className="mt-8 flex flex-wrap gap-2 border-b border-bone/15 pb-3">

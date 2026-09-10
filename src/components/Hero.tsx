@@ -66,7 +66,7 @@ export default function Hero() {
 
           <dl className="mt-12 grid grid-cols-3 gap-6 max-w-xl border-t border-bone/20 pt-8">
             {[
-              { n: "15+", l: "Years Experience" },
+              { n: "12", l: "Years Experience" },
               { n: "All Levels", l: "Pro, Amateur & Non-Athletes" },
               { n: "100%", l: "No-BS Guarantee" },
             ].map((s) => (

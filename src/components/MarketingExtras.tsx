@@ -15,9 +15,10 @@ function Stat({ end, suffix, label }: { end: number; suffix: string; label: stri
         done.current = true;
         const start = performance.now();
         const dur = 1400;
+        const from = end;
         const tick = (t: number) => {
           const p = Math.min(1, (t - start) / dur);
-          setN(Math.round(end * (1 - Math.pow(1 - p, 3))));
+          setN(Math.round(from * (1 - Math.pow(1 - p, 3))));
           if (p < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -25,6 +26,12 @@ function Stat({ end, suffix, label }: { end: number; suffix: string; label: stri
     }, { threshold: 0.4 });
     io.observe(el);
     return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Live values may arrive after the count-up has already run — snap to the
+  // latest real number so the display always reflects the true count.
+  useEffect(() => {
+    if (done.current) setN(end);
   }, [end]);
   return (
     <div ref={ref} className="text-center">
@@ -69,12 +76,27 @@ function Faq() {
 }
 
 export default function MarketingExtras() {
+  const [stats, setStats] = useState<{ athletesCoached: number; totalAccounts: number } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) setStats(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  const athletes = stats?.athletesCoached ?? 15;
+  const members = stats?.totalAccounts ?? 0;
+
   return (
     <section className="py-20 md:py-28 border-t border-bone/10">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-24">
-          <Stat end={12} suffix="+" label="Years coaching" />
-          <Stat end={500} suffix="+" label="Athletes coached" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-24">
+          <Stat end={12} suffix="" label="Years experience" />
+          <Stat end={athletes} suffix="" label="Athletes coached" />
+          <Stat end={members} suffix="" label="Members" />
           <Stat end={2000} suffix="+" label="PRs logged" />
           <Stat end={98} suffix="%" label="Would recommend" />
         </div>

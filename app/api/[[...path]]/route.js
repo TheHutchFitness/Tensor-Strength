@@ -1234,6 +1234,28 @@ async function handleRoute(request, { params }) {
     }
 
     // ---- Public professionals (trainers who completed a profile) ----
+    // ---- Public site stats (live counts, no auth) ----
+    if (route === '/stats' && method === 'GET') {
+      const users = db.collection('users')
+      // Athletes coached = a base of 15 (coached before the site tracked it)
+      // plus everyone who has paid for remote or in-person coaching here.
+      const ATHLETES_BASE = 15
+      const paidCoached = await users.countDocuments({
+        accessType: { $in: ['remote_coaching', 'in_person'] },
+      })
+      // Total accounts on the website (exclude the seeded admin + demo client
+      // so the number reflects real signups only).
+      const totalAccounts = await users.countDocuments({
+        role: { $ne: 'admin' },
+        isDemo: { $ne: true },
+      })
+      return handleCORS(NextResponse.json({
+        athletesCoached: ATHLETES_BASE + paidCoached,
+        totalAccounts,
+      }))
+    }
+
+
     if (route === '/professionals' && method === 'GET') {
       const list = await db.collection('users')
         .find({ isTrainer: true, profileCompleted: true })
