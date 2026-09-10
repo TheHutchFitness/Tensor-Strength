@@ -1249,9 +1249,20 @@ async function handleRoute(request, { params }) {
         role: { $ne: 'admin' },
         isDemo: { $ne: true },
       })
+      // Workouts logged across all members (real, grows live).
+      let workoutsLogged = 0
+      try {
+        const docs = await db.collection('tracker')
+          .find({}, { projection: { workouts: 1 } })
+          .toArray()
+        for (const t of docs) {
+          if (Array.isArray(t.workouts)) workoutsLogged += t.workouts.length
+        }
+      } catch { workoutsLogged = 0 }
       return handleCORS(NextResponse.json({
         athletesCoached: ATHLETES_BASE + paidCoached,
         totalAccounts,
+        workoutsLogged,
       }))
     }
 

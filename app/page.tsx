@@ -11,6 +11,7 @@ import MarketingExtras from "@/components/MarketingExtras";
 import ContactForm from "@/components/ContactForm";
 import Footer from "@/components/Footer";
 import SiteTabBar from "@/components/SiteTabBar";
+import MemberHub from "@/components/MemberHub";
 
 export default function Home() {
   return (
@@ -18,6 +19,7 @@ export default function Home() {
       <Navbar />
       <Announcement />
       <main>
+        <MemberHub />
         <Hero />
         <About />
         <PRBoard />

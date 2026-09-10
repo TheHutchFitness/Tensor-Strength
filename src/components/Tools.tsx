@@ -91,6 +91,38 @@ export default function Tools() {
           {active === "pr" && <PRTracker />}
           {active === "macros" && <MacroCalculator />}
         </div>
+
+        {/* Locked Pro features tease */}
+        <div className="mt-8">
+          <p className="font-display uppercase tracking-[0.3em] text-bone/50 text-xs mb-4">
+            🔒 Unlock with a membership
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { t: "Cloud sync", d: "Every device, always saved" },
+              { t: "Full workout log", d: "Log sets, track PRs & trends" },
+              { t: "8-week programs", d: "The Hutch Touch, PDF & XLSX" },
+              { t: "Coach check-ins", d: "Weekly feedback from Hutch" },
+            ].map((f) => (
+              <a
+                key={f.t}
+                href="/#pricing"
+                className="group relative border border-bone/15 bg-ink/40 p-4 flex flex-col hover:border-electric transition-colors"
+              >
+                <span className="absolute top-3 right-3 text-bone/30 group-hover:text-electric transition-colors text-sm">
+                  🔒
+                </span>
+                <span className="font-display uppercase tracking-wider text-sm text-bone group-hover:text-electric transition-colors pr-6">
+                  {f.t}
+                </span>
+                <span className="text-xs text-bone/50 mt-1 leading-snug">{f.d}</span>
+                <span className="mt-3 font-display uppercase tracking-wider text-[10px] text-electric">
+                  Members only →
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );

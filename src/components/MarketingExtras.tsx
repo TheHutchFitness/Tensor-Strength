@@ -76,7 +76,7 @@ function Faq() {
 }
 
 export default function MarketingExtras() {
-  const [stats, setStats] = useState<{ athletesCoached: number; totalAccounts: number } | null>(null);
+  const [stats, setStats] = useState<{ athletesCoached: number; totalAccounts: number; workoutsLogged: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/stats")
@@ -89,6 +89,7 @@ export default function MarketingExtras() {
 
   const athletes = stats?.athletesCoached ?? 15;
   const members = stats?.totalAccounts ?? 0;
+  const workouts = stats?.workoutsLogged ?? 0;
 
   return (
     <section className="py-20 md:py-28 border-t border-bone/10">
@@ -97,8 +98,8 @@ export default function MarketingExtras() {
           <Stat end={12} suffix="" label="Years experience" />
           <Stat end={athletes} suffix="" label="Athletes coached" />
           <Stat end={members} suffix="" label="Members" />
-          <Stat end={2000} suffix="+" label="PRs logged" />
-          <Stat end={98} suffix="%" label="Would recommend" />
+          <Stat end={workouts} suffix="" label="Workouts logged" />
+          <Stat end={100} suffix="%" label="Would recommend" />
         </div>
         <Faq />
       </div>
