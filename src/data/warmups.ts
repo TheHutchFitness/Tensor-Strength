@@ -18,6 +18,7 @@
 export type Warmup = {
   name: string;
   category:
+    | "The Hutch Touch"
     | "General Warm-up"
     | "Plyometric Warm-up"
     | "Plyometrics"

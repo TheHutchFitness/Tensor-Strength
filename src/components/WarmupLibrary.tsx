@@ -1,7 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { warmups } from "@/data/warmups";
+import { warmups as baseWarmups, type Warmup } from "@/data/warmups";
+import { hutchTouchSessions } from "@/data/hutchTouchProgram";
+
+// Build the Hutch Touch warm-up routines straight from the program data so they
+// always stay in sync with the program itself (single source of truth).
+const hutchWarmups: Warmup[] = hutchTouchSessions.map((s) => ({
+  name: `Hutch Touch — ${s.title} Warm-up`,
+  category: "The Hutch Touch",
+  purpose: `The full warm-up order for the ${s.title} session in the Hutch Touch rotation. Primary lift: ${s.focus}.`,
+  duration: "8–12 min",
+  steps: s.warmup,
+  coaching:
+    "Move through in order. Keep explosive / plyometric work crisp and mobility work easy — this is preparation, not a workout. Finish with your ramp-up sets into the primary lift before starting the working session.",
+}));
+
+const warmups: Warmup[] = [...hutchWarmups, ...baseWarmups];
 
 const categories = [
   "All",
