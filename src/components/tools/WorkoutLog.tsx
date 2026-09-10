@@ -134,7 +134,15 @@ export default function WorkoutLog() {
   function loadHutchTouchSession() {
     const s = hutchTouchSessions.find((x) => x.id === htSession);
     if (!s) return;
-    const loaded: SessionExercise[] = s.exercises.map((ex) => {
+    // Warm-up movements load first, each as a light single-set entry the client
+    // can tick through (or add sets to) before the working exercises.
+    const warmups: SessionExercise[] = (s.warmup || []).map((w, i) => ({
+      id: uid(),
+      name: `Warm-up ${i + 1}: ${w}`,
+      cue: "Warm-up · prep / light",
+      sets: [{ id: uid(), weight: "", reps: "", rpe: "" }],
+    }));
+    const work: SessionExercise[] = s.exercises.map((ex) => {
       // Pre-fill sets, reps and RPE from the prescription so the client only
       // has to enter the weight they used. Sets like "3-5" -> use the lower
       // bound as a starting number of set rows.
@@ -156,7 +164,7 @@ export default function WorkoutLog() {
         sets,
       };
     });
-    setSession(loaded);
+    setSession([...warmups, ...work]);
     setSessionTitle(`The Hutch Touch — ${s.title}`);
     setActiveSplitId(null);
     setCurrentTemplateId(null);
@@ -676,7 +684,8 @@ export default function WorkoutLog() {
             </p>
             <p className="text-xs text-bone/60 mt-1 leading-relaxed">
               Load any of the 4 rotation sessions from the performance program straight
-              into the tracker — every exercise pre-filled with sets, reps &amp; RPE, ready to log.
+              into the tracker — the full warm-up plus every exercise, pre-filled with
+              sets, reps &amp; RPE, ready to log.
             </p>
           </div>
           <button
@@ -718,7 +727,7 @@ export default function WorkoutLog() {
                 >
                   {s.number}. {s.title}
                   <span className="block text-[10px] tracking-wide opacity-80 normal-case">
-                    Primary: {s.focus} · {s.exercises.length} exercises
+                    Primary: {s.focus} · {s.warmup.length} warm-ups + {s.exercises.length} exercises
                   </span>
                 </button>
               ))}
