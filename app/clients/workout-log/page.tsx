@@ -15,6 +15,7 @@ export default function WorkoutLogPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [isTrainer, setIsTrainer] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState<Tab>("tracker");
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function WorkoutLogPage() {
         return;
       }
       setIsTrainer(!!user.isTrainer);
+      setIsAdmin(user.role === "admin");
       setAuthorized(true);
       setLoading(false);
     })();
@@ -99,7 +101,7 @@ export default function WorkoutLogPage() {
                 <TrainerPrograms />
               </div>
             ) : tab === "hutch" ? (
-              <HutchTouch mode="portal" />
+              <HutchTouch mode="portal" isAdmin={isAdmin} />
             ) : (
               <div className="bg-ink/20 border border-bone/10 p-6 md:p-10">
                 {tab === "tracker" && <WorkoutLog />}

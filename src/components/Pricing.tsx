@@ -34,7 +34,7 @@ const tiers: Tier[] = [
     tagline: "Self-guided. Full portal.",
     features: [
       "Full Client Portal — workout log, calculators, libraries",
-      "The Hutch Touch 8-week program + weekly programs",
+      "The Hutch Touch performance program + weekly programs",
       "Exercise & warmup libraries, PR tracker",
       "Self-directed — build and run your own training",
     ],
@@ -49,7 +49,7 @@ const tiers: Tier[] = [
     features: [
       "Everything in the monthly Membership",
       "Full Client Portal — workout log, calculators, libraries",
-      "The Hutch Touch 8-week program + weekly programs",
+      "The Hutch Touch performance program + weekly programs",
       "One payment a year — cheaper than monthly",
     ],
     packageId: "yearly_90",

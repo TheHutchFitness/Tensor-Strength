@@ -211,8 +211,8 @@ export default function WeeklyPrograms({ mode, single }: { mode: Mode; single?: 
             <p className="mt-6 text-bone/70 leading-relaxed">
               Six complete training programs — free, always here, and available 24/7 with
               no account needed. Pick the one that matches your goal and your setup, download
-              the PDF, and get to work. Members get the 8-week Hutch Touch block, the full
-              workout log, libraries, and check-ins in the portal.
+              the PDF, and get to work. Members get the full Hutch Touch performance
+              rotation, the full workout log, libraries, and check-ins in the portal.
             </p>
           </div>
 
@@ -240,8 +240,8 @@ export default function WeeklyPrograms({ mode, single }: { mode: Mode; single?: 
           </div>
 
           <p className="mt-8 text-xs text-bone/40 leading-relaxed max-w-xl">
-            Want more than a starter week? The full sessions, the 8-week Hutch Touch block,
-            and weekly programming live in the{" "}
+            Want more than a starter week? The full sessions, the Hutch Touch performance
+            rotation, and weekly programming live in the{" "}
             <a href="/clients" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors">
               Client Portal
             </a>

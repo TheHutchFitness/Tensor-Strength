@@ -101,7 +101,7 @@ export default function Tools() {
             {[
               { t: "Cloud sync", d: "Every device, always saved" },
               { t: "Full workout log", d: "Log sets, track PRs & trends" },
-              { t: "8-week programs", d: "The Hutch Touch, PDF & XLSX" },
+              { t: "Full programs", d: "The Hutch Touch performance rotation + PDF" },
               { t: "Coach check-ins", d: "Weekly feedback from Hutch" },
             ].map((f) => (
               <a

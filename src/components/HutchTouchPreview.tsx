@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { hutchTouchSessions, HUTCH_TOUCH_PRIMARIES } from "@/data/hutchTouchProgram";
+import { hutchTouchSessions } from "@/data/hutchTouchProgram";
 
 type Demo = { name: string; desc: string; rows: string[] };
 
@@ -28,10 +28,8 @@ export default function HutchTouchPreview() {
       }).catch(() => {});
     } catch {}
   }
-  // Show Week 1 "Session A" for Push / Pull / Legs as a taste of the full block.
-  const samples = (["Push", "Pull", "Legs"] as const)
-    .map((day) => hutchTouchSessions.find((s) => s.week === 1 && s.day === day && s.variant === "A"))
-    .filter(Boolean) as typeof hutchTouchSessions;
+  // Show the first 3 rotation sessions as a taste of the full program.
+  const samples = hutchTouchSessions.slice(0, 3);
 
   return (
     <section className="mt-16 border-t border-bone/10 pt-14">
@@ -39,12 +37,13 @@ export default function HutchTouchPreview() {
         Free Preview
       </p>
       <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
-        The Hutch Touch — <span className="text-electric">Week 1.</span>
+        The Hutch Touch — <span className="text-electric">the rotation.</span>
       </h2>
       <p className="mt-4 text-bone/70 leading-relaxed max-w-2xl">
-        A look inside Hutch&apos;s real 8‑week, 6‑day Push / Pull / Legs performance
-        block. Here&apos;s Week 1, Session A for each day — the full program (16
-        workouts per category, tracker &amp; PDF) unlocks with a free account.
+        A look inside Hutch&apos;s real 4‑session performance rotation — Upper Push,
+        Lower Pull, Upper Pull, and Legs. Here&apos;s a taste of three sessions; the
+        full program (every exercise, the variation progressions &amp; the tracker)
+        unlocks with a free account.
       </p>
 
       <div className="mt-8 grid md:grid-cols-3 gap-5">
@@ -52,16 +51,16 @@ export default function HutchTouchPreview() {
           const shown = s.exercises.slice(0, 4);
           const hidden = s.exercises.length - shown.length;
           return (
-            <div key={s.day} className="border border-bone/15 bg-ink/30 p-5">
-              <p className="font-display uppercase tracking-wider text-electric text-sm">{s.day}</p>
+            <div key={s.id} className="border border-bone/15 bg-ink/30 p-5">
+              <p className="font-display uppercase tracking-wider text-electric text-sm">{s.title}</p>
               <p className="text-[10px] uppercase tracking-wider text-bone/40 mt-1">
-                Primary: {HUTCH_TOUCH_PRIMARIES[s.day]}
+                Primary: {s.focus}
               </p>
               <ul className="mt-4 grid gap-2">
                 {shown.map((ex, i) => (
                   <li key={i} className="text-sm border-l-2 border-electric/40 pl-3">
                     <span className="font-display uppercase tracking-wider text-bone/90">{ex.exercise}</span>
-                    <span className="text-bone/50"> · {ex.sets}</span>
+                    <span className="text-bone/50"> · {ex.sets} × {ex.reps}</span>
                   </li>
                 ))}
               </ul>
@@ -91,7 +90,7 @@ export default function HutchTouchPreview() {
         >
           Create a free account to unlock →
         </a>
-        <span className="text-sm text-bone/50">Full 8 weeks · A/B sessions · downloadable tracker &amp; PDF</span>
+        <span className="text-sm text-bone/50">All 4 sessions · variation progressions · workout tracker</span>
       </div>
 
       {/* Locked tool suite preview */}

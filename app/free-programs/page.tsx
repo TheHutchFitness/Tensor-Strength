@@ -133,7 +133,7 @@ export default function FreeProgramsPage() {
                 Want more than a week?
               </p>
               <p className="mt-3 text-bone/80 leading-relaxed">
-                The full Client Portal has the 8-week Hutch Touch block, a workout log,
+                The full Client Portal has the Hutch Touch performance rotation, a workout log,
                 calculators, exercise and warmup libraries, and weekly check-ins — plus
                 custom and 1:1 coaching options.
               </p>

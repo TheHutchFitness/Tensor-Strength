@@ -1,183 +1,185 @@
 // ============================================================================
-// THE HUTCH TOUCH — 8-week, 6-day Push / Pull / Legs performance block
+// THE HUTCH TOUCH — 4-session performance rotation
 // ----------------------------------------------------------------------------
-// This is Hutch's real program. Each week the primary strength lift and the
-// power/plyometric movement rotate through a planned progression while the
-// accessory + conditioning work stays consistent. The portal view shows the
-// "heavy" Push / Pull / Legs exposure for each of the 8 weeks.
+// This is Hutch's real training system. It is NOT a fixed weekly calendar — it
+// runs as a four-session rotation (Upper Push, Lower Pull, Upper Pull, Legs).
+// You move to the next session when recovery and movement quality support it.
 //
-// Full PDF + Excel tracker are linked via HUTCH_TOUCH_PDF_URL / _TRACKER_URL.
+// Overload comes primarily from VARIATION PROGRESSION on the main lifts (bench,
+// squat, deadlift) plus honest RPE-based loading — not from just adding weight.
+//
+// There are two editions of the full program (delivered as PDFs):
+//   • Performance Edition — the public / general-audience program (everyone).
+//   • Athlete Edition     — Hutch's personal, advanced, autoregulated version
+//                           (admin/owner only; served via a gated API route).
+//
+// The in-app tables below mirror the Performance Edition so members can load
+// any session straight into the workout tracker.
 // ============================================================================
 
-export type HutchTouchDay = "Push" | "Pull" | "Legs";
+export type HutchTouchSessionId = "push" | "lower-pull" | "upper-pull" | "legs";
 
 export type HutchTouchExercise = {
   order: number;
   exercise: string;
   sets: string;
-  load: string;
+  reps: string;
+  rpe: string;
   notes: string;
 };
 
 export type HutchTouchSession = {
-  week: number;
-  day: HutchTouchDay;
-  variant: "A" | "B";
-  label: string;
+  id: HutchTouchSessionId;
+  number: number;
+  title: string;
+  focus: string; // the primary lift / theme of the session
+  warmup: string[];
   exercises: HutchTouchExercise[];
 };
 
-export const HUTCH_TOUCH_PRIMARIES: Record<HutchTouchDay, string> = {
-  Push: "Bench / Larson Press",
-  Pull: "Sumo Deadlift",
-  Legs: "Front / Back Squat",
+// Static program PDFs.
+// Performance Edition lives in /public (open to everyone).
+// Athlete Edition is served through a gated API route (admin only) so it stays
+// private — it is NOT placed in /public.
+export const HUTCH_TOUCH_PERFORMANCE_PDF_URL = "/programs/hutch-touch-performance-edition.pdf";
+export const HUTCH_TOUCH_ATHLETE_PDF_URL = "/api/hutch-touch/athlete-pdf";
+
+// Short focus label per session (used in headers / pickers).
+export const HUTCH_TOUCH_FOCUS: Record<HutchTouchSessionId, string> = {
+  push: "Bench variation",
+  "lower-pull": "Sumo deadlift",
+  "upper-pull": "Weighted chin-up",
+  legs: "Squat variation",
 };
 
-export const HUTCH_TOUCH_BASELINES: Record<string, string> = {
-  "Larson Press": "Hutch's reference: worked to 255 lb for 5×3. Use your own current 3-rep strength.",
-  "Sumo Deadlift": "Hutch's reference: worked to 500 lb for 2×3. Wedge in, spread the floor, finish tall.",
-  "HBT Front Squat": "Hutch's reference: worked to 330 lb for 3×3. High-bar tempo, full depth, upright.",
-};
+type Slot = { exercise: string; sets: string; reps: string; rpe: string; notes: string };
 
-export const HUTCH_TOUCH_PDF_URL = "/api/hutch-touch/pdf";
-export const HUTCH_TOUCH_TRACKER_URL = "/api/hutch-touch/tracker";
-
-type Slot = { exercise: string; sets: string; load: string; notes: string };
-
-// --- PUSH -------------------------------------------------------------------
-const PUSH_PRIMARY_BY_WEEK: string[] = [
-  "Larson Press", "Larson Press", "HBT Bench", "HBT Bench",
-  "Tempo Bench", "Close-Grip Bench", "Regular Bench (Test)", "Regular Bench (Test)",
-];
-// Upper-body plyometric / ballistic power that rotates + progresses each week.
-const PUSH_POWER_BY_WEEK: string[] = [
-  "Kneeling Plyo Push-Up", "Plyo Push-Up (Clap)", "Med-Ball Chest Pass", "Med-Ball Chest Pass",
-  "Depth Push-Up", "Depth Push-Up", "Max-Intent Med-Ball Throw", "Max-Intent Med-Ball Throw",
-];
-const PUSH_FIXED_PRE: Slot[] = [
-  { exercise: "Ab Roller", sets: "2-3 × 8-15", load: "Controlled", notes: "Core / bracing" },
-  { exercise: "Med-Ball Slam", sets: "3 × 3-5", load: "Max intent", notes: "Full reset between reps" },
-  { exercise: "Med-Ball Overhead Throw", sets: "3 × 3-5", load: "Max intent", notes: "Explosive hip + shoulder drive" },
-  { exercise: "Stability + Scap Retractions", sets: "2 rounds", load: "Easy", notes: "Shoulder prep" },
-  { exercise: "T-Bar Power Movement", sets: "2-3 × 3-5", load: "Explosive", notes: "Stop if speed falls" },
-  { exercise: "Shoulder / Rotator Mobility", sets: "3-5 min", load: "Easy", notes: "Prepare ROM" },
-];
-const PUSH_FIXED_POST: Slot[] = [
-  { exercise: "Secondary Overhead Press", sets: "3 × 6-12", load: "RPE 7-8", notes: "DB / landmine / push press progression" },
-  { exercise: "Weighted Dips", sets: "3 × 6-12", load: "RPE 8-9", notes: "No grinding on technique day" },
-  { exercise: "Overhead Triceps", sets: "2 × 10-15", load: "RPE 8-9", notes: "" },
-  { exercise: "Cable Pressdown", sets: "1-2 × 15-30", load: "RPE 8-9", notes: "" },
-  { exercise: "Cable Fly", sets: "1-2 × 15-30", load: "RPE 8-9", notes: "" },
-  { exercise: "Lateral Raise", sets: "2 × 12-20", load: "RPE 8-9", notes: "" },
-  { exercise: "Face Pull / Reverse Fly", sets: "2 × 15-25", load: "RPE 6-8", notes: "Scap balance" },
-  { exercise: "Treadmill / Bunny Hops", sets: "10-15 min", load: "Easy", notes: "Recovery / GPP" },
-];
-
-// --- PULL -------------------------------------------------------------------
-// Items 6 & 7 (main pull + variation) change per week.
-const PULL_MAIN_BY_WEEK: Slot[][] = [
-  [{ exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Braced, vertical shin" }, { exercise: "BOSU RDL", sets: "2-3 sets", load: "RPE 7.5-9", notes: "Heavy day progresses load" }],
-  [{ exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Braced, vertical shin" }, { exercise: "BOSU RDL", sets: "2-3 sets", load: "RPE 7.5-9", notes: "Heavy day progresses load" }],
-  [{ exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Braced, vertical shin" }, { exercise: "Regular RDL", sets: "2-3 sets", load: "RPE 7.5-9", notes: "Hinge, flat back" }],
-  [{ exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Braced, vertical shin" }, { exercise: "Regular RDL", sets: "2-3 sets", load: "RPE 7.5-9", notes: "Hinge, flat back" }],
-  [{ exercise: "Power Clean", sets: "4-5 × 2-3", load: "Fast", notes: "Power cleans precede sumo" }, { exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Heavy day progresses load" }],
-  [{ exercise: "Power Clean", sets: "4-5 × 2-3", load: "Fast", notes: "Power cleans precede sumo" }, { exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Heavy day progresses load" }],
-  [{ exercise: "Sumo Deadlift", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Braced, vertical shin" }, { exercise: "Rack Pull", sets: "2-3 sets", load: "RPE 7.5-9", notes: "Overload top-end" }],
-  [{ exercise: "Sumo Deadlift (Test)", sets: "2-3 × 2-3", load: "RPE 7.5-9", notes: "Technical-max single + optional AMRAP" }, { exercise: "Minimal / None", sets: "—", load: "—", notes: "Cut variation volume for testing" }],
-];
-const PULL_FIXED_PRE: Slot[] = [
-  { exercise: "Seated Calf Raise", sets: "2 × 12-20", load: "Easy", notes: "" },
-  { exercise: "Tib Raise", sets: "2 × 15-25", load: "Easy", notes: "" },
-  { exercise: "Loaded Hyperextension", sets: "1 AMRAP / capped", load: "Hard", notes: "Don't pre-fatigue heavy sumo late block" },
-  { exercise: "Hip Adduction / Abduction", sets: "1-2 × 12-20", load: "Easy", notes: "" },
-  { exercise: "Explosive Step-Up", sets: "3 × 3 / side", load: "Max intent", notes: "Full reset" },
-];
-// Ballistic hinge / pulling power that rotates + progresses each week.
-const PULL_POWER_BY_WEEK: string[] = [
-  "Kettlebell Swing", "Kettlebell Swing", "Broad Jump", "Broad Jump",
-  "Hang High Pull", "Hang High Pull", "Max-Intent Broad Jump", "Max-Intent Broad Jump",
-];
-const PULL_FIXED_POST: Slot[] = [
-  { exercise: "Scapular Retractions", sets: "2 × 15-20", load: "RPE 6-8", notes: "" },
-  { exercise: "Shrugs", sets: "2 × 15-20", load: "RPE 8-9", notes: "" },
-  { exercise: "Lat Pulldown", sets: "1 AMRAP / 2 hard", load: "RPE 9-10", notes: "" },
-  { exercise: "Upper-Back Row", sets: "1 AMRAP / 2 hard", load: "RPE 9-10", notes: "" },
-  { exercise: "Biceps", sets: "Rack run", load: "Hard", notes: "" },
-  { exercise: "Lat Pullover", sets: "1-2 × 12-20", load: "Easy", notes: "" },
-  { exercise: "Grip Training", sets: "2-4 sets", load: "Moderate", notes: "Cooldown" },
-];
-
-// --- LEGS -------------------------------------------------------------------
-const LEGS_POWER_BY_WEEK: string[] = [
-  "Box Jump", "Box Jump", "Depth Drop → Box Jump", "Depth Drop → Box Jump",
-  "Lateral Bound → Box Jump", "Lateral Bound → Box Jump", "Max-Intent Box Jump", "Max-Intent Box Jump",
-];
-// Second lower-body plyometric that complements the primary jump each week.
-const LEGS_POWER2_BY_WEEK: string[] = [
-  "Pogo Hops", "Pogo Hops", "Hurdle Hops", "Hurdle Hops",
-  "Tuck Jumps", "Tuck Jumps", "Single-Leg Bound", "Single-Leg Bound",
-];
-const LEGS_PRIMARY_BY_WEEK: string[] = [
-  "HBT Front Squat", "Tempo Front Squat", "Front Squat", "HBT Back Squat",
-  "Tempo Back Squat", "Back Squat", "Heavy Back Squat", "Back Squat (Test)",
-];
-const LEGS_FIXED_PRE: Slot[] = [
-  { exercise: "Deep Calf Stretch", sets: "2-3 min", load: "Easy", notes: "" },
-  { exercise: "Abductors + Adductors", sets: "1-2 × 12-20", load: "Easy", notes: "" },
-  { exercise: "Lateral-Plane Work", sets: "2-3 sets", load: "Crisp", notes: "" },
-  { exercise: "Plank", sets: "2-3 × 30-60 sec", load: "Controlled", notes: "" },
-  { exercise: "Crunch Machine", sets: "2 × 10-20", load: "Moderate", notes: "" },
-];
-const LEGS_FIXED_POST: Slot[] = [
-  { exercise: "Hack Squat", sets: "1 hard / AMRAP", load: "RPE 9-10", notes: "Taper heavy-day AMRAP late block" },
-  { exercise: "Hack Sissy Squat", sets: "2 × 8-12", load: "RPE 8-9", notes: "" },
-  { exercise: "Hamstring Curl", sets: "2 AMRAP", load: "Hard", notes: "" },
-  { exercise: "Leg Extension", sets: "2 AMRAP", load: "Hard", notes: "" },
-  { exercise: "Calf Raise", sets: "1 AMRAP", load: "Hard", notes: "" },
-  { exercise: "Jump Lunges", sets: "2-3 short sets", load: "Crisp", notes: "Reduce late block" },
-  { exercise: "StairMaster", sets: "10-15 min", load: "Easy-moderate", notes: "GPP" },
-];
-
-function withOrder(slots: Slot[], start: number): HutchTouchExercise[] {
-  return slots.map((s, i) => ({ order: start + i, ...s }));
+function withOrder(slots: Slot[]): HutchTouchExercise[] {
+  return slots.map((s, i) => ({ order: i + 1, ...s }));
 }
 
-function buildPush(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
-  const slots: Slot[] = [
-    ...PUSH_FIXED_PRE,
-    { exercise: PUSH_POWER_BY_WEEK[week - 1], sets: "3 × 3-5", load: "Max intent", notes: "Upper-body plyometric — full reset between reps" },
-    { exercise: PUSH_PRIMARY_BY_WEEK[week - 1], sets: "3-5 × 2-3", load: "RPE 7.5-9", notes: "Strength / performance — primary lift" },
-    ...PUSH_FIXED_POST,
-  ];
-  return { week, day: "Push", exercises: withOrder(slots, 1) };
-}
+// --- SESSION 01 — UPPER BODY PUSH ------------------------------------------
+const PUSH_WARMUP = [
+  "Ab wheel",
+  "Core / stability drill of choice",
+  "Light med-ball slam",
+  "Scapular retraction drill",
+  "Rotational landmine hand-to-hand transfer",
+  "Explosive OR stability push-up",
+  "Rotator cuff external rotation",
+  "Band shoulder mobility",
+  "Bench ramp sets",
+];
+const PUSH_WORK: Slot[] = [
+  { exercise: "Bench variation", sets: "3-5", reps: "3-5", rpe: "8", notes: "Use current progression phase. Recalibrate load every variation." },
+  { exercise: "DB or barbell shoulder press", sets: "3-4", reps: "12-20", rpe: "8-9", notes: "High-volume press; control the bottom position." },
+  { exercise: "Overhead triceps extension OR skull crusher", sets: "3", reps: "8-15", rpe: "8-9", notes: "Long-head triceps emphasis." },
+  { exercise: "Weighted dips", sets: "3", reps: "6-10", rpe: "8-9", notes: "If unavailable: bodyweight dip AMRAP with clean reps." },
+  { exercise: "Cable triceps pushdown", sets: "3", reps: "12-20", rpe: "8-9", notes: "Full lockout; no torso swing." },
+  { exercise: "Cable fly", sets: "3", reps: "12-20", rpe: "8-9", notes: "Controlled stretch and squeeze." },
+  { exercise: "Lateral raise", sets: "3", reps: "15-25", rpe: "8-9", notes: "High-quality delt volume." },
+  { exercise: "Cardio of choice", sets: "1", reps: "10-20 min", rpe: "5-7", notes: "Finish with conditioning; do not turn every finish into a max test." },
+];
 
-function buildPull(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
-  const slots: Slot[] = [
-    ...PULL_FIXED_PRE,
-    { exercise: PULL_POWER_BY_WEEK[week - 1], sets: "3 × 3-5", load: "Max intent", notes: "Ballistic power — full reset between reps" },
-    ...PULL_MAIN_BY_WEEK[week - 1],
-    ...PULL_FIXED_POST,
-  ];
-  return { week, day: "Pull", exercises: withOrder(slots, 1) };
-}
+// --- SESSION 02 — LOWER BODY PULL ------------------------------------------
+const LOWER_PULL_WARMUP = [
+  "Posterior-chain plyometric",
+  "Explosive step-up",
+  "Abductor machine",
+  "Adductor machine",
+  "Lateral-plane drill",
+  "Core stability",
+  "Hyperextension",
+  "Sumo ramp sets",
+];
+const LOWER_PULL_WORK: Slot[] = [
+  { exercise: "Sumo deadlift", sets: "3-5", reps: "3-5", rpe: "7-7.5", notes: "Technical anchor. Keep fatigue deliberately low. Sumo rack pull may occasionally substitute." },
+  { exercise: "Secondary deadlift / hinge", sets: "3-4", reps: "see rotation", rpe: "8-9", notes: "Harder volume slot. Performance edition: BOSU RDL uses dumbbells only." },
+  { exercise: "Hamstring curl", sets: "4", reps: "8-15", rpe: "8-9", notes: "Full shortening and controlled eccentric." },
+  { exercise: "Calf raise", sets: "4", reps: "8-15", rpe: "8-9", notes: "Pause in stretch and top position." },
+  { exercise: "Tibialis raise", sets: "3", reps: "15-25", rpe: "8-9", notes: "Controlled dorsiflexion." },
+  { exercise: "Cardio of choice", sets: "1", reps: "10-20 min", rpe: "5-7", notes: "Keep it sustainable after posterior-chain work." },
+];
 
-function buildLegs(week: number): { week: number; day: HutchTouchDay; exercises: HutchTouchExercise[] } {
-  const slots: Slot[] = [
-    ...LEGS_FIXED_PRE,
-    { exercise: LEGS_POWER_BY_WEEK[week - 1], sets: "3 × 2-3", load: "Max intent", notes: "Full reset between reps" },
-    { exercise: LEGS_POWER2_BY_WEEK[week - 1], sets: "3 × 3-5", load: "Max intent", notes: "Second plyometric — crisp, quiet landings" },
-    { exercise: LEGS_PRIMARY_BY_WEEK[week - 1], sets: "3-4 × 2-3", load: "RPE 7.5-9", notes: "Strength / performance — primary lift" },
-    ...LEGS_FIXED_POST,
-  ];
-  return { week, day: "Legs", exercises: withOrder(slots, 1) };
-}
+// --- SESSION 03 — UPPER BODY PULL ------------------------------------------
+const UPPER_PULL_WARMUP = [
+  "Light med-ball slam / upper-body explosive drill",
+  "Pallof press",
+  "Dead hang",
+  "Scap pull-up",
+  "Thoracic rotation",
+  "Band pull-apart / face-pull pattern",
+];
+const UPPER_PULL_WORK: Slot[] = [
+  { exercise: "Kelso shrug", sets: "3", reps: "10-15", rpe: "7-8", notes: "Prime upper-back retraction without arm dominance." },
+  { exercise: "Weighted chin-up", sets: "4-5", reps: "4-8", rpe: "8-9", notes: "Primary vertical pull. Add load only with full range." },
+  { exercise: "Single-arm dumbbell row", sets: "4", reps: "8-12", rpe: "8-9", notes: "Hard horizontal pull; control rotation." },
+  { exercise: "Upper-back row of choice", sets: "3-4", reps: "10-15", rpe: "8-9", notes: "Bias upper back / rear shoulder." },
+  { exercise: "Lat accessory of choice", sets: "3-4", reps: "10-15", rpe: "8-9", notes: "Pulldown, pullover, or similar lat bias." },
+  { exercise: "Rear-delt work", sets: "3-4", reps: "15-25", rpe: "8-9", notes: "High-quality volume." },
+  { exercise: "Forearm work", sets: "3", reps: "12-20", rpe: "8-9", notes: "Grip / wrist flexion-extension as needed." },
+  { exercise: "Biceps work", sets: "3-4", reps: "8-15", rpe: "8-9", notes: "Choose curl variation based on elbow comfort." },
+  { exercise: "Cardio of choice", sets: "1", reps: "10-20 min", rpe: "5-7", notes: "Short conditioning finish." },
+];
 
-export const hutchTouchSessions: HutchTouchSession[] = [];
-for (let w = 1; w <= 8; w++) {
-  for (const base of [buildPush(w), buildPull(w), buildLegs(w)]) {
-    // Each week runs two exposures per lift (6-day PPL) => 16 workouts per category over 8 weeks.
-    hutchTouchSessions.push({ ...base, variant: "A", label: "Session A — Heavy / Strength" });
-    hutchTouchSessions.push({ ...base, variant: "B", label: "Session B — Volume / Technique" });
-  }
-}
+// --- SESSION 04 — LEGS / LOWER BODY PUSH -----------------------------------
+const LEGS_WARMUP = [
+  "Box jump",
+  "Jump lunge",
+  "Core / stability drill",
+  "Lateral-plane drill",
+  "Deep calf stretch",
+  "TKE (terminal knee extension)",
+  "Squat patterning",
+  "Squat ramp sets",
+];
+const LEGS_WORK: Slot[] = [
+  { exercise: "Squat variation", sets: "3-5", reps: "3-5", rpe: "8-9", notes: "Primary heavy lower-body lift. Recalibrate load every phase." },
+  { exercise: "Good morning OR hip-extension movement", sets: "3", reps: "6-10", rpe: "8", notes: "Posterior-chain strength without stealing from squat quality." },
+  { exercise: "Walking lunge", sets: "3", reps: "8-12/leg", rpe: "8-9", notes: "Long, controlled steps." },
+  { exercise: "Sissy squat — Smith preferred", sets: "3", reps: "10-20", rpe: "8-9", notes: "Quad bias; use pain-free range." },
+  { exercise: "Leg extension", sets: "3", reps: "12-20", rpe: "9", notes: "Hard quad finish; controlled eccentric." },
+  { exercise: "Calf raise", sets: "4", reps: "8-15", rpe: "8-9", notes: "Loaded stretch + full plantarflexion." },
+  { exercise: "Tibialis raise", sets: "3", reps: "15-25", rpe: "8-9", notes: "Anterior lower-leg volume." },
+  { exercise: "Hamstring curl", sets: "3", reps: "10-15", rpe: "8-9", notes: "Balance knee-flexion volume." },
+  { exercise: "Abductor work", sets: "3", reps: "15-25", rpe: "8-9", notes: "Finish hips with controlled reps." },
+  { exercise: "Cardio of choice", sets: "1", reps: "10-20 min", rpe: "5-7", notes: "Choose modality based on recovery." },
+];
+
+export const hutchTouchSessions: HutchTouchSession[] = [
+  { id: "push", number: 1, title: "Upper Body Push", focus: HUTCH_TOUCH_FOCUS.push, warmup: PUSH_WARMUP, exercises: withOrder(PUSH_WORK) },
+  { id: "lower-pull", number: 2, title: "Lower Body Pull", focus: HUTCH_TOUCH_FOCUS["lower-pull"], warmup: LOWER_PULL_WARMUP, exercises: withOrder(LOWER_PULL_WORK) },
+  { id: "upper-pull", number: 3, title: "Upper Body Pull", focus: HUTCH_TOUCH_FOCUS["upper-pull"], warmup: UPPER_PULL_WARMUP, exercises: withOrder(UPPER_PULL_WORK) },
+  { id: "legs", number: 4, title: "Legs / Lower Body Push", focus: HUTCH_TOUCH_FOCUS.legs, warmup: LEGS_WARMUP, exercises: withOrder(LEGS_WORK) },
+];
+
+// --- MAIN-LIFT VARIATION PROGRESSIONS --------------------------------------
+export type ProgressionStep = { variation: string; purpose: string; detail: string };
+
+export const HUTCH_TOUCH_BENCH_PROGRESSION: ProgressionStep[] = [
+  { variation: "Larsen press", purpose: "Control + upper-body tension", detail: "No leg drive; load by RPE 8" },
+  { variation: "Tempo bench press", purpose: "Eccentric control + position", detail: "Use prescribed tempo; reset load" },
+  { variation: "Spoto press", purpose: "Pause control just off chest", detail: "Own the hover; no sink" },
+  { variation: "HBT bench press", purpose: "Stability + force organization", detail: "Hanging Band Technique; conservative setup" },
+  { variation: "Close-grip bench press", purpose: "Triceps strength + bar path", detail: "Narrow only as far as wrist/elbow mechanics allow" },
+  { variation: "Floor press", purpose: "Mid-range strength + control", detail: "Dead stop each rep" },
+  { variation: "Pin press", purpose: "Starting strength / overload", detail: "Set pins to target weak range" },
+  { variation: "Banded bench press", purpose: "Power + accelerating resistance", detail: "Bands add resistance toward lockout" },
+  { variation: "Regular bench press", purpose: "Expression / specificity", detail: "Bring the qualities back to the full lift" },
+];
+
+export const HUTCH_TOUCH_SQUAT_ROTATION: ProgressionStep[] = [
+  { variation: "Front HBT squat", purpose: "Front-loaded stability + bracing", detail: "3-5 × 3-5 @ RPE 8-9" },
+  { variation: "Zombie squat", purpose: "Upper-back position + torso control", detail: "3-5 × 3-5 @ RPE 8-9" },
+  { variation: "Box SSB squat", purpose: "Positional strength + controlled reversal", detail: "3-5 × 3-5 @ RPE 8-9" },
+  { variation: "Tempo squat", purpose: "Control through full range", detail: "3-5 × 3-5 @ RPE 8-9" },
+  { variation: "Back HBT squat", purpose: "Back-squat pattern under instability", detail: "3-5 × 3-5 @ RPE 8-9" },
+  { variation: "Regular back squat", purpose: "Expression / primary squat", detail: "3-5 × 3-5 @ RPE 8-9" },
+];
+
+export const HUTCH_TOUCH_DEADLIFT_ROTATION: ProgressionStep[] = [
+  { variation: "Barbell RDL", purpose: "Loaded hinge strength + hamstrings", detail: "3-4 × 6-10 @ RPE 8-9" },
+  { variation: "Dumbbell BOSU RDL", purpose: "Stability + hinge control; never chase failure", detail: "3 × 8-12 @ RPE 8 (public version)" },
+  { variation: "Rack pull", purpose: "Overload / lockout strength", detail: "4 × 4-8 @ RPE 8-9" },
+  { variation: "Banded conventional deadlift", purpose: "Power + force through lockout", detail: "4 × 3-6 @ RPE 8" },
+];

@@ -19,7 +19,7 @@ const TILES = [
   { href: "/clients", label: "Client Portal", desc: "Your coaching hub", Icon: LayoutDashboard },
 ];
 
-const UNLOCKS = ["Client Portal", "Workout log", "Cloud sync", "8-week programs", "Coach check-ins"];
+const UNLOCKS = ["Client Portal", "Workout log", "Cloud sync", "Hutch Touch program", "Coach check-ins"];
 
 export default function MemberHub() {
   const [me, setMe] = useState<Me>(null);

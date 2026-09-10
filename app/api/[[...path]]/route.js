@@ -5,10 +5,8 @@ import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
 import { readFile, writeFile, mkdir } from 'fs/promises'
-import path from 'path'
+import nodePath from 'path'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { buildHutchTouchPdf } from '../../../src/lib/hutchTouchPdf'
-import { buildHutchTouchXlsx } from '../../../src/lib/hutchTouchXlsx'
 
 // ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
 // When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
@@ -2283,50 +2281,28 @@ async function handleRoute(request, { params }) {
     }
 
 
-    // ---------------- HUTCH TOUCH FILES (gated — portal access only) ----------------
-    if ((route === '/hutch-touch/pdf' || route === '/hutch-touch/tracker') && method === 'GET') {
+    // ---------------- HUTCH TOUCH — ATHLETE EDITION (admin/owner only) ----------------
+    // The Performance Edition PDF is a public static file (/programs/...). The
+    // Athlete Edition is Hutch's personal program and is served only to the
+    // admin account from a non-public directory so it can't be linked publicly.
+    if (route === '/hutch-touch/athlete-pdf' && method === 'GET') {
       const user = await getCurrentUser(request, db)
-      if (!user || !user.portalAccess) {
+      if (!user || user.role !== 'admin') {
         return handleCORS(NextResponse.json(
-          { error: 'The Hutch Touch is for clients and members only. Get portal access to download it.' },
+          { error: 'The Athlete Edition is private to Hutch.' },
           { status: 403 }
         ))
       }
-      const HUTCH_FILES = {
-        pdf: {
-          url: process.env.HUTCH_TOUCH_PDF_URL || 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/uozo0w84_The_Hutch_6_Day_PPL_Performance_Block.pdf',
-          type: 'application/pdf',
-          name: 'The-Hutch-Touch-8-Week-Program.pdf',
-        },
-        tracker: {
-          url: process.env.HUTCH_TOUCH_TRACKER_URL || 'https://customer-assets-39nsmqrw.emergentagent.net/job_trainer-profiles-2/artifacts/6rp8lcad_The_Hutch_6_Day_PPL_Performance_Tracker.xlsx',
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          name: 'The-Hutch-Touch-Tracker.xlsx',
-        },
-      }
-      const f = route.endsWith('/pdf') ? HUTCH_FILES.pdf : HUTCH_FILES.tracker
       try {
-        // The PDF is generated on the fly from the live program data so it always
-        // matches the in-app program (including the plyometric progressions).
-        if (route.endsWith('/pdf')) {
-          const bytes = await buildHutchTouchPdf({ clientName: user.username, startDate: new Date() })
-          const headers = new Headers()
-          headers.set('Content-Type', 'application/pdf')
-          headers.set('Content-Disposition', `inline; filename="${f.name}"`)
-          headers.set('Cache-Control', 'private, no-store')
-          return new NextResponse(Buffer.from(bytes), { status: 200, headers })
-        }
-        // The .xlsx tracker is also generated on the fly from the live program.
-        {
-          const buf = await buildHutchTouchXlsx({ clientName: user.username })
-          const headers = new Headers()
-          headers.set('Content-Type', f.type)
-          headers.set('Content-Disposition', `attachment; filename="${f.name}"`)
-          headers.set('Cache-Control', 'private, no-store')
-          return new NextResponse(buf, { status: 200, headers })
-        }
+        const filePath = nodePath.join(process.cwd(), 'private-assets', 'hutch-touch-athlete-edition.pdf')
+        const bytes = await readFile(filePath)
+        const headers = new Headers()
+        headers.set('Content-Type', 'application/pdf')
+        headers.set('Content-Disposition', 'inline; filename="Tensor-Strength-Hutch-Touch-Athlete-Edition.pdf"')
+        headers.set('Cache-Control', 'private, no-store')
+        return new NextResponse(Buffer.from(bytes), { status: 200, headers })
       } catch (e) {
-        console.error('Hutch Touch file error:', e)
+        console.error('Athlete Edition file error:', e)
         return handleCORS(NextResponse.json({ error: 'File temporarily unavailable' }, { status: 502 }))
       }
     }

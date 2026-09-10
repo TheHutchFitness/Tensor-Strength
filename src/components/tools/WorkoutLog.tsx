@@ -13,8 +13,7 @@ import {
 } from "./exerciseData";
 import {
   hutchTouchSessions,
-  HUTCH_TOUCH_PRIMARIES,
-  type HutchTouchDay,
+  type HutchTouchSessionId,
 } from "@/data/hutchTouchProgram";
 
 type Set = { id: string; weight: string; reps: string; rpe: string };
@@ -128,41 +127,37 @@ export default function WorkoutLog() {
     return () => clearInterval(id);
   }, [restRunning]);
 
-  // The Hutch Touch loader state
+  // The Hutch Touch loader state — the program runs as a 4-session rotation.
   const [hutchOpen, setHutchOpen] = useState(false);
-  const [htWeek, setHtWeek] = useState(1);
-  const [htDay, setHtDay] = useState<HutchTouchDay>("Push");
-  const [htVariant, setHtVariant] = useState<"A" | "B">("A");
+  const [htSession, setHtSession] = useState<HutchTouchSessionId>("push");
 
   function loadHutchTouchSession() {
-    const s = hutchTouchSessions.find(
-      (x) => x.week === htWeek && x.day === htDay && x.variant === htVariant
-    );
+    const s = hutchTouchSessions.find((x) => x.id === htSession);
     if (!s) return;
     const loaded: SessionExercise[] = s.exercises.map((ex) => {
       // Pre-fill sets, reps and RPE from the prescription so the client only
-      // has to enter the weight they used.
-      const setsStr = ex.sets || "";
-      const countMatch = setsStr.match(/(\d+)/);
+      // has to enter the weight they used. Sets like "3-5" -> use the lower
+      // bound as a starting number of set rows.
+      const countMatch = (ex.sets || "").match(/(\d+)/);
       const count = Math.max(1, Math.min(6, countMatch ? parseInt(countMatch[1], 10) : 1));
-      const reps = setsStr.includes("×") ? setsStr.split("×")[1].trim() : "";
-      const rpeMatch = (ex.load || "").match(/RPE\s*([\d.]+(?:\s*-\s*[\d.]+)?)/i);
-      const rpe = rpeMatch ? rpeMatch[1].replace(/\s/g, "") : "";
       const sets: Set[] = Array.from({ length: count }, () => ({
         id: uid(),
         weight: "",
-        reps,
-        rpe,
+        reps: ex.reps || "",
+        rpe: ex.rpe || "",
       }));
+      const cue = [`${ex.sets} × ${ex.reps}`, ex.rpe && `RPE ${ex.rpe}`, ex.notes]
+        .filter(Boolean)
+        .join(" · ");
       return {
         id: uid(),
         name: ex.exercise,
-        cue: `${ex.sets} · ${ex.load} · ${ex.notes}`,
+        cue,
         sets,
       };
     });
     setSession(loaded);
-    setSessionTitle(`The Hutch Touch — W${htWeek} ${htDay} (Session ${htVariant === "A" ? "1" : "2"})`);
+    setSessionTitle(`The Hutch Touch — ${s.title}`);
     setActiveSplitId(null);
     setCurrentTemplateId(null);
     setHutchOpen(false);
@@ -680,8 +675,8 @@ export default function WorkoutLog() {
               The Hutch Touch
             </p>
             <p className="text-xs text-bone/60 mt-1 leading-relaxed">
-              Load any session from the 8-week PPL performance block straight into the
-              tracker — every exercise pre-filled, ready to log.
+              Load any of the 4 rotation sessions from the performance program straight
+              into the tracker — every exercise pre-filled with sets, reps &amp; RPE, ready to log.
             </p>
           </div>
           <button
@@ -707,83 +702,45 @@ export default function WorkoutLog() {
             </div>
 
             <p className="font-display uppercase tracking-wider text-xs text-bone/70 mb-2">
-              Week
+              Pick a session
             </p>
-            <div className="grid grid-cols-8 gap-1.5 mb-5">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((w) => (
+            <div className="grid gap-2 mb-5">
+              {hutchTouchSessions.map((s) => (
                 <button
-                  key={w}
-                  onClick={() => setHtWeek(w)}
+                  key={s.id}
+                  onClick={() => setHtSession(s.id)}
                   className={
-                    "h-9 font-display text-sm transition-colors " +
-                    (htWeek === w
+                    "px-4 py-3 font-display uppercase tracking-wider text-sm transition-colors text-left " +
+                    (htSession === s.id
                       ? "bg-electric text-ink"
                       : "border border-bone/20 text-bone/60 hover:border-electric hover:text-electric")
                   }
                 >
-                  {w}
+                  {s.number}. {s.title}
+                  <span className="block text-[10px] tracking-wide opacity-80 normal-case">
+                    Primary: {s.focus} · {s.exercises.length} exercises
+                  </span>
                 </button>
               ))}
             </div>
 
-            <p className="font-display uppercase tracking-wider text-xs text-bone/70 mb-2">
-              Day
-            </p>
-            <div className="grid grid-cols-3 gap-2 mb-5">
-              {(["Push", "Pull", "Legs"] as HutchTouchDay[]).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setHtDay(d)}
-                  className={
-                    "px-4 py-2.5 font-display uppercase tracking-wider text-sm transition-colors " +
-                    (htDay === d
-                      ? "bg-electric text-ink"
-                      : "border border-bone/20 text-bone/60 hover:border-electric hover:text-electric")
-                  }
-                >
-                  {d}
-                </button>
-              ))}
+            <div className="text-xs text-bone/50 mb-4 leading-relaxed border-l-2 border-electric/40 pl-3">
+              Runs as a continuous rotation — there&apos;s no fixed weekday. When you finish
+              this session, move to the next one once you&apos;re recovered.
             </div>
 
-            <p className="font-display uppercase tracking-wider text-xs text-bone/70 mb-2">
-              Session
-            </p>
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              {([
-                { v: "A" as const, n: "1", label: "Heavy / Strength" },
-                { v: "B" as const, n: "2", label: "Volume / Technique" },
-              ]).map((opt) => (
-                <button
-                  key={opt.v}
-                  onClick={() => setHtVariant(opt.v)}
-                  className={
-                    "px-4 py-2.5 font-display uppercase tracking-wider text-sm transition-colors text-left " +
-                    (htVariant === opt.v
-                      ? "bg-electric text-ink"
-                      : "border border-bone/20 text-bone/60 hover:border-electric hover:text-electric")
-                  }
-                >
-                  Session {opt.n}
-                  <span className="block text-[10px] tracking-wide opacity-80">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="text-xs text-bone/50 mb-5 leading-relaxed border-l-2 border-electric/40 pl-3">
-              Primary lift: <span className="text-electric">{HUTCH_TOUCH_PRIMARIES[htDay]}</span>
-              {" · "}
-              {(() => {
-                const s = hutchTouchSessions.find((x) => x.week === htWeek && x.day === htDay && x.variant === htVariant);
-                return s ? `${s.exercises.length} exercises · sets, reps & RPE pre-filled` : "";
-              })()}
+            <div className="text-[11px] text-bone/50 mb-5 leading-relaxed border border-bone/15 bg-ink/40 p-3">
+              <span className="font-display uppercase tracking-wider text-electric">Recovery check:</span>{" "}
+              If the target muscles are still significantly sore, your performance is clearly
+              down, or you can&apos;t hold technique — reduce the load or move on to the next
+              session instead of grinding.
             </div>
 
             <button
               onClick={loadHutchTouchSession}
               className="w-full bg-electric text-ink py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
             >
-              Load W{htWeek} {htDay} · Session {htVariant === "A" ? "1" : "2"} →
+              Load {hutchTouchSessions.find((x) => x.id === htSession)?.title} →
             </button>
           </div>
         </div>
