@@ -230,12 +230,21 @@ export default function Navbar() {
             </a>
           )}
           {me ? (
-            <button
-              onClick={logout}
-              className="block w-full text-left py-3 font-display uppercase tracking-wider text-sm text-bone/70 hover:text-electric transition-colors"
-            >
-              Logout ({me.username})
-            </button>
+            <>
+              <a
+                href="/account"
+                onClick={() => setOpen(false)}
+                className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-bone/5"
+              >
+                My Account →
+              </a>
+              <button
+                onClick={logout}
+                className="block w-full text-left py-3 font-display uppercase tracking-wider text-sm text-bone/70 hover:text-electric transition-colors"
+              >
+                Logout ({me.username})
+              </button>
+            </>
           ) : (
             <a
               href="/login"

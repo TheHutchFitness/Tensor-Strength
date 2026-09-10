@@ -1,26 +1,69 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { UserRound, FileText, Users, Calculator, Tag } from "lucide-react";
+import {
+  Home,
+  FileText,
+  Users,
+  Calculator,
+  Tag,
+  LogIn,
+  LayoutDashboard,
+  MessagesSquare,
+  UserRound,
+} from "lucide-react";
 
-const TABS = [
-  { href: "/clients", label: "Clients", Icon: UserRound, match: (p: string) => p === "/clients" },
-  { href: "/programs", label: "Programs", Icon: FileText, match: (p: string) => p.startsWith("/programs") },
-  { href: "/meet-the-team", label: "Team", Icon: Users, match: (p: string) => p.startsWith("/meet-the-team") },
-  { href: "/free-tools", label: "Tools", Icon: Calculator, match: (p: string) => p.startsWith("/free-tools") },
-  { href: "/#pricing", label: "Pricing", Icon: Tag, match: () => false },
+type Tab = {
+  href: string;
+  label: string;
+  Icon: typeof Home;
+  match: (p: string) => boolean;
+};
+
+// Signed-out visitors: focus on discovering the product + signing in.
+const GUEST_TABS: Tab[] = [
+  { href: "/", label: "Home", Icon: Home, match: (p) => p === "/" },
+  { href: "/programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/programs") },
+  { href: "/free-tools", label: "Tools", Icon: Calculator, match: (p) => p.startsWith("/free-tools") },
+  { href: "/meet-the-team", label: "Team", Icon: Users, match: (p) => p.startsWith("/meet-the-team") },
+  { href: "/login", label: "Sign In", Icon: LogIn, match: (p) => p.startsWith("/login") },
 ];
 
-// A mobile-only bottom tab bar for the main marketing site (mirrors the
-// client portal's tab bar). Links to the key public destinations.
+// Signed-in members: fast access to the things they actually use.
+const MEMBER_TABS: Tab[] = [
+  { href: "/", label: "Home", Icon: Home, match: (p) => p === "/" },
+  { href: "/clients", label: "Portal", Icon: LayoutDashboard, match: (p) => p.startsWith("/clients") },
+  { href: "/programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/programs") },
+  { href: "/forum", label: "Forum", Icon: MessagesSquare, match: (p) => p.startsWith("/forum") },
+  { href: "/account", label: "Account", Icon: UserRound, match: (p) => p.startsWith("/account") },
+];
+
+// A mobile-only bottom tab bar. It adapts to whether the visitor is signed in
+// so members get member destinations (Portal, Forum, Account) and visitors get
+// discovery + Sign In — instead of one confusing shared set.
 export default function SiteTabBar() {
   const pathname = usePathname() || "";
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
     document.body.classList.add("has-site-tabbar");
     return () => document.body.classList.remove("has-site-tabbar");
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => alive && setSignedIn(!!d?.user))
+      .catch(() => alive && setSignedIn(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Until we know, default to the guest set (no flash of member-only links).
+  const tabs = signedIn ? MEMBER_TABS : GUEST_TABS;
 
   return (
     <nav
@@ -29,7 +72,7 @@ export default function SiteTabBar() {
       aria-label="Site navigation"
     >
       <div className="mx-auto max-w-lg grid grid-cols-5">
-        {TABS.map(({ href, label, Icon, match }) => {
+        {tabs.map(({ href, label, Icon, match }) => {
           const active = match(pathname);
           return (
             <a
