@@ -7,6 +7,7 @@ const links = [
   { href: "/#pricing", label: "Pricing" },
   { href: "/#library", label: "Library" },
   { href: "/programs", label: "Programs" },
+  { href: "/quests", label: "Quests" },
   { href: "/free-tools", label: "Free Tools" },
 ];
 
@@ -16,6 +17,7 @@ const menus = [
   { label: "Meet the Team", href: "/meet-the-team" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Library", href: "/#library" },
+  { label: "Quests", href: "/quests" },
   {
     label: "Programs",
     href: "/programs",

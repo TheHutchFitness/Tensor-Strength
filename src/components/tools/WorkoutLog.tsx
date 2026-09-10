@@ -646,7 +646,12 @@ export default function WorkoutLog() {
       exercises: clean,
     };
     persistWorkouts([w, ...workouts]);
-    // Hutch Touch: if this saved session was a rotation session with a rotating
+    // Award XP for logging a workout (server dedupes by workout id).
+    fetch("/api/gamification/workout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workoutId: w.id }),
+    }).catch(() => {});
     // main lift, advance that lift to the next variation for next time.
     if (loadedHutchId) {
       const ml = HUTCH_MAIN_LIFT[loadedHutchId];

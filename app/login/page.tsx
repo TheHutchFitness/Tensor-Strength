@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { GOAL_OPTIONS } from "@/data/gamification";
 
 type Mode = "login" | "register";
 
@@ -20,6 +21,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [goals, setGoals] = useState<string[]>([]);
+  function toggleGoal(g: string) {
+    setGoals((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  }
 
   // Tick down the rate-limit cooldown once per second.
   useEffect(() => {
@@ -81,9 +86,16 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      // Success — redirect to the intended page or home
+      // Success — save signup goals (new members), then redirect.
+      if (mode === "register" && goals.length) {
+        await fetch("/api/gamification/goals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ goals }),
+        }).catch(() => {});
+      }
       const params = new URLSearchParams(window.location.search);
-      const from = params.get("from") || "/";
+      const from = params.get("from") || (mode === "register" ? "/quests" : "/");
       window.location.href = from;
     } catch {
       setError("Network error. Please try again.");
@@ -169,6 +181,31 @@ export default function LoginPage() {
               className={inputCls + " mt-2"}
             />
           </label>
+
+          {mode === "register" && (
+            <div>
+              <span className="font-display uppercase tracking-wider text-xs text-bone/70">
+                Your goals <span className="text-bone/40">(pick any — powers your quests)</span>
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {GOAL_OPTIONS.map((g) => (
+                  <button
+                    type="button"
+                    key={g}
+                    onClick={() => toggleGoal(g)}
+                    className={
+                      "px-3 py-2 font-display uppercase tracking-wider text-[11px] border transition-colors " +
+                      (goals.includes(g)
+                        ? "border-electric bg-electric/10 text-electric"
+                        : "border-bone/20 text-bone/60 hover:border-bone/40")
+                    }
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-electric">{error}</p>}
 

@@ -5,6 +5,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SiteTabBar from "@/components/SiteTabBar";
 import CheckoutButton from "@/components/CheckoutButton";
+import Avatar from "@/components/Avatar";
+import { titleById } from "@/data/gamification";
 
 type Me = {
   username?: string;
@@ -60,6 +62,28 @@ export default function AccountPage() {
   const [form, setForm] = useState({ username: "", email: "" });
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [saveMsg, setSaveMsg] = useState("");
+  const [game, setGame] = useState<any>(null);
+  const [pwd, setPwd] = useState({ current: "", next: "" });
+  const [pwdMsg, setPwdMsg] = useState("");
+  const [pwdState, setPwdState] = useState<"idle" | "saving">("idle");
+
+  async function changePassword() {
+    setPwdState("saving");
+    setPwdMsg("");
+    try {
+      const res = await fetch("/api/account/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: pwd.current, newPassword: pwd.next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setPwdMsg(res.ok ? "Password updated." : data.error || "Couldn't update password.");
+      if (res.ok) setPwd({ current: "", next: "" });
+    } catch {
+      setPwdMsg("Network error — please try again.");
+    }
+    setPwdState("idle");
+  }
 
   function startEdit() {
     setForm({ username: me?.username || "", email: me?.email || "" });
@@ -95,6 +119,7 @@ export default function AccountPage() {
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => setMe(d?.user || null)).catch(() => {}).finally(() => setLoaded(true));
     fetch("/api/billing/history").then((r) => (r.ok ? r.json() : null)).then((d) => d && setTxns(d.transactions || [])).catch(() => {});
+    fetch("/api/gamification").then((r) => (r.ok ? r.json() : null)).then((d) => d && setGame(d)).catch(() => {});
   }, []);
 
   async function cancelSub() {
@@ -226,6 +251,46 @@ export default function AccountPage() {
                 </>
                 )}
               </div>
+
+              {/* Profile & Rewards */}
+              <div className="border-2 border-electric/40 bg-electric/5 p-6 md:p-8">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-4">Profile &amp; Rewards</p>
+                {game ? (
+                  <div className="flex items-center gap-5 flex-wrap">
+                    <Avatar id={game.equippedAvatar} size={64} />
+                    <div className="flex-1 min-w-[200px]">
+                      <p className="font-display uppercase text-2xl leading-tight">
+                        Level {game.xp.level} <span className="text-electric">· {titleById(game.equippedTitle).name}</span>
+                      </p>
+                      <div className="mt-2 h-2.5 w-full bg-bone/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-electric" style={{ width: `${Math.min(100, Math.round((game.xp.into / Math.max(1, game.xp.needed)) * 100))}%` }} />
+                      </div>
+                      <p className="text-xs text-bone/50 mt-1">{game.xp.into.toLocaleString()} / {game.xp.needed.toLocaleString()} XP to next level · {game.xp.total.toLocaleString()} total</p>
+                    </div>
+                    <a href="/quests" className="border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-xs hover:bg-electric hover:text-ink transition-colors">
+                      Quests &amp; avatars →
+                    </a>
+                  </div>
+                ) : (
+                  <p className="text-bone/50 text-sm">Log a workout or complete a quest to start earning XP. <a href="/quests" className="underline text-electric">Open quests →</a></p>
+                )}
+              </div>
+
+              {/* Change password */}
+              {me.email && (
+                <div className="border-2 border-bone/15 bg-ink/30 p-6 md:p-8">
+                  <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-4">Change Password</p>
+                  <div className="grid sm:grid-cols-2 gap-3 max-w-lg">
+                    <input type="password" value={pwd.current} onChange={(e) => setPwd({ ...pwd, current: e.target.value })} placeholder="Current password" className="bg-ink border border-bone/20 px-3 py-2.5 text-sm" />
+                    <input type="password" value={pwd.next} onChange={(e) => setPwd({ ...pwd, next: e.target.value })} placeholder="New password (8+ chars)" className="bg-ink border border-bone/20 px-3 py-2.5 text-sm" />
+                  </div>
+                  <button onClick={changePassword} disabled={pwdState === "saving" || !pwd.current || !pwd.next} className="mt-3 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors disabled:opacity-50">
+                    {pwdState === "saving" ? "Saving…" : "Update password"}
+                  </button>
+                  {pwdMsg && <p className="mt-2 text-sm text-electric">{pwdMsg}</p>}
+                  <p className="mt-2 text-[11px] text-bone/40">Only applies to email/password accounts. Google sign-in accounts don&apos;t use a password.</p>
+                </div>
+              )}
 
               {/* Billing history */}
               <div className="border-2 border-bone/15 bg-ink/30 p-6 md:p-8">

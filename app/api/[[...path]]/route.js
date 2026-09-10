@@ -493,6 +493,65 @@ function tooMany(retryAfter) {
   return handleCORS(resp)
 }
 
+// ============================ GAMIFICATION ============================
+// Steep XP curve — reaching high levels takes months of real consistency.
+// XP to REACH a level = 1000 * (L-1)*L/2  -> L2:1000  L3:3000  L4:6000  L5:10000 ...
+function cumulativeXp(level) { return 1000 * (level - 1) * level / 2 }
+function levelFromXp(xp) { let L = 1; const x = xp || 0; while (cumulativeXp(L + 1) <= x) L++; return L }
+function xpSummary(xp) {
+  const total = xp || 0
+  const level = levelFromXp(total)
+  const cur = cumulativeXp(level)
+  const next = cumulativeXp(level + 1)
+  return { total, level, into: total - cur, needed: next - cur, nextLevelAt: next }
+}
+const XP_AWARD = { workout: 50 }
+// Preset unlockable avatars (emoji + gradient — friendly for all ages).
+const AVATARS = [
+  { id: 'seed', name: 'Fresh Start', emoji: '🌱', level: 1, grad: ['#1f6f43', '#0a2a1a'] },
+  { id: 'wolf', name: 'Lone Wolf', emoji: '🐺', level: 2, grad: ['#5a6b82', '#141a24'] },
+  { id: 'bull', name: 'Bull', emoji: '🐂', level: 3, grad: ['#8a4b2a', '#241108'] },
+  { id: 'fire', name: 'On Fire', emoji: '🔥', level: 4, grad: ['#ff6a00', '#3a1400'] },
+  { id: 'bolt', name: 'Live Wire', emoji: '⚡', level: 5, grad: ['#146cff', '#04173a'] },
+  { id: 'lion', name: 'Lionheart', emoji: '🦁', level: 6, grad: ['#d9a441', '#3a2708'] },
+  { id: 'dragon', name: 'Dragon', emoji: '🐉', level: 8, grad: ['#2fae6a', '#06251a'] },
+  { id: 'crown', name: 'Iron Crown', emoji: '👑', level: 10, grad: ['#c9a227', '#2a2205'] },
+  { id: 'goat', name: 'The GOAT', emoji: '🐐', level: 12, grad: ['#146cff', '#000014'] },
+]
+const TITLES = [
+  { id: 'newcomer', name: 'Newcomer', level: 1 },
+  { id: 'grinder', name: 'The Grinder', level: 2 },
+  { id: 'consistent', name: 'Consistency Machine', level: 3 },
+  { id: 'ironwilled', name: 'Iron-Willed', level: 4 },
+  { id: 'relentless', name: 'Relentless', level: 5 },
+  { id: 'beast', name: 'Certified Beast', level: 6 },
+  { id: 'elite', name: 'Elite', level: 8 },
+  { id: 'legend', name: 'Tensor Legend', level: 10 },
+]
+// Built-in quests. Client computes progress from the member's own workouts and
+// goals; the server dedupes claims per period so a quest pays out once per cycle.
+const QUEST_DEFS = [
+  { id: 'daily_log', period: 'daily', title: 'Log a workout today', desc: 'Record any session in the tracker.', xp: 40, target: 1, metric: 'workoutsToday' },
+  { id: 'weekly_4', period: 'weekly', title: 'Train 4 times this week', desc: 'Log four workouts (Mon–Sun).', xp: 150, target: 4, metric: 'workoutsThisWeek' },
+  { id: 'weekly_rotation', period: 'weekly', title: 'Full Hutch Touch rotation', desc: 'Log all 4 rotation sessions this week.', xp: 200, target: 4, metric: 'rotationThisWeek' },
+  { id: 'monthly_12', period: 'monthly', title: '12 workouts this month', desc: 'Stay consistent all month long.', xp: 500, target: 12, metric: 'workoutsThisMonth' },
+]
+function periodId(period, d = new Date()) {
+  const y = d.getUTCFullYear()
+  if (period === 'daily') return `${y}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+  if (period === 'monthly') return `${y}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  // weekly (ISO-ish): year + week number
+  const oneJan = new Date(Date.UTC(y, 0, 1))
+  const week = Math.ceil((((d - oneJan) / 86400000) + oneJan.getUTCDay() + 1) / 7)
+  return `${y}-W${String(week).padStart(2, '0')}`
+}
+function unlockedFor(level) {
+  return {
+    avatars: AVATARS.filter(a => a.level <= level).map(a => a.id),
+    titles: TITLES.filter(t => t.level <= level).map(t => t.id),
+  }
+}
+
 export async function OPTIONS() {
   return handleCORS(new NextResponse(null, { status: 200 }))
 }
@@ -2389,6 +2448,155 @@ async function handleRoute(request, { params }) {
         console.error('Receipt generation error:', e)
         return handleCORS(NextResponse.json({ error: 'Unable to generate receipt right now.' }, { status: 502 }))
       }
+    }
+
+    // ============================ GAMIFICATION ROUTES ============================
+    if (route === '/gamification' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const sum = xpSummary(user.xp)
+      const unlocked = unlockedFor(sum.level)
+      const isPaid = !!user.portalAccess
+      // Custom quests: site-wide + any assigned to this member by their trainer.
+      const custom = await db.collection('site_quests').find({
+        active: true,
+        $or: [{ scope: 'site' }, { scope: 'trainer', clientIds: user.id }],
+      }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(30).toArray()
+      return handleCORS(NextResponse.json({
+        xp: sum, isPaid,
+        goals: user.goals || [],
+        equippedAvatar: user.equippedAvatar || 'seed',
+        equippedTitle: user.equippedTitle || 'newcomer',
+        unlocked,
+        claims: user.questClaims || {},
+        avatars: AVATARS, titles: TITLES,
+        quests: QUEST_DEFS, customQuests: custom,
+        xpAward: XP_AWARD,
+      }))
+    }
+
+    if (route === '/gamification/goals' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const goals = Array.isArray(body.goals) ? body.goals.filter(g => typeof g === 'string').slice(0, 6) : []
+      await db.collection('users').updateOne({ id: user.id }, { $set: { goals } })
+      return handleCORS(NextResponse.json({ ok: true, goals }))
+    }
+
+    // Award XP for a logged workout (deduped by workoutId so re-saving can't farm).
+    if (route === '/gamification/workout' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const wid = String(body.workoutId || '').slice(0, 60)
+      if (!wid) return handleCORS(NextResponse.json({ error: 'workoutId required' }, { status: 400 }))
+      const awarded = user.awardedWorkouts || []
+      if (awarded.includes(wid)) {
+        return handleCORS(NextResponse.json({ ok: true, awarded: false, xp: xpSummary(user.xp) }))
+      }
+      const newAwarded = [wid, ...awarded].slice(0, 400)
+      const newXp = (user.xp || 0) + XP_AWARD.workout
+      await db.collection('users').updateOne({ id: user.id }, { $set: { xp: newXp, awardedWorkouts: newAwarded } })
+      return handleCORS(NextResponse.json({ ok: true, awarded: true, gained: XP_AWARD.workout, xp: xpSummary(newXp) }))
+    }
+
+    // Claim a quest's XP (deduped per period).
+    if (route === '/gamification/claim' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const qid = String(body.questId || '')
+      let quest = QUEST_DEFS.find(q => q.id === qid)
+      if (!quest) {
+        const c = await db.collection('site_quests').findOne({ id: qid, active: true })
+        if (c) quest = { id: c.id, period: c.period, xp: Math.min(500, c.xp || 100) }
+      }
+      if (!quest) return handleCORS(NextResponse.json({ error: 'Unknown quest' }, { status: 400 }))
+      const pid = periodId(quest.period)
+      const claims = user.questClaims || {}
+      if (claims[qid] === pid) {
+        return handleCORS(NextResponse.json({ error: 'Already claimed this period', xp: xpSummary(user.xp) }, { status: 409 }))
+      }
+      claims[qid] = pid
+      const newXp = (user.xp || 0) + quest.xp
+      await db.collection('users').updateOne({ id: user.id }, { $set: { xp: newXp, questClaims: claims } })
+      return handleCORS(NextResponse.json({ ok: true, gained: quest.xp, xp: xpSummary(newXp) }))
+    }
+
+    // Equip an unlocked avatar / title (paying members only for rewards).
+    if (route === '/gamification/equip' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      if (!user.portalAccess) return handleCORS(NextResponse.json({ error: 'Rewards are for members. Upgrade to unlock avatars and titles.' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      const level = levelFromXp(user.xp)
+      const unlocked = unlockedFor(level)
+      const set = {}
+      if (body.avatarId) {
+        if (!unlocked.avatars.includes(body.avatarId)) return handleCORS(NextResponse.json({ error: 'Avatar still locked — keep leveling up.' }, { status: 403 }))
+        set.equippedAvatar = body.avatarId
+      }
+      if (body.titleId) {
+        if (!unlocked.titles.includes(body.titleId)) return handleCORS(NextResponse.json({ error: 'Title still locked — keep leveling up.' }, { status: 403 }))
+        set.equippedTitle = body.titleId
+      }
+      if (!Object.keys(set).length) return handleCORS(NextResponse.json({ error: 'Nothing to equip' }, { status: 400 }))
+      await db.collection('users').updateOne({ id: user.id }, { $set: set })
+      return handleCORS(NextResponse.json({ ok: true, ...set }))
+    }
+
+    // Leaderboard — top members by XP (compete site-wide).
+    if (route === '/gamification/leaderboard' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const top = await db.collection('users')
+        .find({ xp: { $gt: 0 } }, { projection: { _id: 0, username: 1, xp: 1, equippedAvatar: 1, equippedTitle: 1 } })
+        .sort({ xp: -1 }).limit(20).toArray()
+      const rows = top.map(u => ({ username: u.username, level: levelFromXp(u.xp), xp: u.xp || 0, avatar: u.equippedAvatar || 'seed', title: u.equippedTitle || 'newcomer' }))
+      return handleCORS(NextResponse.json({ leaderboard: rows }))
+    }
+
+    // Create a quest — admin (site-wide) or trainer (for their assigned clients).
+    if (route === '/gamification/quests' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const isAdmin = user.role === 'admin'
+      const isTrainer = !!user.isTrainer || isAdmin
+      if (!isTrainer) return handleCORS(NextResponse.json({ error: 'Only coaches can create quests.' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      const title = String(body.title || '').trim().slice(0, 120)
+      const desc = String(body.desc || '').trim().slice(0, 300)
+      const period = ['daily', 'weekly', 'monthly'].includes(body.period) ? body.period : 'weekly'
+      const xp = Math.max(10, Math.min(500, parseInt(body.xp, 10) || 100))
+      if (!title) return handleCORS(NextResponse.json({ error: 'Title required' }, { status: 400 }))
+      const scope = (isAdmin && body.scope === 'site') ? 'site' : 'trainer'
+      let clientIds = []
+      if (scope === 'trainer') {
+        const mine = await db.collection('users').find({ assignedTrainerId: user.id }, { projection: { _id: 0, id: 1 } }).toArray()
+        clientIds = mine.map(m => m.id)
+      }
+      const quest = { id: uuidv4(), scope, trainerId: user.id, clientIds, title, desc, period, xp, active: true, createdBy: user.username, createdAt: new Date() }
+      await db.collection('site_quests').insertOne(quest)
+      const { _id, ...clean } = quest
+      return handleCORS(NextResponse.json({ ok: true, quest: clean }))
+    }
+
+    // ---- Member: change password (email/password accounts only) ----
+    if (route === '/account/password' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      if (!user.passwordHash) return handleCORS(NextResponse.json({ error: 'Your account uses Google sign-in, so there is no password to change.' }, { status: 400 }))
+      const body = await request.json().catch(() => ({}))
+      const current = String(body.currentPassword || '')
+      const next = String(body.newPassword || '')
+      if (next.length < 8) return handleCORS(NextResponse.json({ error: 'New password must be at least 8 characters.' }, { status: 400 }))
+      if (!(await bcrypt.compare(current, user.passwordHash))) {
+        return handleCORS(NextResponse.json({ error: 'Current password is incorrect.' }, { status: 400 }))
+      }
+      const passwordHash = await bcrypt.hash(next, 10)
+      await db.collection('users').updateOne({ id: user.id }, { $set: { passwordHash } })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     // ---- Member: cancel their own subscription (at period end) ----

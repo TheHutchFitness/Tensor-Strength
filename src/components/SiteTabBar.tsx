@@ -10,7 +10,7 @@ import {
   Tag,
   LogIn,
   LayoutDashboard,
-  MessagesSquare,
+  Trophy,
   UserRound,
 } from "lucide-react";
 
@@ -32,10 +32,10 @@ const GUEST_TABS: Tab[] = [
 
 // Signed-in members: fast access to the things they actually use.
 const MEMBER_TABS: Tab[] = [
-  { href: "/", label: "Home", Icon: Home, match: (p) => p === "/" },
   { href: "/clients", label: "Portal", Icon: LayoutDashboard, match: (p) => p.startsWith("/clients") },
+  { href: "/quests", label: "Quests", Icon: Trophy, match: (p) => p.startsWith("/quests") },
   { href: "/programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/programs") },
-  { href: "/forum", label: "Forum", Icon: MessagesSquare, match: (p) => p.startsWith("/forum") },
+  { href: "/free-tools", label: "Tools", Icon: Calculator, match: (p) => p.startsWith("/free-tools") },
   { href: "/account", label: "Account", Icon: UserRound, match: (p) => p.startsWith("/account") },
 ];
 
