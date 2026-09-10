@@ -13,6 +13,9 @@ import {
 } from "./exerciseData";
 import {
   hutchTouchSessions,
+  HUTCH_TOUCH_BENCH_PROGRESSION,
+  HUTCH_TOUCH_SQUAT_ROTATION,
+  HUTCH_TOUCH_DEADLIFT_ROTATION,
   type HutchTouchSessionId,
 } from "@/data/hutchTouchProgram";
 
@@ -55,6 +58,31 @@ function est1RM(weight: string, reps: string): number {
 // Best estimated 1RM across an exercise's sets.
 function bestE1RM(sets: { weight: string; reps: string }[]): number {
   return sets.reduce((m, s) => Math.max(m, est1RM(s.weight, s.reps)), 0);
+}
+
+// Ordered variation-progression list for a main compound lift (Hutch Touch).
+function VariationList({
+  title,
+  steps,
+}: {
+  title: string;
+  steps: { variation: string; purpose: string; detail: string }[];
+}) {
+  return (
+    <div className="border border-bone/10 bg-ink/30 p-4">
+      <p className="font-display uppercase tracking-wider text-electric text-xs mb-3">{title}</p>
+      <ol className="grid gap-2.5">
+        {steps.map((s, i) => (
+          <li key={i} className="border-l-2 border-electric/40 pl-3">
+            <p className="text-sm text-bone/90">
+              <span className="text-bone/40 font-display">{i + 1}.</span> {s.variation}
+            </p>
+            <p className="text-[11px] text-bone/50 leading-relaxed">{s.purpose} · {s.detail}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 export default function WorkoutLog() {
@@ -129,6 +157,7 @@ export default function WorkoutLog() {
 
   // The Hutch Touch loader state — the program runs as a 4-session rotation.
   const [hutchOpen, setHutchOpen] = useState(false);
+  const [variationsOpen, setVariationsOpen] = useState(false);
   const [htSession, setHtSession] = useState<HutchTouchSessionId>("push");
 
   function loadHutchTouchSession() {
@@ -145,7 +174,7 @@ export default function WorkoutLog() {
     const work: SessionExercise[] = s.exercises.map((ex) => {
       // Pre-fill sets, reps and RPE from the prescription so the client only
       // has to enter the weight they used. Sets like "3-5" -> use the lower
-      // bound as a starting number of set rows.
+      // bound as a starting number of set rows (they can add up to the top end).
       const countMatch = (ex.sets || "").match(/(\d+)/);
       const count = Math.max(1, Math.min(6, countMatch ? parseInt(countMatch[1], 10) : 1));
       const sets: Set[] = Array.from({ length: count }, () => ({
@@ -154,9 +183,13 @@ export default function WorkoutLog() {
         reps: ex.reps || "",
         rpe: ex.rpe || "",
       }));
-      const cue = [`${ex.sets} × ${ex.reps}`, ex.rpe && `RPE ${ex.rpe}`, ex.notes]
-        .filter(Boolean)
-        .join(" · ");
+      // Spell out the target so users know exactly how many sets and reps to do.
+      const isTime = /min|sec|:/i.test(ex.reps || "");
+      const setLabel = (ex.sets || "").trim() === "1" ? "1 set" : `${ex.sets} sets`;
+      const parts: string[] = [setLabel];
+      if (ex.reps) parts.push(isTime ? ex.reps : `${ex.reps} reps`);
+      if (ex.rpe) parts.push(`RPE ${ex.rpe}`);
+      const cue = `Target: ${parts.join(" · ")}` + (ex.notes ? ` — ${ex.notes}` : "");
       return {
         id: uid(),
         name: ex.exercise,
@@ -695,6 +728,38 @@ export default function WorkoutLog() {
             Load a Session →
           </button>
         </div>
+
+        {/* Main-lift variation order — a list to follow on which variation, and in what order */}
+        <div className="mt-3 border border-bone/15 bg-ink/20">
+          <button
+            onClick={() => setVariationsOpen((v) => !v)}
+            className="w-full flex items-center justify-between gap-4 px-4 py-3 text-left"
+            aria-expanded={variationsOpen}
+          >
+            <span>
+              <span className="font-display uppercase tracking-wider text-bone text-sm block">
+                Main-lift variation order
+              </span>
+              <span className="text-xs text-bone/50 mt-0.5 block">
+                Which bench / squat / deadlift variation to run, and in what order — work top to bottom, then repeat.
+              </span>
+            </span>
+            <span className="font-display text-electric text-xl shrink-0">{variationsOpen ? "−" : "+"}</span>
+          </button>
+
+          {variationsOpen && (
+            <div className="px-4 pb-4 grid md:grid-cols-3 gap-4 border-t border-bone/10 pt-4">
+              <VariationList title="Bench (Push day)" steps={HUTCH_TOUCH_BENCH_PROGRESSION} />
+              <VariationList title="Squat (Legs day)" steps={HUTCH_TOUCH_SQUAT_ROTATION} />
+              <VariationList title="Secondary deadlift / hinge (Pull day)" steps={HUTCH_TOUCH_DEADLIFT_ROTATION} />
+              <p className="md:col-span-3 text-[11px] text-bone/50 leading-relaxed border-l-2 border-electric/40 pl-3">
+                Sumo deadlift stays your constant anchor on Lower Pull day — it&apos;s the secondary hinge that
+                rotates through the list above. Whenever the variation changes, recalibrate your load to hit the
+                prescribed RPE — don&apos;t just copy the previous weight.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* HUTCH TOUCH PICKER MODAL */}
@@ -800,7 +865,11 @@ export default function WorkoutLog() {
                     ✕
                   </button>
                 </div>
-                {ex.cue && <p className="text-xs text-bone/50 mb-3 italic">{ex.cue}</p>}
+                {ex.cue && (
+                  <p className="text-xs text-bone/80 mb-3 border-l-2 border-electric/50 pl-2.5 py-0.5 leading-relaxed">
+                    {ex.cue}
+                  </p>
+                )}
 
                 <div className="grid grid-cols-[28px_1fr_1fr_1fr_24px] gap-2 items-center text-[10px] uppercase tracking-wider text-bone/50 mb-1">
                   <span>Set</span>
