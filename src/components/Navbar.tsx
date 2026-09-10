@@ -156,9 +156,12 @@ export default function Navbar() {
                   Upgrade
                 </a>
               )}
-              <span className="font-display uppercase text-xs tracking-wider text-bone/60">
+              <a
+                href="/account"
+                className="font-display uppercase text-xs tracking-wider text-bone/60 hover:text-electric transition-colors"
+              >
                 {me.username}
-              </span>
+              </a>
               <button
                 onClick={logout}
                 className="border border-bone/30 px-4 py-2 font-display uppercase text-xs tracking-wider hover:border-electric hover:text-electric transition-colors"

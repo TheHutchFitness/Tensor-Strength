@@ -2194,6 +2194,23 @@ async function handleRoute(request, { params }) {
       }))
     }
 
+    // ---- Member: their own billing history ----
+    if (route === '/billing/history' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      }
+      const txns = await db.collection('payment_transactions')
+        .find(
+          { userId: user.id },
+          { projection: { _id: 0, id: 1, packageId: 1, amount: 1, currency: 1, accessType: 1, status: 1, paymentStatus: 1, createdAt: 1 } }
+        )
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .toArray()
+      return handleCORS(NextResponse.json({ transactions: txns }))
+    }
+
     // ---- Member: cancel their own subscription (at period end) ----
     if (route === '/subscription/cancel' && method === 'POST') {
       const user = await getCurrentUser(request, db)
