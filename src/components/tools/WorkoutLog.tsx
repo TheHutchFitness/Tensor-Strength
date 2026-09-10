@@ -42,6 +42,22 @@ type Template = {
 const WORKOUT_KEY = "hutch-workouts";
 const CUSTOM_KEY = "hutch-custom-exercises";
 const TEMPLATE_KEY = "hutch-templates";
+const VARIATION_KEY = "hutch-variations";
+
+// Which main compound lift rotates on each Hutch Touch session, and its
+// variation-progression list. Sumo deadlift stays constant on Lower Pull day —
+// it's the SECONDARY hinge that rotates there.
+type VarState = { bench: number; squat: number; deadlift: number };
+const HUTCH_ORDER: HutchTouchSessionId[] = ["push", "lower-pull", "upper-pull", "legs"];
+const HUTCH_MAIN_LIFT: Record<
+  HutchTouchSessionId,
+  { slot: string; key: keyof VarState; progression: { variation: string; purpose: string; detail: string }[] } | null
+> = {
+  push: { slot: "Bench variation", key: "bench", progression: HUTCH_TOUCH_BENCH_PROGRESSION },
+  legs: { slot: "Squat variation", key: "squat", progression: HUTCH_TOUCH_SQUAT_ROTATION },
+  "lower-pull": { slot: "Secondary deadlift / hinge", key: "deadlift", progression: HUTCH_TOUCH_DEADLIFT_ROTATION },
+  "upper-pull": null,
+};
 
 function uid() {
   return Math.random().toString(36).slice(2);
@@ -158,11 +174,33 @@ export default function WorkoutLog() {
   // The Hutch Touch loader state — the program runs as a 4-session rotation.
   const [hutchOpen, setHutchOpen] = useState(false);
   const [variationsOpen, setVariationsOpen] = useState(false);
+  // Which variation index each main lift is currently on (auto-advances).
+  const [variations, setVariations] = useState<VarState>({ bench: 0, squat: 0, deadlift: 0 });
+  // The Hutch Touch session currently loaded into the tracker (for auto-advance on save).
+  const [loadedHutchId, setLoadedHutchId] = useState<HutchTouchSessionId | null>(null);
   const [htSession, setHtSession] = useState<HutchTouchSessionId>("push");
 
-  function loadHutchTouchSession() {
-    const s = hutchTouchSessions.find((x) => x.id === htSession);
+  // Find what the athlete lifted last time for a given movement (by exact name,
+  // case-insensitive). Returns a short "225x5 · 225x5" style hint, newest first.
+  function lastTimeHint(name: string): string | null {
+    const key = name.trim().toLowerCase();
+    for (const w of workouts) {
+      const ex = w.exercises.find((e) => e.name.trim().toLowerCase() === key);
+      if (ex && ex.sets.length) {
+        const parts = ex.sets
+          .map((st) => (st.weight ? `${st.weight}${st.reps ? `x${st.reps}` : ""}` : ""))
+          .filter(Boolean);
+        if (parts.length) return parts.join(" · ");
+      }
+    }
+    return null;
+  }
+
+  function loadHutchTouchSession(explicitId?: HutchTouchSessionId) {
+    const sid = explicitId ?? htSession;
+    const s = hutchTouchSessions.find((x) => x.id === sid);
     if (!s) return;
+    const mainLift = HUTCH_MAIN_LIFT[s.id];
     // Warm-up movements load first, each as a light single-set entry the client
     // can tick through (or add sets to) before the working exercises.
     const warmups: SessionExercise[] = (s.warmup || []).map((w, i) => ({
@@ -172,6 +210,17 @@ export default function WorkoutLog() {
       sets: [{ id: uid(), weight: "", reps: "", rpe: "" }],
     }));
     const work: SessionExercise[] = s.exercises.map((ex) => {
+      // For the rotating main lift, swap the generic "Bench variation" slot for
+      // the actual variation the athlete is currently on, and add a recalibrate
+      // note instead of the generic prescription note.
+      let name = ex.exercise;
+      let variationNote = "";
+      if (mainLift && ex.exercise === mainLift.slot) {
+        const idx = (variations[mainLift.key] || 0) % mainLift.progression.length;
+        const v = mainLift.progression[idx];
+        name = v.variation;
+        variationNote = `Variation ${idx + 1}/${mainLift.progression.length} — ${v.purpose}. Recalibrate your load to hit the RPE (don't just copy last time's weight).`;
+      }
       // Pre-fill sets, reps and RPE from the prescription so the client only
       // has to enter the weight they used. Sets like "3-5" -> use the lower
       // bound as a starting number of set rows (they can add up to the top end).
@@ -189,16 +238,21 @@ export default function WorkoutLog() {
       const parts: string[] = [setLabel];
       if (ex.reps) parts.push(isTime ? ex.reps : `${ex.reps} reps`);
       if (ex.rpe) parts.push(`RPE ${ex.rpe}`);
-      const cue = `Target: ${parts.join(" · ")}` + (ex.notes ? ` — ${ex.notes}` : "");
+      let cue = `Target: ${parts.join(" · ")}`;
+      const tail = variationNote || ex.notes;
+      if (tail) cue += ` — ${tail}`;
+      const lt = lastTimeHint(name);
+      if (lt) cue += `  ·  Last time: ${lt}`;
       return {
         id: uid(),
-        name: ex.exercise,
+        name,
         cue,
         sets,
       };
     });
     setSession([...warmups, ...work]);
     setSessionTitle(`The Hutch Touch — ${s.title}`);
+    setLoadedHutchId(s.id);
     setActiveSplitId(null);
     setCurrentTemplateId(null);
     setHutchOpen(false);
@@ -235,6 +289,11 @@ export default function WorkoutLog() {
       if (c) setCustomExercises(JSON.parse(c));
       const t = localStorage.getItem(TEMPLATE_KEY);
       if (t) setTemplates(JSON.parse(t));
+      const varsRaw = localStorage.getItem(VARIATION_KEY);
+      if (varsRaw) {
+        const v = JSON.parse(varsRaw);
+        if (v && typeof v === "object") setVariations({ bench: v.bench || 0, squat: v.squat || 0, deadlift: v.deadlift || 0 });
+      }
       // If a trainer program was handed off from the portal, load it in.
       const pending = localStorage.getItem("ts-pending-program");
       if (pending) {
@@ -267,6 +326,17 @@ export default function WorkoutLog() {
             localStorage.setItem(CUSTOM_KEY, JSON.stringify(cd.value));
           }
         }
+        // Hutch Touch variation progress syncs via the same per-user store.
+        const vs = await fetch(`/api/client/store?key=${encodeURIComponent(VARIATION_KEY)}`);
+        if (vs.ok) {
+          const vd = await vs.json();
+          if (vd.found && vd.value && typeof vd.value === "object") {
+            const v = vd.value;
+            const next = { bench: v.bench || 0, squat: v.squat || 0, deadlift: v.deadlift || 0 };
+            setVariations(next);
+            localStorage.setItem(VARIATION_KEY, JSON.stringify(next));
+          }
+        }
       } catch {}
       cloudReady.current = true;
     })();
@@ -291,6 +361,25 @@ export default function WorkoutLog() {
     [customExercises]
   );
 
+  // Next-session nudge: find the last Hutch Touch session logged and suggest the
+  // next one in the rotation (push -> lower-pull -> upper-pull -> legs -> ...).
+  const nextHutch = useMemo(() => {
+    let lastId: HutchTouchSessionId | null = null;
+    for (const w of workouts) {
+      const found = hutchTouchSessions.find((s) => `The Hutch Touch — ${s.title}` === w.title);
+      if (found) {
+        lastId = found.id;
+        break;
+      }
+    }
+    const nextId = lastId
+      ? HUTCH_ORDER[(HUTCH_ORDER.indexOf(lastId) + 1) % HUTCH_ORDER.length]
+      : "push";
+    const next = hutchTouchSessions.find((s) => s.id === nextId)!;
+    const last = lastId ? hutchTouchSessions.find((s) => s.id === lastId) || null : null;
+    return { last, next };
+  }, [workouts]);
+
   function persistWorkouts(list: Workout[]) {
     setWorkouts(list);
     localStorage.setItem(WORKOUT_KEY, JSON.stringify(list));
@@ -305,6 +394,11 @@ export default function WorkoutLog() {
     setTemplates(list);
     localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
     pushTracker(workouts, list);
+  }
+  function persistVariations(next: VarState) {
+    setVariations(next);
+    localStorage.setItem(VARIATION_KEY, JSON.stringify(next));
+    cloudSet(VARIATION_KEY, next);
   }
 
   const activeSplit = SPLITS.find((s) => s.id === activeSplitId) || null;
@@ -532,6 +626,22 @@ export default function WorkoutLog() {
       exercises: clean,
     };
     persistWorkouts([w, ...workouts]);
+    // Hutch Touch: if this saved session was a rotation session with a rotating
+    // main lift, advance that lift to the next variation for next time.
+    if (loadedHutchId) {
+      const ml = HUTCH_MAIN_LIFT[loadedHutchId];
+      const sess = hutchTouchSessions.find((x) => x.id === loadedHutchId);
+      const titleMatches = !!sess && w.title === `The Hutch Touch — ${sess.title}`;
+      if (ml && titleMatches) {
+        const idx = (variations[ml.key] || 0) % ml.progression.length;
+        const curName = ml.progression[idx].variation.trim().toLowerCase();
+        const didLift = clean.some((e) => e.name.trim().toLowerCase() === curName);
+        if (didLift) {
+          persistVariations({ ...variations, [ml.key]: (idx + 1) % ml.progression.length });
+        }
+      }
+      setLoadedHutchId(null);
+    }
     // If this session came from a template, update that template's values so
     // next week starts from the numbers just entered.
     if (currentTemplateId) {
@@ -710,23 +820,44 @@ export default function WorkoutLog() {
         </div>
 
         {/* Load The Hutch Touch program */}
-        <div className="mt-5 border-2 border-electric/40 bg-electric/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <p className="font-display uppercase tracking-wider text-electric text-sm">
-              The Hutch Touch
-            </p>
-            <p className="text-xs text-bone/60 mt-1 leading-relaxed">
-              Load any of the 4 rotation sessions from the performance program straight
-              into the tracker — the full warm-up plus every exercise, pre-filled with
-              sets, reps &amp; RPE, ready to log.
-            </p>
+        <div className="mt-5 border-2 border-electric/40 bg-electric/5 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-display uppercase tracking-wider text-electric text-sm">
+                The Hutch Touch
+              </p>
+              <p className="text-xs text-bone/60 mt-1 leading-relaxed">
+                Load any of the 4 rotation sessions from the performance program straight
+                into the tracker — the full warm-up plus every exercise, pre-filled with
+                sets, reps &amp; RPE, ready to log.
+              </p>
+            </div>
+            <button
+              onClick={() => { setHtSession(nextHutch.next.id); setHutchOpen(true); }}
+              className="border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors whitespace-nowrap"
+            >
+              Choose a Session →
+            </button>
           </div>
-          <button
-            onClick={() => setHutchOpen(true)}
-            className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap"
-          >
-            Load a Session →
-          </button>
+
+          {/* Next-up nudge — where you are in the rotation */}
+          <div className="mt-3 border-t border-electric/20 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-xs text-bone/70 leading-relaxed">
+              {nextHutch.last ? (
+                <>Last logged: <span className="text-bone/90">{nextHutch.last.title}</span>. </>
+              ) : (
+                <>You haven&apos;t logged a Hutch Touch session yet. </>
+              )}
+              <span className="text-electric font-display uppercase tracking-wider">Next up:</span>{" "}
+              <span className="text-bone/90">{nextHutch.next.title}</span>
+            </p>
+            <button
+              onClick={() => loadHutchTouchSession(nextHutch.next.id)}
+              className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap"
+            >
+              Load {nextHutch.next.title} →
+            </button>
+          </div>
         </div>
 
         {/* Main-lift variation order — a list to follow on which variation, and in what order */}
@@ -794,6 +925,21 @@ export default function WorkoutLog() {
                   <span className="block text-[10px] tracking-wide opacity-80 normal-case">
                     Primary: {s.focus} · {s.warmup.length} warm-ups + {s.exercises.length} exercises
                   </span>
+                  {(() => {
+                    const ml = HUTCH_MAIN_LIFT[s.id];
+                    if (!ml) return null;
+                    const idx = (variations[ml.key] || 0) % ml.progression.length;
+                    return (
+                      <span
+                        className={
+                          "block text-[10px] tracking-wide normal-case mt-0.5 " +
+                          (htSession === s.id ? "text-ink/80" : "text-electric")
+                        }
+                      >
+                        Main lift this time: {ml.progression[idx].variation} ({idx + 1}/{ml.progression.length})
+                      </span>
+                    );
+                  })()}
                 </button>
               ))}
             </div>
@@ -811,7 +957,7 @@ export default function WorkoutLog() {
             </div>
 
             <button
-              onClick={loadHutchTouchSession}
+              onClick={() => loadHutchTouchSession()}
               className="w-full bg-electric text-ink py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
             >
               Load {hutchTouchSessions.find((x) => x.id === htSession)?.title} →
