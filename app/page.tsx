@@ -6,6 +6,7 @@ import MarketingExtras from "@/components/MarketingExtras";
 import Footer from "@/components/Footer";
 import SiteTabBar from "@/components/SiteTabBar";
 import MemberHub from "@/components/MemberHub";
+import PortalAutoOpen from "@/components/PortalAutoOpen";
 
 // Logged-in member home = a lean hub. All the heavy marketing (Hero, About,
 // PR board, program finder, custom program, contact) lives on the public
@@ -14,6 +15,7 @@ import MemberHub from "@/components/MemberHub";
 export default function Home() {
   return (
     <>
+      <PortalAutoOpen />
       <Navbar />
       <Announcement />
       <main>
