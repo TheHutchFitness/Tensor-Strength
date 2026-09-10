@@ -56,6 +56,41 @@ export default function AccountPage() {
   const [txns, setTxns] = useState<Txn[]>([]);
   const [cancelState, setCancelState] = useState<"idle" | "confirm" | "canceling" | "done" | "error">("idle");
   const [cancelMsg, setCancelMsg] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ username: "", email: "" });
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
+  const [saveMsg, setSaveMsg] = useState("");
+
+  function startEdit() {
+    setForm({ username: me?.username || "", email: me?.email || "" });
+    setSaveMsg("");
+    setSaveState("idle");
+    setEditing(true);
+  }
+
+  async function saveProfile() {
+    setSaveState("saving");
+    setSaveMsg("");
+    try {
+      const res = await fetch("/api/account/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveMsg(data.error || "Couldn't save — please try again.");
+        setSaveState("error");
+        return;
+      }
+      setMe(data.user);
+      setEditing(false);
+      setSaveState("idle");
+    } catch {
+      setSaveMsg("Network error — please try again.");
+      setSaveState("error");
+    }
+  }
 
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => setMe(d?.user || null)).catch(() => {}).finally(() => setLoaded(true));
@@ -105,7 +140,59 @@ export default function AccountPage() {
             <div className="space-y-10">
               {/* Profile */}
               <div className="border-2 border-bone/15 bg-ink/30 p-6 md:p-8">
-                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-4">Profile</p>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs">Profile</p>
+                  {!editing && (
+                    <button
+                      onClick={startEdit}
+                      className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-[10px] hover:border-electric hover:text-electric transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+
+                {editing ? (
+                  <div className="space-y-5 max-w-md">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-bone/50 mb-2">Display name</label>
+                      <input
+                        value={form.username}
+                        onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                        className="w-full bg-ink/60 border border-bone/20 focus:border-electric outline-none px-4 py-3 text-bone"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-bone/50 mb-2">Email</label>
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                        className="w-full bg-ink/60 border border-bone/20 focus:border-electric outline-none px-4 py-3 text-bone"
+                      />
+                    </div>
+                    {saveState === "error" && <p className="text-xs text-red-400">{saveMsg}</p>}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={saveProfile}
+                        disabled={saveState === "saving"}
+                        className="bg-electric text-ink px-6 py-2.5 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors disabled:opacity-60"
+                      >
+                        {saveState === "saving" ? "Saving…" : "Save changes"}
+                      </button>
+                      <button
+                        onClick={() => setEditing(false)}
+                        className="border border-bone/25 text-bone/70 px-6 py-2.5 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-bone/40">
+                      Note: your display name is also your login — if you change it, use the new one next time you sign in.
+                    </p>
+                  </div>
+                ) : (
+                <>
                 <dl className="grid sm:grid-cols-2 gap-5">
                   <div>
                     <dt className="text-xs uppercase tracking-wider text-bone/50">Username</dt>
@@ -135,6 +222,8 @@ export default function AccountPage() {
                       Upgrade · $9.99/mo →
                     </CheckoutButton>
                   </div>
+                )}
+                </>
                 )}
               </div>
 

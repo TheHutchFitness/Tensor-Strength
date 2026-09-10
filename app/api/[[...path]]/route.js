@@ -2194,6 +2194,41 @@ async function handleRoute(request, { params }) {
       }))
     }
 
+    // ---- Member: update their own profile (display name + email) ----
+    if (route === '/account/profile' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      }
+      const body = await request.json().catch(() => ({}))
+      const updates = {}
+      if (typeof body.username === 'string' && body.username.trim()) {
+        const uname = body.username.trim().slice(0, 40)
+        const clash = await db.collection('users').findOne({ username: uname, id: { $ne: user.id } })
+        if (clash) {
+          return handleCORS(NextResponse.json({ error: 'That display name is already taken.' }, { status: 400 }))
+        }
+        updates.username = uname
+      }
+      if (typeof body.email === 'string' && body.email.trim()) {
+        const email = body.email.trim().toLowerCase()
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return handleCORS(NextResponse.json({ error: 'Please enter a valid email.' }, { status: 400 }))
+        }
+        const clash = await db.collection('users').findOne({ email, id: { $ne: user.id } })
+        if (clash) {
+          return handleCORS(NextResponse.json({ error: 'That email is already in use.' }, { status: 400 }))
+        }
+        updates.email = email
+      }
+      if (!Object.keys(updates).length) {
+        return handleCORS(NextResponse.json({ error: 'Nothing to update.' }, { status: 400 }))
+      }
+      await db.collection('users').updateOne({ id: user.id }, { $set: updates })
+      const fresh = await db.collection('users').findOne({ id: user.id })
+      return handleCORS(NextResponse.json({ ok: true, user: publicUser(fresh) }))
+    }
+
     // ---- Member: their own billing history ----
     if (route === '/billing/history' && method === 'GET') {
       const user = await getCurrentUser(request, db)
