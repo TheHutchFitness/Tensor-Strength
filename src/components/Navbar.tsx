@@ -3,36 +3,24 @@
 import { useEffect, useState } from "react";
 
 const links = [
-  { href: "/meet-the-team", label: "About" },
+  { href: "/meet-the-team", label: "Meet the Team" },
+  { href: "/#pricing", label: "Pricing" },
   { href: "/#library", label: "Library" },
-  { href: "/programs", label: "Free Programs" },
+  { href: "/programs", label: "Programs" },
   { href: "/free-tools", label: "Free Tools" },
 ];
 
-// Desktop grouped hover dropdowns. Each trigger still links to its main section;
-// the panel exposes the related sub-sections.
+// Desktop nav. Items with `items` render a hover dropdown of sub-sections;
+// items without render as a plain top-level link.
 const menus = [
+  { label: "Meet the Team", href: "/meet-the-team" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "Library", href: "/#library" },
   {
-    label: "About",
-    href: "/meet-the-team",
-    items: [
-      { href: "/meet-the-team", label: "Meet the Team" },
-      { href: "/#pricing", label: "Pricing" },
-    ],
-  },
-  {
-    label: "Library",
-    href: "/#library",
-    items: [
-      { href: "/#library", label: "The Library" },
-      { href: "/forum", label: "Community Forum" },
-    ],
-  },
-  {
-    label: "Free Programs",
+    label: "Programs",
     href: "/programs",
     items: [
-      { href: "/programs", label: "Free Programs" },
+      { href: "/programs", label: "Programs" },
       { href: "/apply", label: "Custom Program" },
     ],
   },
@@ -85,29 +73,33 @@ export default function Navbar() {
                 className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors inline-flex items-center gap-1"
               >
                 {m.label}
-                <svg
-                  className="h-3 w-3 text-bone/50 group-hover:text-electric transition-colors"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                {m.items && (
+                  <svg
+                    className="h-3 w-3 text-bone/50 group-hover:text-electric transition-colors"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
               </a>
               {/* Hover panel — pt-2 keeps a bridge so the menu doesn't close on the gap */}
-              <div className="absolute left-0 top-full pt-3 hidden group-hover:block">
-                <div className="min-w-[230px] bg-ink/95 backdrop-blur border-2 border-electric/60 shadow-xl shadow-electric/10">
-                  {m.items.map((it, i) => (
-                    <a
-                      key={it.href + i}
-                      href={it.href}
-                      className="block px-4 py-3 font-display uppercase tracking-wider text-xs text-bone/80 hover:text-electric hover:bg-electric/5 transition-colors border-b border-bone/5 last:border-b-0"
-                    >
-                      {it.label}
-                    </a>
-                  ))}
+              {m.items && (
+                <div className="absolute left-0 top-full pt-3 hidden group-hover:block">
+                  <div className="min-w-[230px] bg-ink/95 backdrop-blur border-2 border-electric/60 shadow-xl shadow-electric/10">
+                    {m.items.map((it, i) => (
+                      <a
+                        key={it.href + i}
+                        href={it.href}
+                        className="block px-4 py-3 font-display uppercase tracking-wider text-xs text-bone/80 hover:text-electric hover:bg-electric/5 transition-colors border-b border-bone/5 last:border-b-0"
+                      >
+                        {it.label}
+                      </a>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </li>
           ))}
           <li>

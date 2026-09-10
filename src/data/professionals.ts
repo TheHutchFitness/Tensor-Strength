@@ -58,7 +58,7 @@ export const professionals: Professional[] = [
       "https://us.chat-img.sintra.ai/0d1255aa-5bdd-49c7-9b93-64af3dfc8e4f/e1af4534-8dc1-462e-92df-7d2eb92de149/image.png?w=1024&h=1024",
     location: "Paris, ON — The Fit Effect",
     shortBio:
-      "15+ years of strength and performance coaching. Founder of Tensor Strength, head trainer at The Fit Effect, and the coach behind every program that leaves this site.",
+      "12+ years of experience in strength & performance. Founder of Tensor Strength, head trainer at The Fit Effect, and the coach behind every program that leaves this site.",
     bio: [
       "Hutch is the founder of Tensor Strength and the head trainer behind the brand's no-BS approach to building stronger, more capable athletes. He coaches in person at The Fit Effect in Paris, Ontario, and remotely for athletes everywhere.",
       "His coaching spans the full range — high school athletes chasing scholarship strength, powerlifters working toward meet-day PRs, adults rebuilding from injury, and older clients who want to stay strong and capable for life. The common thread: proven programming, intelligent progression, and honest feedback that meets you where you are and pushes you to where you said you wanted to go.",
@@ -67,7 +67,7 @@ export const professionals: Professional[] = [
     credentials: [
       "Founder, Tensor Strength",
       "Head Trainer, The Fit Effect (Paris, ON)",
-      "15+ years experience across all levels",
+      "12+ years of experience across all levels",
       "Specialist in strength, powerlifting, and athletic performance",
       "Custom 12-week program design — built per athlete, never templated",
       "Remote coaching for athletes everywhere",

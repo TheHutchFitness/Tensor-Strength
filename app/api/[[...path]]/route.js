@@ -7,6 +7,7 @@ import Stripe from 'stripe'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import nodePath from 'path'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 // ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
 // When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
@@ -471,14 +472,25 @@ function rateLimit(request, bucket, limit, windowMs) {
     const rec = rateBuckets.get(key)
     if (!rec || now > rec.reset) {
       rateBuckets.set(key, { count: 1, reset: now + windowMs })
-      return true
+      return { ok: true, retryAfter: 0 }
     }
-    if (rec.count >= limit) return false
+    if (rec.count >= limit) {
+      return { ok: false, retryAfter: Math.max(1, Math.ceil((rec.reset - now) / 1000)) }
+    }
     rec.count++
-    return true
+    return { ok: true, retryAfter: 0 }
   } catch {
-    return true
+    return { ok: true, retryAfter: 0 }
   }
+}
+// Build a 429 response with a Retry-After header + retryAfter seconds in the body.
+function tooMany(retryAfter) {
+  const resp = NextResponse.json(
+    { error: 'Too many attempts. Please wait a moment and try again.', retryAfter },
+    { status: 429 }
+  )
+  resp.headers.set('Retry-After', String(retryAfter))
+  return handleCORS(resp)
 }
 
 export async function OPTIONS() {
@@ -573,9 +585,8 @@ async function handleRoute(request, { params }) {
 
     // ---------------- AUTH ----------------
     if (route === '/auth/register' && method === 'POST') {
-      if (!rateLimit(request, 'register', 20, 60_000)) {
-        return handleCORS(NextResponse.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429 }))
-      }
+      const rl = rateLimit(request, 'register', 20, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
       const body = await request.json()
       const username = (body.username || '').trim().toLowerCase()
       const email = (body.email || '').trim().toLowerCase()
@@ -615,9 +626,8 @@ async function handleRoute(request, { params }) {
     }
 
     if (route === '/auth/login' && method === 'POST') {
-      if (!rateLimit(request, 'login', 20, 60_000)) {
-        return handleCORS(NextResponse.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429 }))
-      }
+      const rl = rateLimit(request, 'login', 20, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
       const body = await request.json()
       const identifier = (body.username || '').trim().toLowerCase()
       const password = body.password || ''
@@ -638,9 +648,8 @@ async function handleRoute(request, { params }) {
     // Emergent-managed Google sign-in: exchange the one-time session_id for the
     // Google identity, then find-or-create the local user and issue our ts_token.
     if (route === '/auth/emergent' && method === 'POST') {
-      if (!rateLimit(request, 'emergent', 40, 60_000)) {
-        return handleCORS(NextResponse.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429 }))
-      }
+      const rl = rateLimit(request, 'emergent', 40, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
       const body = await request.json().catch(() => ({}))
       const sessionId = (body.session_id || '').trim()
       if (!sessionId || sessionId.length > 512) {
@@ -2281,6 +2290,105 @@ async function handleRoute(request, { params }) {
         .limit(50)
         .toArray()
       return handleCORS(NextResponse.json({ transactions: txns }))
+    }
+
+    // ---- Member: downloadable PDF receipt for one of their transactions ----
+    if (route === '/billing/invoice' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      }
+      const txId = request.nextUrl.searchParams.get('id')
+      if (!txId) {
+        return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      }
+      const tx = await db.collection('payment_transactions').findOne({ id: txId, userId: user.id })
+      if (!tx) {
+        return handleCORS(NextResponse.json({ error: 'Receipt not found' }, { status: 404 }))
+      }
+      const isPaid = tx.paymentStatus === 'paid' || tx.status === 'complete' || tx.accessGranted
+      if (!isPaid) {
+        return handleCORS(NextResponse.json({ error: 'A receipt is available once the payment is complete.' }, { status: 400 }))
+      }
+      try {
+        const pkg = PACKAGES[tx.packageId] || {}
+        const itemLabel = pkg.label || tx.accessType || 'Tensor Strength purchase'
+        const currency = (tx.currency || 'usd').toUpperCase()
+        const amount = ((tx.amount || 0) / 100).toFixed(2)
+        const dateStr = new Date(tx.completedAt || tx.createdAt || Date.now()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        const receiptNo = `TS-${String(tx.id).slice(0, 8).toUpperCase()}`
+
+        const doc = await PDFDocument.create()
+        const page = doc.addPage([612, 792]) // US Letter
+        const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+        const font = await doc.embedFont(StandardFonts.Helvetica)
+        const ink = rgb(0.04, 0.02, 0.13)
+        const electric = rgb(0.13, 0.45, 1)
+        const grey = rgb(0.4, 0.4, 0.45)
+        const M = 56
+        let y = 736
+
+        // Header band
+        page.drawRectangle({ x: 0, y: 748, width: 612, height: 44, color: ink })
+        page.drawText('TENSOR STRENGTH', { x: M, y: 762, size: 16, font: bold, color: rgb(1, 1, 1) })
+        page.drawText('RECEIPT', { x: 612 - M - bold.widthOfTextAtSize('RECEIPT', 16), y: 762, size: 16, font: bold, color: electric })
+
+        y = 700
+        page.drawText('Payment receipt', { x: M, y, size: 22, font: bold, color: ink })
+        y -= 30
+        page.drawText(`Receipt no.  ${receiptNo}`, { x: M, y, size: 11, font, color: grey })
+        y -= 16
+        page.drawText(`Date  ${dateStr}`, { x: M, y, size: 11, font, color: grey })
+
+        // Billed to
+        y -= 40
+        page.drawText('BILLED TO', { x: M, y, size: 9, font: bold, color: electric })
+        y -= 16
+        page.drawText(user.username || 'Member', { x: M, y, size: 12, font, color: ink })
+        if (user.email) { y -= 15; page.drawText(user.email, { x: M, y, size: 11, font, color: grey }) }
+
+        // From
+        page.drawText('FROM', { x: 340, y: 620, size: 9, font: bold, color: electric })
+        page.drawText('Tensor Strength', { x: 340, y: 604, size: 12, font, color: ink })
+        page.drawText('TensorStrength.com', { x: 340, y: 589, size: 11, font, color: grey })
+
+        // Line items table
+        y -= 46
+        page.drawLine({ start: { x: M, y }, end: { x: 612 - M, y }, thickness: 1, color: rgb(0.85, 0.85, 0.88) })
+        y -= 20
+        page.drawText('DESCRIPTION', { x: M, y, size: 9, font: bold, color: grey })
+        page.drawText('AMOUNT', { x: 612 - M - bold.widthOfTextAtSize('AMOUNT', 9), y, size: 9, font: bold, color: grey })
+        y -= 20
+        page.drawText(itemLabel, { x: M, y, size: 12, font, color: ink })
+        const amtStr = `${currency} $${amount}`
+        page.drawText(amtStr, { x: 612 - M - font.widthOfTextAtSize(amtStr, 12), y, size: 12, font, color: ink })
+        y -= 12
+        page.drawLine({ start: { x: M, y }, end: { x: 612 - M, y }, thickness: 1, color: rgb(0.85, 0.85, 0.88) })
+
+        // Total
+        y -= 26
+        page.drawText('Total paid', { x: 612 - M - 200, y, size: 12, font: bold, color: ink })
+        const totalStr = `${currency} $${amount}`
+        page.drawText(totalStr, { x: 612 - M - bold.widthOfTextAtSize(totalStr, 14), y: y - 1, size: 14, font: bold, color: electric })
+
+        // Status pill text
+        y -= 40
+        page.drawText('Status:  PAID', { x: M, y, size: 11, font: bold, color: rgb(0.1, 0.55, 0.3) })
+
+        // Footer note
+        page.drawText('Thank you for training with Tensor Strength.', { x: M, y: 90, size: 10, font, color: grey })
+        page.drawText('This receipt was generated for your records. Questions? Reply to your welcome email.', { x: M, y: 74, size: 9, font, color: grey })
+
+        const bytes = await doc.save()
+        const headers = new Headers()
+        headers.set('Content-Type', 'application/pdf')
+        headers.set('Content-Disposition', `inline; filename="Tensor-Strength-Receipt-${receiptNo}.pdf"`)
+        headers.set('Cache-Control', 'private, no-store')
+        return new NextResponse(Buffer.from(bytes), { status: 200, headers })
+      } catch (e) {
+        console.error('Receipt generation error:', e)
+        return handleCORS(NextResponse.json({ error: 'Unable to generate receipt right now.' }, { status: 502 }))
+      }
     }
 
     // ---- Member: cancel their own subscription (at period end) ----

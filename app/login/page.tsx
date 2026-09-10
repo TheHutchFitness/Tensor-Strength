@@ -19,6 +19,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Tick down the rate-limit cooldown once per second.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
 
   // Invite flow: /login?signup=1&email=...&name=... opens the register form
   // prefilled with the applicant's details (used by the Admin "invite" button).
@@ -47,6 +55,7 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (cooldown > 0) return;
     setError("");
     setLoading(true);
     try {
@@ -60,9 +69,15 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Something went wrong. Try again.");
+        if (res.status === 429) {
+          const wait = Number(data.retryAfter) || Number(res.headers.get("Retry-After")) || 60;
+          setCooldown(wait);
+          setError("");
+        } else {
+          setError(data.error || "Something went wrong. Try again.");
+        }
         setLoading(false);
         return;
       }

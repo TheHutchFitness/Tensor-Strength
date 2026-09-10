@@ -9,7 +9,6 @@ import OneRepMaxCalculator from "@/components/tools/OneRepMaxCalculator";
 import WilksDotsCalculator from "@/components/tools/WilksDotsCalculator";
 import PRTracker from "@/components/tools/PRTracker";
 import ClientCoaching from "@/components/portal/ClientCoaching";
-import WeeklyPrograms from "@/components/WeeklyPrograms";
 import PRSubmit from "@/components/PRSubmit";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
@@ -234,11 +233,6 @@ export default function ClientPortalPage() {
                   photos or videos to any post or reply.
                 </p>
               </a>
-
-              {/* Weekly Programs */}
-              <div className="mt-14 border-t border-bone/10 pt-12">
-                <WeeklyPrograms mode="portal" single />
-              </div>
 
               {/* PR Board submission */}
               <div className="mt-14 border-t border-bone/10 pt-12">

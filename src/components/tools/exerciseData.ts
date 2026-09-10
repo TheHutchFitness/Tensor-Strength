@@ -1370,6 +1370,38 @@ export const exercises: Exercise[] = [
   { id: "iso6", name: "Bar Hang (Dead Hang)", muscle: "BACK", categories: ["CALISTHENICS"], description: "Isometric grip and shoulder decompression hold — builds grip and healthy shoulders." },
   { id: "iso7", name: "Copenhagen Plank", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Side-plank with top leg on a bench — powerful adductor and groin isometric." },
   { id: "iso8", name: "Spanish Squat Hold", muscle: "LEGS", categories: ["CALISTHENICS"], description: "Band-behind-knees isometric squat hold — knee-friendly quad tension and tendon health." },
+
+  // ===== THE HUTCH TOUCH — main-lift variations + program movements =====
+  // Bench variation progression
+  { id: "ht_bench1", name: "Larsen Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Bench press with the legs off the floor / extended — no leg drive. Builds upper-body control and tension. Hutch Touch bench progression #1." },
+  { id: "ht_bench2", name: "Tempo Bench Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Bench with a prescribed slow eccentric — builds position and control. Hutch Touch bench progression #2." },
+  { id: "ht_bench3", name: "Spoto Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Pause the bar just off the chest without touching — own the hover, no sink. Hutch Touch bench progression #3." },
+  { id: "ht_bench4", name: "HBT Bench Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Hanging Band Technique bench — plates on bands add instability, forcing tight force organization. Hutch Touch bench progression #4." },
+  { id: "ht_bench5", name: "Floor Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Bench pressed from the floor with a dead-stop at the triceps — mid-range strength and control. Hutch Touch bench progression #6." },
+  { id: "ht_bench6", name: "Pin Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Press from pins set at a weak range — builds starting strength and overload. Hutch Touch bench progression #7." },
+  { id: "ht_bench7", name: "Banded Bench Press", muscle: "CHEST", categories: ["POWERLIFTING"], description: "Bands add accommodating resistance toward lockout — accelerate through the top. Hutch Touch bench progression #8." },
+  // Squat variation rotation
+  { id: "ht_squat1", name: "Front HBT Squat", muscle: "LEGS", categories: ["POWERLIFTING"], description: "Front-rack squat with Hanging Band Technique — front-loaded stability and bracing. Hutch Touch squat rotation." },
+  { id: "ht_squat2", name: "Zombie Squat", muscle: "LEGS", categories: ["POWERLIFTING"], description: "Front squat with arms extended forward and no hand support — upper-back position and torso control. Hutch Touch squat rotation." },
+  { id: "ht_squat3", name: "Box SSB Squat", muscle: "LEGS", categories: ["POWERLIFTING"], description: "Safety-bar squat to a box — positional strength and a controlled reversal. Hutch Touch squat rotation." },
+  { id: "ht_squat4", name: "Tempo Squat", muscle: "LEGS", categories: ["POWERLIFTING"], description: "Squat with a prescribed tempo — control through the full range. Hutch Touch squat rotation." },
+  { id: "ht_squat5", name: "Back HBT Squat", muscle: "LEGS", categories: ["POWERLIFTING"], description: "Back squat with Hanging Band Technique — the back-squat pattern under instability. Hutch Touch squat rotation." },
+  // Secondary deadlift / hinge rotation
+  { id: "ht_dl1", name: "Dumbbell BOSU RDL", muscle: "LEGS", categories: [], description: "Romanian deadlift with dumbbells while standing on a BOSU — stability and hinge control; never chased to failure. Hutch Touch hinge rotation." },
+  { id: "ht_dl2", name: "Banded Conventional Deadlift", muscle: "BACK", categories: ["POWERLIFTING"], description: "Conventional deadlift with band tension — power and force through the lockout. Hutch Touch hinge rotation." },
+  { id: "ht_dl3", name: "Sumo Rack Pull", muscle: "BACK", categories: ["POWERLIFTING"], description: "Sumo-stance rack pull from pins — overload the lockout with a wide stance. Hutch Touch hinge rotation." },
+  // Accessories + warm-up movements specific to the program
+  { id: "ht_acc1", name: "Tibialis Raise", muscle: "LEGS", categories: [], description: "Dorsiflexion raise for the tibialis anterior — knee health and lower-leg balance." },
+  { id: "ht_acc2", name: "Kelso Shrug", muscle: "BACK", categories: [], description: "Scapular-retraction shrug performed on a row — primes the upper back without arm dominance." },
+  { id: "ht_acc3", name: "Hip Abduction (Machine)", muscle: "LEGS", categories: [], description: "Seated machine abduction — glute medius and outer-hip strength." },
+  { id: "ht_acc4", name: "Hip Adduction (Machine)", muscle: "LEGS", categories: [], description: "Seated machine adduction — inner-thigh / adductor strength." },
+  { id: "ht_acc5", name: "Weighted Dip", muscle: "CHEST", categories: ["CALISTHENICS"], description: "Dip loaded with a belt or dumbbell — chest and triceps pressing strength." },
+  { id: "ht_acc6", name: "Landmine Rotation", muscle: "CORE", categories: [], description: "Hand-to-hand landmine rotation — explosive anti-rotation and rotational power." },
+  { id: "ht_acc7", name: "Rotator Cuff External Rotation", muscle: "SHOULDERS", categories: ["STRETCH"], description: "Band or cable external rotation — shoulder health and cuff strength." },
+  { id: "ht_acc8", name: "Scapular Pull-Up", muscle: "BACK", categories: ["CALISTHENICS"], description: "Hang and pull the shoulder blades down without bending the elbows — scapular control for pulling." },
+  { id: "ht_acc9", name: "Terminal Knee Extension (TKE)", muscle: "LEGS", categories: ["STRETCH"], description: "Band-resisted knee lockout — VMO activation and knee prep." },
+  { id: "ht_acc10", name: "Jump Lunge", muscle: "LEGS", categories: ["PLYOMETRIC"], description: "Alternating split-jump lunges — explosive single-leg power and warm-up prep." },
+  { id: "ht_acc11", name: "Band Pull-Apart", muscle: "SHOULDERS", categories: ["STRETCH"], description: "Pull a band apart at chest height — rear delts and upper-back activation." },
 ];
 
 export type Split = {

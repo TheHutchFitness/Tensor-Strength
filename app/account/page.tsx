@@ -249,6 +249,16 @@ export default function AccountPage() {
                           <p className={"text-[10px] uppercase tracking-wider " + (t.paymentStatus === "paid" ? "text-electric" : "text-bone/40")}>
                             {t.paymentStatus || t.status}
                           </p>
+                          {(t.paymentStatus === "paid" || t.status === "complete") && (
+                            <a
+                              href={`/api/billing/invoice?id=${encodeURIComponent(t.id)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block mt-1 text-[10px] uppercase tracking-wider text-bone/70 underline underline-offset-2 hover:text-electric transition-colors"
+                            >
+                              Download receipt ↓
+                            </a>
+                          )}
                         </div>
                       </div>
                     ))}
