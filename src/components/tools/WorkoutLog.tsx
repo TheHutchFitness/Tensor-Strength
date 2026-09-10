@@ -178,6 +178,16 @@ export default function WorkoutLog() {
   const [variations, setVariations] = useState<VarState>({ bench: 0, squat: 0, deadlift: 0 });
   // The Hutch Touch session currently loaded into the tracker (for auto-advance on save).
   const [loadedHutchId, setLoadedHutchId] = useState<HutchTouchSessionId | null>(null);
+  // Readiness check: which session we're about to load (drives the prompt), and
+  // how the last-loaded session was flagged (light days don't advance variations).
+  const [readinessFor, setReadinessFor] = useState<HutchTouchSessionId | null>(null);
+  const [loadedReadiness, setLoadedReadiness] = useState<"green" | "yellow" | "light">("green");
+
+  // Show the readiness check before actually loading a session.
+  function promptReadiness(sid: HutchTouchSessionId) {
+    setHutchOpen(false);
+    setReadinessFor(sid);
+  }
   const [htSession, setHtSession] = useState<HutchTouchSessionId>("push");
 
   // Find what the athlete lifted last time for a given movement (by exact name,
@@ -196,7 +206,7 @@ export default function WorkoutLog() {
     return null;
   }
 
-  function loadHutchTouchSession(explicitId?: HutchTouchSessionId) {
+  function loadHutchTouchSession(explicitId?: HutchTouchSessionId, readiness: "green" | "yellow" | "light" = "green") {
     const sid = explicitId ?? htSession;
     const s = hutchTouchSessions.find((x) => x.id === sid);
     if (!s) return;
@@ -251,8 +261,18 @@ export default function WorkoutLog() {
       };
     });
     setSession([...warmups, ...work]);
-    setSessionTitle(`The Hutch Touch — ${s.title}`);
+    const suffix = readiness === "yellow" ? " (deload)" : readiness === "light" ? " (light)" : "";
+    setSessionTitle(`The Hutch Touch — ${s.title}${suffix}`);
+    setSessionNotes(
+      readiness === "yellow"
+        ? "Yellow / a bit sore — back the working load off about 10% and stay ~1 RPE shy of the targets. Quality reps over grinding."
+        : readiness === "light"
+        ? "Light / technique day — very sore or run down. Keep loads easy, focus on movement quality and blood flow, and skip anything that hurts."
+        : ""
+    );
+    setLoadedReadiness(readiness);
     setLoadedHutchId(s.id);
+    setReadinessFor(null);
     setActiveSplitId(null);
     setCurrentTemplateId(null);
     setHutchOpen(false);
@@ -366,7 +386,7 @@ export default function WorkoutLog() {
   const nextHutch = useMemo(() => {
     let lastId: HutchTouchSessionId | null = null;
     for (const w of workouts) {
-      const found = hutchTouchSessions.find((s) => `The Hutch Touch — ${s.title}` === w.title);
+      const found = hutchTouchSessions.find((s) => w.title.startsWith(`The Hutch Touch — ${s.title}`));
       if (found) {
         lastId = found.id;
         break;
@@ -631,8 +651,10 @@ export default function WorkoutLog() {
     if (loadedHutchId) {
       const ml = HUTCH_MAIN_LIFT[loadedHutchId];
       const sess = hutchTouchSessions.find((x) => x.id === loadedHutchId);
-      const titleMatches = !!sess && w.title === `The Hutch Touch — ${sess.title}`;
-      if (ml && titleMatches) {
+      const titleMatches = !!sess && w.title.startsWith(`The Hutch Touch — ${sess.title}`);
+      // Light / technique days don't count as completing the prescribed work, so
+      // they don't advance the variation.
+      if (ml && titleMatches && loadedReadiness !== "light") {
         const idx = (variations[ml.key] || 0) % ml.progression.length;
         const curName = ml.progression[idx].variation.trim().toLowerCase();
         const didLift = clean.some((e) => e.name.trim().toLowerCase() === curName);
@@ -852,7 +874,7 @@ export default function WorkoutLog() {
               <span className="text-bone/90">{nextHutch.next.title}</span>
             </p>
             <button
-              onClick={() => loadHutchTouchSession(nextHutch.next.id)}
+              onClick={() => promptReadiness(nextHutch.next.id)}
               className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap"
             >
               Load {nextHutch.next.title} →
@@ -957,7 +979,7 @@ export default function WorkoutLog() {
             </div>
 
             <button
-              onClick={() => loadHutchTouchSession()}
+              onClick={() => promptReadiness(htSession)}
               className="w-full bg-electric text-ink py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
             >
               Load {hutchTouchSessions.find((x) => x.id === htSession)?.title} →
@@ -965,6 +987,81 @@ export default function WorkoutLog() {
           </div>
         </div>
       )}
+
+      {/* READINESS CHECK MODAL */}
+      {readinessFor && (() => {
+        const sess = hutchTouchSessions.find((x) => x.id === readinessFor);
+        if (!sess) return null;
+        const nextAfterId = HUTCH_ORDER[(HUTCH_ORDER.indexOf(readinessFor) + 1) % HUTCH_ORDER.length];
+        const nextAfter = hutchTouchSessions.find((x) => x.id === nextAfterId);
+        return (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="relative w-full max-w-md bg-[#0a0420] border-2 border-electric p-6">
+              <div className="flex items-center justify-between mb-2">
+                <p className="glow font-display uppercase tracking-wider text-electric">Readiness check</p>
+                <button onClick={() => setReadinessFor(null)} className="text-bone/60 hover:text-electric text-xl">✕</button>
+              </div>
+              <p className="text-sm text-bone/70 mb-5 leading-relaxed">
+                Before <span className="text-bone/90">{sess.title}</span> — how recovered are the muscles you&apos;re
+                about to train?
+              </p>
+
+              <div className="grid gap-3">
+                {/* GREEN */}
+                <button
+                  onClick={() => loadHutchTouchSession(readinessFor, "green")}
+                  className="text-left border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors p-4"
+                >
+                  <span className="flex items-center gap-2 font-display uppercase tracking-wider text-sm text-emerald-300">
+                    <span className="h-3 w-3 rounded-full bg-emerald-400" /> Green — fresh &amp; recovered
+                  </span>
+                  <span className="block text-xs text-bone/60 mt-1 leading-relaxed">
+                    Load as prescribed and push your working sets to the target RPE.
+                  </span>
+                </button>
+
+                {/* YELLOW */}
+                <button
+                  onClick={() => loadHutchTouchSession(readinessFor, "yellow")}
+                  className="text-left border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors p-4"
+                >
+                  <span className="flex items-center gap-2 font-display uppercase tracking-wider text-sm text-amber-300">
+                    <span className="h-3 w-3 rounded-full bg-amber-400" /> Yellow — a bit sore / average
+                  </span>
+                  <span className="block text-xs text-bone/60 mt-1 leading-relaxed">
+                    Keep the session but back the load off ~10% and stay ~1 RPE shy. Quality over grinding.
+                  </span>
+                </button>
+
+                {/* RED */}
+                <div className="border border-red-500/40 bg-red-500/10 p-4">
+                  <span className="flex items-center gap-2 font-display uppercase tracking-wider text-sm text-red-300">
+                    <span className="h-3 w-3 rounded-full bg-red-500" /> Red — very sore / run down
+                  </span>
+                  <span className="block text-xs text-bone/60 mt-1 mb-3 leading-relaxed">
+                    Don&apos;t grind it. Move to the next session, or keep today light and technical.
+                  </span>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <button
+                      onClick={() => loadHutchTouchSession(nextAfterId, "green")}
+                      className="bg-electric text-ink px-3 py-2 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors"
+                    >
+                      Skip to {nextAfter?.title} →
+                    </button>
+                    <button
+                      onClick={() => loadHutchTouchSession(readinessFor, "light")}
+                      className="border border-bone/30 text-bone/80 px-3 py-2 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone transition-colors"
+                    >
+                      Train light today
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {session.length > 0 && (
         <div className="border-t border-bone/15 pt-8">
           <div className="flex items-center justify-between mb-4">
