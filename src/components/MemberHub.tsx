@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Calculator, FileText, MessageSquare, LayoutDashboard, Lock, X } from "lucide-react";
+import CheckoutButton from "@/components/CheckoutButton";
 
 type Me = {
   username?: string;
@@ -102,12 +103,20 @@ export default function MemberHub() {
                 </span>
               ))}
             </p>
-            <a
-              href="/#pricing"
-              className="mt-4 inline-flex bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
-            >
-              Upgrade my account →
-            </a>
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <CheckoutButton
+                packageId="monthly_9_99"
+                className="inline-flex bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
+              >
+                Upgrade my account · $9.99/mo →
+              </CheckoutButton>
+              <a
+                href="/#pricing"
+                className="font-display uppercase tracking-wider text-xs text-bone/60 hover:text-electric transition-colors"
+              >
+                See all plans
+              </a>
+            </div>
           </div>
         )}
       </div>
