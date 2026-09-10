@@ -8,6 +8,7 @@ export default function BillingSuccessPage() {
   const [state, setState] = useState<"checking" | "paid" | "pending" | "error">(
     "checking"
   );
+  const [toast, setToast] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,6 +30,8 @@ export default function BillingSuccessPage() {
         if (stopped) return;
         if (data.paid) {
           setState("paid");
+          setToast(true);
+          setTimeout(() => setToast(false), 6000);
           return;
         }
         if (++attempts >= 25) {
@@ -130,6 +133,31 @@ export default function BillingSuccessPage() {
           )}
         </div>
       </main>
+
+      {/* Unlock confirmation toast */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={
+          "fixed z-[60] left-1/2 -translate-x-1/2 bottom-6 w-[92%] max-w-sm transition-all duration-500 " +
+          (toast ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none")
+        }
+      >
+        <div className="flex items-center gap-3 border-2 border-electric bg-ink/95 backdrop-blur px-5 py-4 shadow-2xl shadow-electric/20">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-electric text-ink font-display text-lg">
+            ✓
+          </span>
+          <div>
+            <p className="font-display uppercase tracking-wider text-sm text-electric leading-tight">
+              Welcome — your portal is unlocked
+            </p>
+            <p className="text-xs text-bone/70 mt-0.5">
+              Everything just opened up. Time to train.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <Footer />
     </>
   );
