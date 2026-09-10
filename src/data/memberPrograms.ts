@@ -10,6 +10,7 @@ export type MemberProgram = {
   blurb: string;
   length: string;
   howTo: string;
+  deloadable?: boolean;
   sessions: MPSession[];
 };
 
@@ -20,6 +21,7 @@ export const memberPrograms: MemberProgram[] = [
     blurb: "Daily Undulating Periodization — hit the big lifts several times a week at rotating rep ranges (heavy, moderate, volume) to drive strength fast.",
     length: "4 weeks · 4 days/week",
     howTo: "Run days A–D each week. Add ~2.5–5 lb to a lift whenever you hit all reps at the target RPE. Repeat the 4-week block.",
+    deloadable: true,
     sessions: [
       { id: "a", title: "Day A — Heavy (Triples)", exercises: [
         { exercise: "Back Squat", sets: "4", reps: "3", rpe: "8", notes: "Heavy day. Leave 2 reps in the tank." },
@@ -76,6 +78,7 @@ export const memberPrograms: MemberProgram[] = [
     blurb: "A high-volume, bodybuilding-style split for maximum muscle growth. Lots of sets, controlled reps, short rest.",
     length: "4 weeks · 4 days/week",
     howTo: "Run Push / Pull / Legs / Upper each week. Chase the top of each rep range with 1–2 reps left, then add reps or load. Keep rest 60–90s on accessories.",
+    deloadable: true,
     sessions: [
       { id: "push", title: "Push (Chest / Shoulders / Triceps)", exercises: [
         { exercise: "Incline Bench Press", sets: "4", reps: "8-12", rpe: "8", notes: "" },
