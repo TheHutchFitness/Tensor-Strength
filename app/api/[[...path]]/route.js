@@ -1255,6 +1255,65 @@ async function handleRoute(request, { params }) {
       }))
     }
 
+    // ---- Coaching applications ----
+    // Public submission (no auth, no Google sign-in required)
+    if (route === '/applications' && method === 'POST') {
+      const body = await request.json().catch(() => ({}))
+      const name = (body.name || '').toString().trim()
+      const email = (body.email || '').toString().trim()
+      if (!name || !email) {
+        return handleCORS(NextResponse.json({ error: 'Name and email are required' }, { status: 400 }))
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return handleCORS(NextResponse.json({ error: 'Please enter a valid email' }, { status: 400 }))
+      }
+      const application = {
+        id: uuidv4(),
+        name,
+        email,
+        phone: (body.phone || '').toString().trim(),
+        focus: (body.focus || '').toString().trim(),         // remote / in_person / custom / not_sure
+        experience: (body.experience || '').toString().trim(),
+        goals: (body.goals || '').toString().trim().slice(0, 4000),
+        injuries: (body.injuries || '').toString().trim().slice(0, 4000),
+        status: 'new',
+        createdAt: new Date(),
+      }
+      await db.collection('applications').insertOne(application)
+      const { _id, ...safe } = application
+      return handleCORS(NextResponse.json({ ok: true, application: safe }))
+    }
+
+    // Admin: list applications
+    if (route === '/applications' && method === 'GET') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const apps = await db.collection('applications')
+        .find({}, { projection: { _id: 0 } })
+        .sort({ createdAt: -1 })
+        .toArray()
+      return handleCORS(NextResponse.json({ applications: apps }))
+    }
+
+    // Admin: update an application's status (new / reviewed / archived)
+    if (route === '/applications' && method === 'PUT') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json().catch(() => ({}))
+      const { id, status } = body
+      if (!id || !['new', 'reviewed', 'archived'].includes(status)) {
+        return handleCORS(NextResponse.json({ error: 'Invalid request' }, { status: 400 }))
+      }
+      await db.collection('applications').updateOne({ id }, { $set: { status } })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+
+
 
     if (route === '/professionals' && method === 'GET') {
       const list = await db.collection('users')

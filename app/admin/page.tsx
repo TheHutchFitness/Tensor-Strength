@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [codes, setCodes] = useState<any[]>([]);
   const [demoStats, setDemoStats] = useState<{ opens: any[]; signups: any[] }>({ opens: [], signups: [] });
+  const [apps, setApps] = useState<any[]>([]);
   const [form, setForm] = useState({ code: "", percentOff: "100", duration: "once", durationInMonths: "3" });
   const [creating, setCreating] = useState(false);
 
@@ -199,10 +200,20 @@ export default function AdminPage() {
       await loadUsers();
       await loadCodes();
       await loadCoaching();
+      fetch("/api/applications").then((r) => (r.ok ? r.json() : null)).then((d) => d && setApps(d.applications || [])).catch(() => {});
       fetch("/api/admin/demo-analytics").then((r) => (r.ok ? r.json() : null)).then((d) => d && setDemoStats(d)).catch(() => {});
       setLoading(false);
     })();
   }, []);
+
+  async function setAppStatus(id: string, status: string) {
+    setApps((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+    await fetch("/api/applications", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    }).catch(() => {});
+  }
 
   async function resetPassword(u: User) {
     const pw = window.prompt(`Set a new password for ${u.username} (6+ characters):`);
@@ -297,6 +308,93 @@ export default function AdminPage() {
             <>
               <div className="mt-12 mb-4 pb-8 border-b border-bone/15">
                 <AdminTools />
+              </div>
+
+              {/* Coaching applications */}
+              <div className="mt-10 mb-4 pb-10 border-b border-bone/15">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-2">
+                  Applications
+                </p>
+                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight mb-2">
+                  Coaching{" "}
+                  <span className="text-electric">applications.</span>
+                  {apps.filter((a) => a.status === "new").length > 0 && (
+                    <span className="ml-3 align-middle text-sm bg-electric text-ink px-2 py-1 font-display">
+                      {apps.filter((a) => a.status === "new").length} new
+                    </span>
+                  )}
+                </h2>
+                <p className="text-bone/60 text-sm mb-6">
+                  Submitted from the public Apply page. No Google sign-in needed.
+                </p>
+
+                {apps.length === 0 ? (
+                  <p className="text-bone/50 font-display uppercase tracking-wider text-sm">
+                    No applications yet.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {apps.map((a) => (
+                      <div
+                        key={a.id}
+                        className={
+                          "border bg-ink/30 p-5 " +
+                          (a.status === "new" ? "border-electric/50" : "border-bone/15") +
+                          (a.status === "archived" ? " opacity-50" : "")
+                        }
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-display uppercase text-lg text-bone">
+                              {a.name}
+                              <span className="ml-2 text-xs text-bone/40 normal-case tracking-normal">
+                                {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""}
+                              </span>
+                            </p>
+                            <p className="text-sm text-electric">
+                              <a href={`mailto:${a.email}`} className="hover:underline">{a.email}</a>
+                              {a.phone ? <span className="text-bone/60"> · {a.phone}</span> : null}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            {["new", "reviewed", "archived"].map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setAppStatus(a.id, s)}
+                                className={
+                                  "px-3 py-1.5 text-[10px] font-display uppercase tracking-wider border transition-colors " +
+                                  (a.status === s
+                                    ? "bg-electric text-ink border-electric"
+                                    : "border-bone/25 text-bone/60 hover:border-bone hover:text-bone")
+                                }
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-display uppercase tracking-wider">
+                          {a.focus && (
+                            <span className="border border-bone/20 px-2 py-1 text-bone/70">{a.focus.replace("_", " ")}</span>
+                          )}
+                          {a.experience && (
+                            <span className="border border-bone/20 px-2 py-1 text-bone/70">{a.experience}</span>
+                          )}
+                        </div>
+                        {a.goals && (
+                          <p className="mt-3 text-sm text-bone/80 leading-relaxed whitespace-pre-line">
+                            <span className="text-bone/40">Goals: </span>{a.goals}
+                          </p>
+                        )}
+                        {a.injuries && (
+                          <p className="mt-2 text-sm text-bone/70 leading-relaxed whitespace-pre-line">
+                            <span className="text-bone/40">Injuries: </span>{a.injuries}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="border border-bone/15 bg-ink/30 p-5">
