@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import WeeklyPrograms from "@/components/WeeklyPrograms";
 import HutchTouch from "@/components/HutchTouch";
+import SiteTabBar from "@/components/SiteTabBar";
 
 export default function ProgramsPage() {
   return (
@@ -14,6 +15,7 @@ export default function ProgramsPage() {
         <HutchTouch mode="public" />
       </main>
       <Footer />
+      <SiteTabBar />
     </>
   );
 }

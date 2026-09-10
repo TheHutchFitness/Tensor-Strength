@@ -2194,6 +2194,43 @@ async function handleRoute(request, { params }) {
       }))
     }
 
+    // ---- Member: cancel their own subscription (at period end) ----
+    if (route === '/subscription/cancel' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) {
+        return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      }
+      if (!user.stripeSubscriptionId) {
+        return handleCORS(NextResponse.json({ error: 'No active subscription found on your account.' }, { status: 400 }))
+      }
+      try {
+        const params = new URLSearchParams()
+        params.set('cancel_at_period_end', 'true')
+        const r = await fetch(`${STRIPE_BASE}/subscriptions/${user.stripeSubscriptionId}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${STRIPE_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        })
+        const data = await r.json()
+        if (!r.ok) throw new Error(data?.error?.message || 'Stripe cancel failed')
+        await db.collection('users').updateOne(
+          { id: user.id },
+          { $set: { subscriptionStatus: 'canceling', subscriptionCancelAt: data.cancel_at ? new Date(data.cancel_at * 1000) : null } }
+        )
+        return handleCORS(NextResponse.json({
+          ok: true,
+          cancelAtPeriodEnd: true,
+          cancelAt: data.cancel_at ? new Date(data.cancel_at * 1000) : null,
+        }))
+      } catch (e) {
+        return handleCORS(NextResponse.json({ error: e.message || 'Could not cancel subscription.' }, { status: 500 }))
+      }
+    }
+
+
     // ---------------- HUTCH TOUCH FILES (gated — portal access only) ----------------
     if ((route === '/hutch-touch/pdf' || route === '/hutch-touch/tracker') && method === 'GET') {
       const user = await getCurrentUser(request, db)

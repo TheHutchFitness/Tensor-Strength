@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const links = [
-  { href: "/#about", label: "About" },
+  { href: "/meet-the-team", label: "About" },
   { href: "/#library", label: "Library" },
   { href: "/programs", label: "Free Programs" },
   { href: "/free-tools", label: "Free Tools" },
@@ -14,9 +14,8 @@ const links = [
 const menus = [
   {
     label: "About",
-    href: "/#about",
+    href: "/meet-the-team",
     items: [
-      { href: "/#about", label: "Our Approach" },
       { href: "/meet-the-team", label: "Meet the Team" },
       { href: "/#pricing", label: "Pricing" },
     ],
@@ -26,7 +25,6 @@ const menus = [
     href: "/#library",
     items: [
       { href: "/#library", label: "The Library" },
-      { href: "/#pr-board", label: "PR Board" },
       { href: "/forum", label: "Community Forum" },
     ],
   },
@@ -35,8 +33,7 @@ const menus = [
     href: "/programs",
     items: [
       { href: "/programs", label: "Free Programs" },
-      { href: "/#program-finder", label: "Program Finder" },
-      { href: "/#program", label: "Custom Program" },
+      { href: "/apply", label: "Custom Program" },
     ],
   },
   {
@@ -151,6 +148,14 @@ export default function Navbar() {
           )}
           {me ? (
             <li className="flex items-center gap-3">
+              {!me.portalAccess && me.role !== "admin" && (
+                <a
+                  href="/#pricing"
+                  className="bg-electric text-ink px-4 py-2 font-display uppercase text-xs tracking-wider hover:bg-bone transition-colors"
+                >
+                  Upgrade
+                </a>
+              )}
               <span className="font-display uppercase text-xs tracking-wider text-bone/60">
                 {me.username}
               </span>

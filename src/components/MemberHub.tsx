@@ -8,6 +8,7 @@ type Me = {
   username?: string;
   portalAccess?: boolean;
   accessType?: string;
+  subscriptionStatus?: string;
   role?: string;
 } | null;
 
@@ -24,6 +25,8 @@ export default function MemberHub() {
   const [me, setMe] = useState<Me>(null);
   const [loaded, setLoaded] = useState(false);
   const [dismissed, setDismissed] = useState(true);
+  const [cancelState, setCancelState] = useState<"idle" | "confirm" | "canceling" | "done" | "error">("idle");
+  const [cancelMsg, setCancelMsg] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -49,6 +52,25 @@ export default function MemberHub() {
       localStorage.setItem("ts_upgrade_dismissed", "1");
     } catch {}
   }
+
+  async function cancelSub() {
+    setCancelState("canceling");
+    try {
+      const res = await fetch("/api/subscription/cancel", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCancelMsg(data.error || "Couldn't cancel — please try again.");
+        setCancelState("error");
+        return;
+      }
+      setCancelState("done");
+    } catch {
+      setCancelMsg("Network error — please try again.");
+      setCancelState("error");
+    }
+  }
+
+  const isSubscribed = hasPortal && me.accessType !== "custom_program";
 
   return (
     <section className="border-b border-bone/10 bg-ink/40">
@@ -117,6 +139,88 @@ export default function MemberHub() {
                 See all plans
               </a>
             </div>
+          </div>
+        )}
+
+        {/* Onboarding checklist for new free members */}
+        {!hasPortal && (
+          <div className="mt-6 border border-bone/15 bg-ink/40 p-5">
+            <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-4">
+              Get started
+            </p>
+            <ul className="space-y-3">
+              {[
+                { n: "1", t: "Try a free tool", d: "Calculators, macros & trackers", href: "/free-tools" },
+                { n: "2", t: "Join the community", d: "Ask questions, share wins", href: "/forum" },
+                { n: "3", t: "Unlock the Client Portal", d: "Workout log, programs & check-ins", href: "/#pricing" },
+              ].map((s) => (
+                <li key={s.n}>
+                  <a href={s.href} className="group flex items-center gap-4">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-electric text-electric font-display text-sm">
+                      {s.n}
+                    </span>
+                    <span className="flex-1">
+                      <span className="font-display uppercase tracking-wider text-sm text-bone group-hover:text-electric transition-colors">
+                        {s.t}
+                      </span>
+                      <span className="block text-xs text-bone/50">{s.d}</span>
+                    </span>
+                    <span className="text-electric group-hover:translate-x-1 transition-transform">→</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Account / manage subscription for members */}
+        {isSubscribed && (
+          <div className="mt-6 border border-bone/15 bg-ink/40 p-5">
+            <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-2">
+              Your Account
+            </p>
+            {cancelState === "done" ? (
+              <p className="text-sm text-bone/80 leading-relaxed">
+                Your membership is set to cancel at the end of the current billing period. You&apos;ll
+                keep access until then. Changed your mind?{" "}
+                <a href="/#pricing" className="text-electric hover:underline">Resubscribe</a>.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-bone/70 leading-relaxed max-w-2xl">
+                  Membership active. You can cancel anytime — you&apos;ll keep access until the end of
+                  your current billing period.
+                </p>
+                {cancelState === "idle" || cancelState === "error" ? (
+                  <button
+                    onClick={() => setCancelState("confirm")}
+                    className="mt-3 border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-red-400 hover:text-red-400 transition-colors"
+                  >
+                    Cancel subscription
+                  </button>
+                ) : (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="text-sm text-bone/80">Are you sure?</span>
+                    <button
+                      onClick={cancelSub}
+                      disabled={cancelState === "canceling"}
+                      className="bg-red-500 text-ink px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-red-400 transition-colors disabled:opacity-60"
+                    >
+                      {cancelState === "canceling" ? "Cancelling…" : "Yes, cancel"}
+                    </button>
+                    <button
+                      onClick={() => setCancelState("idle")}
+                      className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone transition-colors"
+                    >
+                      Keep it
+                    </button>
+                  </div>
+                )}
+                {cancelState === "error" && (
+                  <p className="mt-2 text-xs text-red-400">{cancelMsg}</p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

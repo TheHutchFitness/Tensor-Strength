@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { professionals, type Professional } from "@/data/professionals";
+import SiteTabBar from "@/components/SiteTabBar";
 
 type DbPro = {
   slug: string;
@@ -161,6 +162,7 @@ export default function MeetTheTeamPage() {
         </section>
       </main>
       <Footer />
+      <SiteTabBar />
     </>
   );
 }

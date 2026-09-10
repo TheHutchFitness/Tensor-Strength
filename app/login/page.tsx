@@ -168,6 +168,18 @@ export default function LoginPage() {
               ? "Sign In →"
               : "Create Account →"}
           </button>
+
+          {mode === "login" && (
+            <p className="mt-3 text-center text-xs text-bone/50">
+              Forgot your password?{" "}
+              <a
+                href="mailto:the9hutch@gmail.com?subject=Password%20reset%20request"
+                className="text-electric hover:underline"
+              >
+                Ask your coach to reset it
+              </a>
+            </p>
+          )}
         </form>
 
         <div className="mt-6 flex items-center gap-4">

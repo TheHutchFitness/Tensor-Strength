@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import PortalHeader from "@/components/portal/PortalHeader";
 import Tour from "@/components/portal/Tour";
 import Footer from "@/components/Footer";
+import SiteTabBar from "@/components/SiteTabBar";
 
 type Media = { url: string; type: "image" | "video" } | null;
 type Reactions = Record<string, string[]>;
@@ -1020,6 +1021,7 @@ export default function ForumPage() {
         </div>
       </main>
       <Footer />
+      <SiteTabBar />
     </>
   );
 }
