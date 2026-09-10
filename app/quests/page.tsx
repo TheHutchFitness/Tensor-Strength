@@ -5,7 +5,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SiteTabBar from "@/components/SiteTabBar";
 import Avatar from "@/components/Avatar";
-import { AVATARS, TITLES, titleById } from "@/data/gamification";
+import { AVATARS, TITLES, titleById, LEVEL_REWARDS } from "@/data/gamification";
 
 type XP = { total: number; level: number; into: number; needed: number; nextLevelAt: number };
 type Quest = { id: string; period: string; title: string; desc: string; xp: number; target?: number; metric?: string };
@@ -18,7 +18,11 @@ type Game = {
   unlocked: { avatars: string[]; titles: string[] };
   claims: Record<string, string>;
   quests: Quest[];
+  goalQuests: Quest[];
   customQuests: Quest[];
+  streak: number;
+  badges: { id: string; name: string; emoji: string; desc: string; xp: number }[];
+  earnedBadges: string[];
 };
 
 type Workout = { id: string; date?: string; title?: string };
@@ -64,18 +68,28 @@ export default function QuestsPage() {
     const sow = startOfWeek(now);
     const som = new Date(now.getFullYear(), now.getMonth(), 1);
     let today = 0, week = 0, month = 0;
+    let setsToday = 0, setsThisWeek = 0, setsThisMonth = 0;
     const rotSet = new Set<string>();
+    const exWeek = new Set<string>();
     for (const w of workouts) {
       const d = w.date ? new Date(w.date) : null;
       if (!d || isNaN(d.getTime())) continue;
-      if (d.toDateString() === now.toDateString()) today++;
+      const exs = ((w as any).exercises || []) as { name?: string; sets?: unknown[] }[];
+      const setCount = exs.reduce((s, e) => s + (Array.isArray(e.sets) ? e.sets.length : 0), 0);
+      if (d.toDateString() === now.toDateString()) { today++; setsToday += setCount; }
       if (d >= sow) {
-        week++;
+        week++; setsThisWeek += setCount;
         if ((w.title || "").startsWith("The Hutch Touch —")) rotSet.add((w.title || "").replace(/\s*\((deload|light)\)$/, ""));
+        exs.forEach((e) => e.name && exWeek.add(String(e.name).toLowerCase()));
       }
-      if (d >= som) month++;
+      if (d >= som) { month++; setsThisMonth += setCount; }
     }
-    return { workoutsToday: today, workoutsThisWeek: week, workoutsThisMonth: month, rotationThisWeek: Math.min(4, rotSet.size) } as Record<string, number>;
+    return {
+      workoutsToday: today, workoutsThisWeek: week, workoutsThisMonth: month,
+      rotationThisWeek: Math.min(4, rotSet.size),
+      setsToday, setsThisWeek, setsThisMonth,
+      exercisesThisWeek: exWeek.size,
+    } as Record<string, number>;
   }, [workouts]);
 
   async function claim(q: Quest, done: boolean) {
@@ -142,6 +156,11 @@ export default function QuestsPage() {
                 {game.xp.into.toLocaleString()} / {game.xp.needed.toLocaleString()} XP to level {game.xp.level + 1} · {game.xp.total.toLocaleString()} total
               </p>
             </div>
+            <div className="text-center px-4">
+              <p className="text-3xl">🔥</p>
+              <p className="font-display uppercase text-2xl leading-none text-electric">{game.streak || 0}</p>
+              <p className="text-[10px] uppercase tracking-wider text-bone/50">day streak</p>
+            </div>
           </div>
 
           {!game.isPaid && (
@@ -151,12 +170,32 @@ export default function QuestsPage() {
             </div>
           )}
 
+          {/* Level rewards roadmap — advertised to every member */}
+          <h2 className="font-display uppercase text-2xl mt-8 mb-2">Level Up, Get Rewarded</h2>
+          <p className="text-xs text-bone/50 mb-4">Real perks for dedicated members. Your discount is sent to you once you hit the level.</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {LEVEL_REWARDS.map((r) => {
+              const reached = game.xp.level >= r.level;
+              return (
+                <div key={r.level} className={"relative border-2 p-5 text-center " + (reached ? "border-electric bg-electric/10" : "border-bone/15 bg-ink/30")}>
+                  <p className="text-3xl">{r.emoji}</p>
+                  <p className="font-display uppercase tracking-wider text-electric text-lg mt-1">Level {r.level}</p>
+                  <p className="font-display uppercase text-xl text-bone mt-1">{r.reward}</p>
+                  <p className={"mt-2 text-[10px] uppercase tracking-wider " + (reached ? "text-electric" : "text-bone/40")}>
+                    {reached ? (game.isPaid ? "Unlocked ✓ — your code is on its way" : "Unlocked — upgrade to claim") : `${(1000 * (r.level - 1) * r.level) / 2 - game.xp.total > 0 ? ((1000 * (r.level - 1) * r.level) / 2 - game.xp.total).toLocaleString() : 0} XP to go`}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11px] text-bone/40">Discount codes are issued personally by your coach when you reach each level — no spam, no auto-charges.</p>
+
           {msg && <div className="mt-4 border border-electric bg-electric/10 p-3 text-center font-display uppercase tracking-wider text-sm text-electric">{msg}</div>}
 
           {/* Quests */}
           <h2 className="font-display uppercase text-2xl mt-10 mb-4">Your Quests</h2>
           <div className="grid gap-3">
-            {[...game.quests, ...game.customQuests].map((q) => {
+            {[...game.quests, ...(game.goalQuests || []), ...game.customQuests].map((q) => {
               const prog = q.metric ? progressFor(q) : (periodClaimed(q) ? 1 : 0);
               const target = q.target || 1;
               const done = q.metric ? prog >= target : true; // custom quests are self-marked
@@ -240,6 +279,25 @@ export default function QuestsPage() {
             })}
           </div>
 
+          {/* Badges */}
+          <h2 className="font-display uppercase text-2xl mt-12 mb-2">Badges</h2>
+          <p className="text-xs text-bone/50 mb-4">One-off achievements. Earn them once — keep them forever.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {game.badges.map((b) => {
+              const earned = game.earnedBadges.includes(b.id);
+              return (
+                <div key={b.id} className={"flex items-center gap-3 p-3 border " + (earned ? "border-electric/50 bg-electric/5" : "border-bone/10 opacity-60")}>
+                  <span className="text-2xl" style={{ filter: earned ? "none" : "grayscale(1)" }}>{earned ? b.emoji : "🔒"}</span>
+                  <div>
+                    <p className="font-display uppercase tracking-wider text-xs text-bone/90">{b.name}</p>
+                    <p className="text-[10px] text-bone/50">{b.desc}</p>
+                    <p className="text-[10px] text-electric">+{b.xp} XP</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           {/* Leaderboard */}
           <h2 className="font-display uppercase text-2xl mt-12 mb-4">Leaderboard</h2>
           <div className="border border-bone/15 bg-ink/30">
@@ -270,6 +328,13 @@ function CoachQuestForm({ isAdmin, onCreated }: { isAdmin: boolean; onCreated: (
   const [xp, setXp] = useState("100");
   const [scope, setScope] = useState(isAdmin ? "site" : "trainer");
   const [saving, setSaving] = useState(false);
+  const [mine, setMine] = useState<{ id: string; title: string; period: string; xp: number; scope: string; active: boolean }[]>([]);
+
+  async function loadMine() {
+    const r = await fetch("/api/gamification/quests").then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (r?.quests) setMine(r.quests);
+  }
+  useEffect(() => { loadMine(); }, []);
 
   async function create() {
     if (!title.trim()) return;
@@ -281,13 +346,24 @@ function CoachQuestForm({ isAdmin, onCreated }: { isAdmin: boolean; onCreated: (
     });
     setSaving(false);
     setTitle(""); setDesc("");
+    loadMine();
+    onCreated();
+  }
+
+  async function toggle(id: string) {
+    await fetch("/api/gamification/quests/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    loadMine();
     onCreated();
   }
 
   return (
     <div className="mt-8 border-2 border-electric/40 bg-electric/5 p-5">
       <p className="font-display uppercase tracking-wider text-electric text-sm mb-3">
-        Coach tools — create a quest {isAdmin ? "(site-wide or for your clients)" : "(for your clients)"}
+        {isAdmin ? "Admin panel — create quests for members" : "Coach tools — create a quest for your clients"}
       </p>
       <div className="grid sm:grid-cols-2 gap-3">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quest title" className="bg-ink border border-bone/20 px-3 py-2 text-sm" />
@@ -308,6 +384,24 @@ function CoachQuestForm({ isAdmin, onCreated }: { isAdmin: boolean; onCreated: (
       <button onClick={create} disabled={saving} className="mt-3 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors">
         {saving ? "Creating…" : "Create quest →"}
       </button>
+
+      {mine.length > 0 && (
+        <div className="mt-5 border-t border-bone/10 pt-4">
+          <p className="font-display uppercase tracking-wider text-xs text-bone/60 mb-2">Your quests</p>
+          <div className="grid gap-2">
+            {mine.map((q) => (
+              <div key={q.id} className="flex items-center justify-between gap-3 text-sm border border-bone/10 bg-ink/40 px-3 py-2">
+                <span className={q.active ? "text-bone/90" : "text-bone/40 line-through"}>
+                  {q.title} <span className="text-[10px] text-bone/40">· {q.period} · +{q.xp} · {q.scope}</span>
+                </span>
+                <button onClick={() => toggle(q.id)} className="font-display uppercase tracking-wider text-[10px] text-electric hover:underline">
+                  {q.active ? "Deactivate" : "Reactivate"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

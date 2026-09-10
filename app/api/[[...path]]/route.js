@@ -532,9 +532,15 @@ const TITLES = [
 // goals; the server dedupes claims per period so a quest pays out once per cycle.
 const QUEST_DEFS = [
   { id: 'daily_log', period: 'daily', title: 'Log a workout today', desc: 'Record any session in the tracker.', xp: 40, target: 1, metric: 'workoutsToday' },
+  { id: 'daily_sets', period: 'daily', title: 'Grind 20 sets today', desc: 'Rack up 20 working sets in one day.', xp: 60, target: 20, metric: 'setsToday' },
   { id: 'weekly_4', period: 'weekly', title: 'Train 4 times this week', desc: 'Log four workouts (Mon–Sun).', xp: 150, target: 4, metric: 'workoutsThisWeek' },
+  { id: 'weekly_6', period: 'weekly', title: 'Train 6 times this week', desc: 'Six sessions in a week — serious work.', xp: 260, target: 6, metric: 'workoutsThisWeek' },
   { id: 'weekly_rotation', period: 'weekly', title: 'Full Hutch Touch rotation', desc: 'Log all 4 rotation sessions this week.', xp: 200, target: 4, metric: 'rotationThisWeek' },
+  { id: 'weekly_volume', period: 'weekly', title: 'Log 100 sets this week', desc: 'Accumulate 100 working sets across the week.', xp: 200, target: 100, metric: 'setsThisWeek' },
+  { id: 'weekly_variety', period: 'weekly', title: 'Hit 12 different exercises', desc: 'Train 12 distinct movements this week.', xp: 180, target: 12, metric: 'exercisesThisWeek' },
   { id: 'monthly_12', period: 'monthly', title: '12 workouts this month', desc: 'Stay consistent all month long.', xp: 500, target: 12, metric: 'workoutsThisMonth' },
+  { id: 'monthly_20', period: 'monthly', title: '20 workouts this month', desc: 'Elite-level monthly consistency.', xp: 900, target: 20, metric: 'workoutsThisMonth' },
+  { id: 'monthly_sets', period: 'monthly', title: 'Log 400 sets this month', desc: 'Big monthly volume — earn it.', xp: 700, target: 400, metric: 'setsThisMonth' },
 ]
 function periodId(period, d = new Date()) {
   const y = d.getUTCFullYear()
@@ -550,6 +556,42 @@ function unlockedFor(level) {
     avatars: AVATARS.filter(a => a.level <= level).map(a => a.id),
     titles: TITLES.filter(t => t.level <= level).map(t => t.id),
   }
+}
+// One-off achievement badges.
+const BADGES = [
+  { id: 'first_step', name: 'First Step', emoji: '👟', desc: 'Log your first workout', xp: 50 },
+  { id: 'week_warrior', name: 'Week Warrior', emoji: '🔥', desc: 'Reach a 7-day streak', xp: 150 },
+  { id: 'month_monster', name: 'Month Monster', emoji: '🗓️', desc: 'Reach a 30-day streak', xp: 750 },
+  { id: 'half_century', name: 'Half Century', emoji: '💯', desc: 'Log 50 workouts', xp: 300 },
+  { id: 'quest_hunter', name: 'Quest Hunter', emoji: '🎯', desc: 'Complete 10 quests', xp: 200 },
+  { id: 'rising_star', name: 'Rising Star', emoji: '⭐', desc: 'Reach level 5', xp: 250 },
+]
+function evalBadges(stats, earned) {
+  const has = (id) => (earned || []).includes(id)
+  const out = []
+  if (stats.workouts >= 1 && !has('first_step')) out.push('first_step')
+  if (stats.streak >= 7 && !has('week_warrior')) out.push('week_warrior')
+  if (stats.streak >= 30 && !has('month_monster')) out.push('month_monster')
+  if (stats.workouts >= 50 && !has('half_century')) out.push('half_century')
+  if (stats.questClaims >= 10 && !has('quest_hunter')) out.push('quest_hunter')
+  if (stats.level >= 5 && !has('rising_star')) out.push('rising_star')
+  return out
+}
+function badgeXp(ids) { return ids.reduce((s, id) => s + ((BADGES.find(b => b.id === id) || {}).xp || 0), 0) }
+// Goal-based weekly quests generated from the member's signup goals.
+const GOAL_QUESTS = {
+  'Build Muscle': { id: 'goal_muscle', title: 'Build Muscle — 3 sessions', desc: 'Log 3 training sessions this week to drive growth.', target: 3, xp: 120 },
+  'Get Stronger': { id: 'goal_strong', title: 'Get Stronger — 3 heavy sessions', desc: 'Log 3 sessions this week built around the main lifts.', target: 3, xp: 120 },
+  'Lose Fat': { id: 'goal_fat', title: 'Lose Fat — 4 sessions', desc: 'Log 4 sessions this week to keep the routine tight.', target: 4, xp: 150 },
+  'Athletic Performance': { id: 'goal_athletic', title: 'Athletic — 3 sessions', desc: 'Log 3 sessions this week including power / plyo work.', target: 3, xp: 120 },
+  'Stay Consistent': { id: 'goal_consistent', title: 'Consistency — 5 sessions', desc: 'Log 5 sessions this week. Showing up is the win.', target: 5, xp: 180 },
+  'General Health': { id: 'goal_health', title: 'General Health — 3 sessions', desc: 'Log 3 balanced sessions this week.', target: 3, xp: 120 },
+}
+function goalQuestsFor(goals) {
+  return (goals || [])
+    .map(g => GOAL_QUESTS[g])
+    .filter(Boolean)
+    .map(q => ({ ...q, period: 'weekly', metric: 'workoutsThisWeek' }))
 }
 
 export async function OPTIONS() {
@@ -2470,8 +2512,13 @@ async function handleRoute(request, { params }) {
         unlocked,
         claims: user.questClaims || {},
         avatars: AVATARS, titles: TITLES,
-        quests: QUEST_DEFS, customQuests: custom,
+        quests: QUEST_DEFS,
+        goalQuests: goalQuestsFor(user.goals),
+        customQuests: custom,
         xpAward: XP_AWARD,
+        streak: user.streak || 0,
+        badges: BADGES,
+        earnedBadges: user.badges || [],
       }))
     }
 
@@ -2492,13 +2539,36 @@ async function handleRoute(request, { params }) {
       const wid = String(body.workoutId || '').slice(0, 60)
       if (!wid) return handleCORS(NextResponse.json({ error: 'workoutId required' }, { status: 400 }))
       const awarded = user.awardedWorkouts || []
-      if (awarded.includes(wid)) {
-        return handleCORS(NextResponse.json({ ok: true, awarded: false, xp: xpSummary(user.xp) }))
+      const already = awarded.includes(wid)
+      // Update daily streak (runs whenever a workout is logged today).
+      const todayStr = periodId('daily')
+      const yStr = periodId('daily', new Date(Date.now() - 86400000))
+      let streak = user.streak || 0
+      let streakBonus = 0
+      if (user.lastActiveDay !== todayStr) {
+        streak = user.lastActiveDay === yStr ? streak + 1 : 1
+        streakBonus = Math.min(50, streak * 5) // escalating daily bonus, capped
       }
-      const newAwarded = [wid, ...awarded].slice(0, 400)
-      const newXp = (user.xp || 0) + XP_AWARD.workout
-      await db.collection('users').updateOne({ id: user.id }, { $set: { xp: newXp, awardedWorkouts: newAwarded } })
-      return handleCORS(NextResponse.json({ ok: true, awarded: true, gained: XP_AWARD.workout, xp: xpSummary(newXp) }))
+      const newAwarded = already ? awarded : [wid, ...awarded].slice(0, 400)
+      const workoutXp = already ? 0 : XP_AWARD.workout
+      let newXp = (user.xp || 0) + workoutXp + streakBonus
+      // Evaluate one-off badges against fresh stats.
+      const stats = { workouts: newAwarded.length, streak, questClaims: user.questClaimCount || 0, level: levelFromXp(newXp) }
+      const newBadges = evalBadges(stats, user.badges || [])
+      if (newBadges.length) newXp += badgeXp(newBadges)
+      await db.collection('users').updateOne({ id: user.id }, {
+        $set: {
+          xp: newXp,
+          awardedWorkouts: newAwarded,
+          streak,
+          lastActiveDay: todayStr,
+          badges: [...(user.badges || []), ...newBadges],
+        },
+      })
+      return handleCORS(NextResponse.json({
+        ok: true, awarded: !already, gained: workoutXp + streakBonus,
+        streak, streakBonus, newBadges, xp: xpSummary(newXp),
+      }))
     }
 
     // Claim a quest's XP (deduped per period).
@@ -2508,6 +2578,7 @@ async function handleRoute(request, { params }) {
       const body = await request.json().catch(() => ({}))
       const qid = String(body.questId || '')
       let quest = QUEST_DEFS.find(q => q.id === qid)
+      if (!quest) quest = goalQuestsFor(user.goals).find(q => q.id === qid)
       if (!quest) {
         const c = await db.collection('site_quests').findOne({ id: qid, active: true })
         if (c) quest = { id: c.id, period: c.period, xp: Math.min(500, c.xp || 100) }
@@ -2519,9 +2590,15 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Already claimed this period', xp: xpSummary(user.xp) }, { status: 409 }))
       }
       claims[qid] = pid
-      const newXp = (user.xp || 0) + quest.xp
-      await db.collection('users').updateOne({ id: user.id }, { $set: { xp: newXp, questClaims: claims } })
-      return handleCORS(NextResponse.json({ ok: true, gained: quest.xp, xp: xpSummary(newXp) }))
+      const claimCount = (user.questClaimCount || 0) + 1
+      let newXp = (user.xp || 0) + quest.xp
+      const stats = { workouts: (user.awardedWorkouts || []).length, streak: user.streak || 0, questClaims: claimCount, level: levelFromXp(newXp) }
+      const newBadges = evalBadges(stats, user.badges || [])
+      if (newBadges.length) newXp += badgeXp(newBadges)
+      await db.collection('users').updateOne({ id: user.id }, {
+        $set: { xp: newXp, questClaims: claims, questClaimCount: claimCount, badges: [...(user.badges || []), ...newBadges] },
+      })
+      return handleCORS(NextResponse.json({ ok: true, gained: quest.xp, newBadges, xp: xpSummary(newXp) }))
     }
 
     // Equip an unlocked avatar / title (paying members only for rewards).
@@ -2555,6 +2632,31 @@ async function handleRoute(request, { params }) {
         .sort({ xp: -1 }).limit(20).toArray()
       const rows = top.map(u => ({ username: u.username, level: levelFromXp(u.xp), xp: u.xp || 0, avatar: u.equippedAvatar || 'seed', title: u.equippedTitle || 'newcomer' }))
       return handleCORS(NextResponse.json({ leaderboard: rows }))
+    }
+
+    // List quests created by this coach (admin sees all).
+    if (route === '/gamification/quests' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const isAdmin = user.role === 'admin'
+      if (!user.isTrainer && !isAdmin) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const q = isAdmin ? {} : { trainerId: user.id }
+      const list = await db.collection('site_quests').find(q, { projection: { _id: 0, clientIds: 0 } }).sort({ createdAt: -1 }).limit(100).toArray()
+      return handleCORS(NextResponse.json({ quests: list }))
+    }
+
+    // Activate / deactivate a quest.
+    if (route === '/gamification/quests/toggle' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const isAdmin = user.role === 'admin'
+      if (!user.isTrainer && !isAdmin) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      const filter = isAdmin ? { id: body.id } : { id: body.id, trainerId: user.id }
+      const target = await db.collection('site_quests').findOne(filter)
+      if (!target) return handleCORS(NextResponse.json({ error: 'Quest not found' }, { status: 404 }))
+      await db.collection('site_quests').updateOne(filter, { $set: { active: !target.active } })
+      return handleCORS(NextResponse.json({ ok: true, active: !target.active }))
     }
 
     // Create a quest — admin (site-wide) or trainer (for their assigned clients).

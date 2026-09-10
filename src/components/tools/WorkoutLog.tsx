@@ -18,6 +18,7 @@ import {
   HUTCH_TOUCH_DEADLIFT_ROTATION,
   type HutchTouchSessionId,
 } from "@/data/hutchTouchProgram";
+import { memberPrograms } from "@/data/memberPrograms";
 
 type Set = { id: string; weight: string; reps: string; rpe: string };
 type SessionExercise = {
@@ -182,6 +183,35 @@ export default function WorkoutLog() {
   // how the last-loaded session was flagged (light days don't advance variations).
   const [readinessFor, setReadinessFor] = useState<HutchTouchSessionId | null>(null);
   const [loadedReadiness, setLoadedReadiness] = useState<"green" | "yellow" | "light">("green");
+  // Member-only extra programs (loaded straight into the tracker).
+  const [mpOpenId, setMpOpenId] = useState<string | null>(null);
+
+  function loadMemberSession(programId: string, sessionId: string) {
+    const p = memberPrograms.find((x) => x.id === programId);
+    const s = p?.sessions.find((x) => x.id === sessionId);
+    if (!p || !s) return;
+    const work: SessionExercise[] = s.exercises.map((ex) => {
+      const countMatch = (ex.sets || "").match(/(\d+)/);
+      const count = Math.max(1, Math.min(8, countMatch ? parseInt(countMatch[1], 10) : 1));
+      const sets: Set[] = Array.from({ length: count }, () => ({ id: uid(), weight: "", reps: ex.reps || "", rpe: ex.rpe || "" }));
+      const isTime = /min|sec|:/i.test(ex.reps || "");
+      const setLabel = (ex.sets || "").trim() === "1" ? "1 set" : `${ex.sets} sets`;
+      const parts: string[] = [setLabel];
+      if (ex.reps) parts.push(isTime ? ex.reps : `${ex.reps} reps`);
+      if (ex.rpe) parts.push(`RPE ${ex.rpe}`);
+      let cue = `Target: ${parts.join(" · ")}` + (ex.notes ? ` — ${ex.notes}` : "");
+      const lt = lastTimeHint(ex.exercise);
+      if (lt) cue += `  ·  Last time: ${lt}`;
+      return { id: uid(), name: ex.exercise, cue, sets };
+    });
+    setSession(work);
+    setSessionTitle(`${p.name} — ${s.title}`);
+    setLoadedHutchId(null);
+    setLoadedReadiness("green");
+    setActiveSplitId(null);
+    setCurrentTemplateId(null);
+    setMpOpenId(null);
+  }
 
   // Show the readiness check before actually loading a session.
   function promptReadiness(sid: HutchTouchSessionId) {
@@ -917,6 +947,47 @@ export default function WorkoutLog() {
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* MEMBER PROGRAMS — extra blocks members can load & try */}
+      <div className="mt-4 border border-bone/15 bg-ink/20 p-4">
+        <p className="font-display uppercase tracking-wider text-bone text-sm">More member programs</p>
+        <p className="text-xs text-bone/50 mt-1 mb-3">Extra training blocks to try — tap a program, then load any day straight into the tracker.</p>
+        <div className="grid gap-2">
+          {memberPrograms.map((p) => (
+            <div key={p.id} className="border border-bone/10 bg-ink/30">
+              <button
+                onClick={() => setMpOpenId(mpOpenId === p.id ? null : p.id)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <span>
+                  <span className="font-display uppercase tracking-wider text-sm text-bone/90 block">{p.name}</span>
+                  <span className="text-[11px] text-bone/50 block mt-0.5">{p.length}</span>
+                </span>
+                <span className="font-display text-electric text-lg shrink-0">{mpOpenId === p.id ? "−" : "+"}</span>
+              </button>
+              {mpOpenId === p.id && (
+                <div className="px-4 pb-4 border-t border-bone/10 pt-3">
+                  <p className="text-xs text-bone/60 leading-relaxed">{p.blurb}</p>
+                  <p className="text-[11px] text-bone/45 leading-relaxed mt-2 border-l-2 border-electric/40 pl-2.5">{p.howTo}</p>
+                  <div className="mt-3 grid gap-2">
+                    {p.sessions.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between gap-3 border border-bone/10 bg-ink/40 px-3 py-2">
+                        <span className="text-sm text-bone/85">{s.title} <span className="text-[10px] text-bone/40">· {s.exercises.length} exercises</span></span>
+                        <button
+                          onClick={() => loadMemberSession(p.id, s.id)}
+                          className="bg-electric text-ink px-3 py-1.5 font-display uppercase tracking-wider text-[10px] hover:bg-bone transition-colors whitespace-nowrap"
+                        >
+                          Load →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

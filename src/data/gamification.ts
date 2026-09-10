@@ -36,6 +36,15 @@ export const GOAL_OPTIONS = [
   "General Health",
 ];
 
+// Level-up perks, advertised to members. Codes are issued MANUALLY by the coach
+// once a member reaches the level (no automated coupon generation).
+export type LevelReward = { level: number; reward: string; emoji: string };
+export const LEVEL_REWARDS: LevelReward[] = [
+  { level: 3, reward: "25% off any plan", emoji: "🎟️" },
+  { level: 5, reward: "50% off any plan", emoji: "🏷️" },
+  { level: 10, reward: "1 month FREE", emoji: "🎁" },
+];
+
 export function avatarById(id?: string): AvatarDef {
   return AVATARS.find((a) => a.id === id) || AVATARS[0];
 }
