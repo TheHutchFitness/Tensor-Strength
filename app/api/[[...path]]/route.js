@@ -565,6 +565,7 @@ const BADGES = [
   { id: 'half_century', name: 'Half Century', emoji: '💯', desc: 'Log 50 workouts', xp: 300 },
   { id: 'quest_hunter', name: 'Quest Hunter', emoji: '🎯', desc: 'Complete 10 quests', xp: 200 },
   { id: 'rising_star', name: 'Rising Star', emoji: '⭐', desc: 'Reach level 5', xp: 250 },
+  { id: 'program_finisher', name: 'Program Finisher', emoji: '🏁', desc: 'Complete a full program block', xp: 300 },
 ]
 function evalBadges(stats, earned) {
   const has = (id) => (earned || []).includes(id)
@@ -2682,6 +2683,83 @@ async function handleRoute(request, { params }) {
       await db.collection('site_quests').insertOne(quest)
       const { _id, ...clean } = quest
       return handleCORS(NextResponse.json({ ok: true, quest: clean }))
+    }
+
+    // ---- Trainer programs: coaches author programs only their clients can load ----
+    if (route === '/trainer/programs' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      if (!user.isTrainer && user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const b = await request.json().catch(() => ({}))
+      const name = String(b.name || '').trim().slice(0, 120)
+      if (!name) return handleCORS(NextResponse.json({ error: 'Program name required' }, { status: 400 }))
+      const sessions = Array.isArray(b.sessions) ? b.sessions.slice(0, 12).map((s, i) => ({
+        id: String(s.id || `s${i}`),
+        title: String(s.title || `Day ${i + 1}`).slice(0, 100),
+        exercises: (Array.isArray(s.exercises) ? s.exercises : []).slice(0, 30).map((e) => ({
+          exercise: String(e.exercise || '').slice(0, 100),
+          sets: String(e.sets || '').slice(0, 12),
+          reps: String(e.reps || '').slice(0, 20),
+          rpe: String(e.rpe || '').slice(0, 12),
+          notes: String(e.notes || '').slice(0, 200),
+        })).filter((e) => e.exercise),
+      })).filter((s) => s.exercises.length) : []
+      if (!sessions.length) return handleCORS(NextResponse.json({ error: 'Add at least one session with exercises' }, { status: 400 }))
+      // Default audience = all of this coach's assigned clients (+ specific ids if provided).
+      let clientIds = Array.isArray(b.clientIds) ? b.clientIds.map(String) : []
+      if (!clientIds.length) {
+        const mine = await db.collection('users').find({ assignedTrainerId: user.id }, { projection: { _id: 0, id: 1 } }).toArray()
+        clientIds = mine.map((m) => m.id)
+      }
+      const prog = { id: uuidv4(), trainerId: user.id, coach: user.username, name, blurb: String(b.blurb || '').slice(0, 300), length: String(b.length || 'Custom block').slice(0, 60), howTo: String(b.howTo || '').slice(0, 400), sessions, clientIds, active: true, createdAt: new Date() }
+      await db.collection('trainer_programs').insertOne(prog)
+      const { _id, ...clean } = prog
+      return handleCORS(NextResponse.json({ ok: true, program: clean }))
+    }
+    if (route === '/trainer/programs' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      if (!user.isTrainer && user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const q = user.role === 'admin' ? {} : { trainerId: user.id }
+      const list = await db.collection('trainer_programs').find(q, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(50).toArray()
+      return handleCORS(NextResponse.json({ programs: list }))
+    }
+    if (route === '/trainer/programs' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      if (!user.isTrainer && user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const id = request.nextUrl.searchParams.get('id')
+      const filter = user.role === 'admin' ? { id } : { id, trainerId: user.id }
+      await db.collection('trainer_programs').deleteOne(filter)
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    // Member: programs assigned to me by my coach.
+    if (route === '/member/programs' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const list = await db.collection('trainer_programs').find({
+        active: true,
+        $or: [{ clientIds: user.id }, ...(user.assignedTrainerId ? [{ trainerId: user.assignedTrainerId }] : [])],
+      }, { projection: { _id: 0, clientIds: 0, trainerId: 0 } }).sort({ createdAt: -1 }).limit(30).toArray()
+      return handleCORS(NextResponse.json({ programs: list }))
+    }
+    // Award the one-off Program Finisher badge (once per program id).
+    if (route === '/gamification/program-complete' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const b = await request.json().catch(() => ({}))
+      const pid = String(b.programId || '').slice(0, 80)
+      if (!pid) return handleCORS(NextResponse.json({ error: 'programId required' }, { status: 400 }))
+      const done = user.completedPrograms || []
+      if (done.includes(pid)) return handleCORS(NextResponse.json({ ok: true, already: true, xp: xpSummary(user.xp) }))
+      const earned = user.badges || []
+      const bonus = 300
+      const addBadge = earned.includes('program_finisher') ? [] : ['program_finisher']
+      const newXp = (user.xp || 0) + bonus + badgeXp(addBadge)
+      await db.collection('users').updateOne({ id: user.id }, {
+        $set: { xp: newXp, completedPrograms: [pid, ...done].slice(0, 100), badges: [...earned, ...addBadge] },
+      })
+      return handleCORS(NextResponse.json({ ok: true, gained: bonus, newBadges: addBadge, xp: xpSummary(newXp) }))
     }
 
     // ---- Member: change password (email/password accounts only) ----

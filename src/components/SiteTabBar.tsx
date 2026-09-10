@@ -34,7 +34,7 @@ const GUEST_TABS: Tab[] = [
 const MEMBER_TABS: Tab[] = [
   { href: "/clients", label: "Portal", Icon: LayoutDashboard, match: (p) => p.startsWith("/clients") },
   { href: "/quests", label: "Quests", Icon: Trophy, match: (p) => p.startsWith("/quests") },
-  { href: "/programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/programs") },
+  { href: "/clients/my-programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/clients/my-programs") || p.startsWith("/programs") },
   { href: "/free-tools", label: "Tools", Icon: Calculator, match: (p) => p.startsWith("/free-tools") },
   { href: "/account", label: "Account", Icon: UserRound, match: (p) => p.startsWith("/account") },
 ];

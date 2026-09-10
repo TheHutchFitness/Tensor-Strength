@@ -338,6 +338,12 @@ export default function ClientPortalPage() {
                     Workout Tracker →
                   </a>
                   <a
+                    href="/clients/my-programs"
+                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
+                  >
+                    My Programs →
+                  </a>
+                  <a
                     href="/clients/nutrition"
                     className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
                   >

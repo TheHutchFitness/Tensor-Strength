@@ -186,12 +186,17 @@ export default function WorkoutLog() {
   // Member-only extra programs (loaded straight into the tracker).
   const [mpOpenId, setMpOpenId] = useState<string | null>(null);
   const [mpDeload, setMpDeload] = useState(false);
+  const [coachPrograms, setCoachPrograms] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/member/programs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.programs && setCoachPrograms(d.programs)).catch(() => {});
+  }, []);
+  const allPrograms: any[] = [...memberPrograms, ...coachPrograms];
 
   function loadMemberSession(programId: string, sessionId: string, deload = false) {
-    const p = memberPrograms.find((x) => x.id === programId);
-    const s = p?.sessions.find((x) => x.id === sessionId);
+    const p = allPrograms.find((x: any) => x.id === programId);
+    const s = p?.sessions.find((x: any) => x.id === sessionId);
     if (!p || !s) return;
-    const work: SessionExercise[] = s.exercises.map((ex) => {
+    const work: SessionExercise[] = s.exercises.map((ex: any) => {
       const countMatch = (ex.sets || "").match(/(\d+)/);
       let count = Math.max(1, Math.min(8, countMatch ? parseInt(countMatch[1], 10) : 1));
       if (deload) count = Math.max(1, Math.ceil(count * 0.6)); // fewer sets on a deload
@@ -216,7 +221,6 @@ export default function WorkoutLog() {
     setMpOpenId(null);
   }
 
-  // Next-session nudge per member program (based on the member's workout history).
   function nextMemberSession(p: (typeof memberPrograms)[number]) {
     const ids = p.sessions.map((s) => s.id);
     let lastId: string | null = null;
@@ -979,8 +983,9 @@ export default function WorkoutLog() {
         </div>
         <p className="text-xs text-bone/50 mt-1 mb-3">Extra training blocks to try — tap a program, then load any day straight into the tracker.</p>
         <div className="grid gap-2">
-          {memberPrograms.map((p) => {
+          {allPrograms.map((p) => {
             const next = nextMemberSession(p);
+            const isCoach = !!p.coach;
             return (
             <div key={p.id} className="border border-bone/10 bg-ink/30">
               <button
@@ -988,7 +993,7 @@ export default function WorkoutLog() {
                 className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
               >
                 <span>
-                  <span className="font-display uppercase tracking-wider text-sm text-bone/90 block">{p.name}</span>
+                  <span className="font-display uppercase tracking-wider text-sm text-bone/90 block">{p.name}{isCoach && <span className="ml-2 text-[9px] text-electric">FROM YOUR COACH</span>}</span>
                   <span className="text-[11px] text-bone/50 block mt-0.5">{p.length} · <span className="text-electric">Next: {next.title}</span></span>
                 </span>
                 <span className="font-display text-electric text-lg shrink-0">{mpOpenId === p.id ? "−" : "+"}</span>
@@ -1004,7 +1009,7 @@ export default function WorkoutLog() {
                     </label>
                   )}
                   <div className="mt-3 grid gap-2">
-                    {p.sessions.map((s) => (
+                    {p.sessions.map((s: any) => (
                       <div key={s.id} className={"flex items-center justify-between gap-3 border px-3 py-2 " + (s.id === next.id ? "border-electric/50 bg-electric/5" : "border-bone/10 bg-ink/40")}>
                         <span className="text-sm text-bone/85">{s.title} <span className="text-[10px] text-bone/40">· {s.exercises.length} exercises</span>{s.id === next.id && <span className="ml-1 text-[9px] text-electric">NEXT</span>}</span>
                         <button
