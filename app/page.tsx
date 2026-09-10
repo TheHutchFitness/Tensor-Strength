@@ -2,10 +2,8 @@ import Navbar from "@/components/Navbar";
 import Announcement from "@/components/Announcement";
 import Hero from "@/components/Hero";
 import About from "@/components/About";
-import CoachingShowcase from "@/components/CoachingShowcase";
 import PRBoard from "@/components/PRBoard";
 import Content from "@/components/Content";
-import FitEffectCard from "@/components/FitEffectCard";
 import ProgramFinder from "@/components/ProgramFinder";
 import Pricing from "@/components/Pricing";
 import CustomProgram from "@/components/CustomProgram";
@@ -22,10 +20,8 @@ export default function Home() {
       <main>
         <Hero />
         <About />
-        <CoachingShowcase />
         <PRBoard />
         <Content />
-        <FitEffectCard />
         <ProgramFinder />
         <Pricing />
         <MarketingExtras />

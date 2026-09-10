@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 const COOKIE_NAME = 'ts_token'
 
 // Routes that are always accessible without a session
-const PUBLIC_PATHS = ['/login', '/free-programs', '/programs', '/meet-the-team', '/professionals', '/apply', '/macros', '/auth/emergent/callback', '/offline.html', '/manifest.webmanifest', '/sw.js']
+const PUBLIC_PATHS = ['/login', '/landing', '/free-programs', '/programs', '/meet-the-team', '/professionals', '/apply', '/macros', '/auth/emergent/callback', '/offline.html', '/manifest.webmanifest', '/sw.js']
 
 export function middleware(request) {
   const { pathname } = request.nextUrl
@@ -15,6 +15,11 @@ export function middleware(request) {
 
   const token = request.cookies.get(COOKIE_NAME)?.value
   if (!token) {
+    // Logged-out visitors landing on the root see the public marketing page
+    // (served from /public/landing). Members who log in get the app home at '/'.
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/landing/index.html', request.url))
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('from', pathname)
