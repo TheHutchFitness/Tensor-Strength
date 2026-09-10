@@ -203,7 +203,7 @@ async function signToken(payload) {
 
 async function verifyToken(token) {
   try {
-    const { payload } = await jwtVerify(token, secretKey)
+    const { payload } = await jwtVerify(token, secretKey, { algorithms: ['HS256'] })
     return payload
   } catch {
     return null
@@ -440,15 +440,45 @@ async function getStripeSession(sessionId) {
 
 // Helper function to handle CORS
 function handleCORS(response) {
-  // Pin the allowed origin to our own app origin — a wildcard '*' combined with
-  // Allow-Credentials is invalid in browsers and overly permissive.
-  const allowOrigin = process.env.NEXT_PUBLIC_BASE_URL || process.env.CORS_ORIGINS || '*'
-  response.headers.set('Access-Control-Allow-Origin', allowOrigin)
+  // Pin the allowed origin to our own app origin. We never fall back to a
+  // wildcard '*' because it is invalid combined with Allow-Credentials and is
+  // overly permissive; if no origin is configured we simply omit the header.
+  const allowOrigin = process.env.NEXT_PUBLIC_BASE_URL || process.env.CORS_ORIGINS || ''
+  if (allowOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', allowOrigin)
+  }
   response.headers.set('Vary', 'Origin')
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   response.headers.set('Access-Control-Allow-Credentials', 'true')
   return response
+}
+
+// ---- Simple in-memory rate limiter (per-process) for sensitive auth routes ----
+// Not a distributed limiter, but it meaningfully slows automated credential
+// stuffing / guessing against a single pod. Keyed by client IP + bucket.
+const rateBuckets = new Map()
+function rateLimit(request, bucket, limit, windowMs) {
+  try {
+    const xff = request.headers.get('x-forwarded-for') || ''
+    const ip = (xff.split(',')[0] || '').trim() || request.headers.get('x-real-ip') || 'unknown'
+    const key = `${bucket}:${ip}`
+    const now = Date.now()
+    // Occasional cleanup to keep the map bounded.
+    if (rateBuckets.size > 5000) {
+      for (const [k, v] of rateBuckets) if (now > v.reset) rateBuckets.delete(k)
+    }
+    const rec = rateBuckets.get(key)
+    if (!rec || now > rec.reset) {
+      rateBuckets.set(key, { count: 1, reset: now + windowMs })
+      return true
+    }
+    if (rec.count >= limit) return false
+    rec.count++
+    return true
+  } catch {
+    return true
+  }
 }
 
 export async function OPTIONS() {
@@ -543,6 +573,9 @@ async function handleRoute(request, { params }) {
 
     // ---------------- AUTH ----------------
     if (route === '/auth/register' && method === 'POST') {
+      if (!rateLimit(request, 'register', 20, 60_000)) {
+        return handleCORS(NextResponse.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429 }))
+      }
       const body = await request.json()
       const username = (body.username || '').trim().toLowerCase()
       const email = (body.email || '').trim().toLowerCase()
@@ -582,6 +615,9 @@ async function handleRoute(request, { params }) {
     }
 
     if (route === '/auth/login' && method === 'POST') {
+      if (!rateLimit(request, 'login', 20, 60_000)) {
+        return handleCORS(NextResponse.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429 }))
+      }
       const body = await request.json()
       const identifier = (body.username || '').trim().toLowerCase()
       const password = body.password || ''
@@ -602,6 +638,9 @@ async function handleRoute(request, { params }) {
     // Emergent-managed Google sign-in: exchange the one-time session_id for the
     // Google identity, then find-or-create the local user and issue our ts_token.
     if (route === '/auth/emergent' && method === 'POST') {
+      if (!rateLimit(request, 'emergent', 40, 60_000)) {
+        return handleCORS(NextResponse.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429 }))
+      }
       const body = await request.json().catch(() => ({}))
       const sessionId = (body.session_id || '').trim()
       if (!sessionId || sessionId.length > 512) {
