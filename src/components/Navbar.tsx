@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 const links = [
   { href: "/#about", label: "About" },
-  { href: "/#content", label: "Content" },
+  { href: "/#library", label: "Library" },
   { href: "/programs", label: "Free Programs" },
   { href: "/free-tools", label: "Free Tools" },
 ];
@@ -17,17 +17,15 @@ const menus = [
     href: "/#about",
     items: [
       { href: "/#about", label: "Our Approach" },
-      { href: "/#coaching", label: "Coaching Showcase" },
       { href: "/meet-the-team", label: "Meet the Team" },
-      { href: "/#fit-effect", label: "The Fit Effect" },
       { href: "/#pricing", label: "Pricing" },
     ],
   },
   {
-    label: "Content",
-    href: "/#content",
+    label: "Library",
+    href: "/#library",
     items: [
-      { href: "/#content", label: "Latest Content" },
+      { href: "/#library", label: "The Library" },
       { href: "/#pr-board", label: "PR Board" },
       { href: "/forum", label: "Community Forum" },
     ],

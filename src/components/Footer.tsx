@@ -21,7 +21,7 @@ export default function Footer() {
           {[
             { href: "/#about", label: "About" },
             { href: "/#professionals", label: "Professionals" },
-            { href: "/#content", label: "Content" },
+            { href: "/#library", label: "Library" },
             { href: "/#programs", label: "Weekly Programs" },
             { href: "/#tools", label: "Free Tools" },
             { href: "/#pricing", label: "Pricing" },

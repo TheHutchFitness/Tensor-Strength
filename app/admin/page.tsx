@@ -36,6 +36,7 @@ export default function AdminPage() {
   const [codes, setCodes] = useState<any[]>([]);
   const [demoStats, setDemoStats] = useState<{ opens: any[]; signups: any[] }>({ opens: [], signups: [] });
   const [apps, setApps] = useState<any[]>([]);
+  const [invitedId, setInvitedId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: "", percentOff: "100", duration: "once", durationInMonths: "3" });
   const [creating, setCreating] = useState(false);
 
@@ -215,6 +216,19 @@ export default function AdminPage() {
     }).catch(() => {});
   }
 
+  function copyInvite(a: any) {
+    const url = `${window.location.origin}/login?signup=1&email=${encodeURIComponent(a.email)}&name=${encodeURIComponent(a.name)}`;
+    const done = () => {
+      setInvitedId(a.id);
+      setTimeout(() => setInvitedId((cur) => (cur === a.id ? null : cur)), 2500);
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(done).catch(() => window.prompt("Copy this invite link:", url));
+    } else {
+      window.prompt("Copy this invite link:", url);
+    }
+  }
+
   async function resetPassword(u: User) {
     const pw = window.prompt(`Set a new password for ${u.username} (6+ characters):`);
     if (!pw) return;
@@ -356,21 +370,35 @@ export default function AdminPage() {
                               {a.phone ? <span className="text-bone/60"> · {a.phone}</span> : null}
                             </p>
                           </div>
-                          <div className="flex gap-2">
-                            {["new", "reviewed", "archived"].map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => setAppStatus(a.id, s)}
-                                className={
-                                  "px-3 py-1.5 text-[10px] font-display uppercase tracking-wider border transition-colors " +
-                                  (a.status === s
-                                    ? "bg-electric text-ink border-electric"
-                                    : "border-bone/25 text-bone/60 hover:border-bone hover:text-bone")
-                                }
-                              >
-                                {s}
-                              </button>
-                            ))}
+                          <div className="flex flex-col items-end gap-2">
+                            <button
+                              onClick={() => copyInvite(a)}
+                              className={
+                                "px-3 py-1.5 text-[10px] font-display uppercase tracking-wider border transition-colors " +
+                                (invitedId === a.id
+                                  ? "bg-green-500 text-ink border-green-500"
+                                  : "bg-electric text-ink border-electric hover:bg-bone hover:border-bone")
+                              }
+                              title="Copy a prefilled sign-up link to send this applicant"
+                            >
+                              {invitedId === a.id ? "Invite link copied ✓" : "Invite to sign up"}
+                            </button>
+                            <div className="flex gap-2">
+                              {["new", "reviewed", "archived"].map((s) => (
+                                <button
+                                  key={s}
+                                  onClick={() => setAppStatus(a.id, s)}
+                                  className={
+                                    "px-3 py-1.5 text-[10px] font-display uppercase tracking-wider border transition-colors " +
+                                    (a.status === s
+                                      ? "bg-electric text-ink border-electric"
+                                      : "border-bone/25 text-bone/60 hover:border-bone hover:text-bone")
+                                  }
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-display uppercase tracking-wider">

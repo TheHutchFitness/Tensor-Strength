@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Mode = "login" | "register";
+
+function slugifyUsername(name: string) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 20);
+}
 
 export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("login");
@@ -11,6 +19,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Invite flow: /login?signup=1&email=...&name=... opens the register form
+  // prefilled with the applicant's details (used by the Admin "invite" button).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("signup") === "1" || params.get("mode") === "register") {
+      setMode("register");
+    }
+    const em = params.get("email");
+    if (em) setEmail(em);
+    const nm = params.get("name");
+    if (nm) setUsername(slugifyUsername(nm));
+  }, []);
 
   const inputCls =
     "w-full bg-transparent border-b-2 border-bone/40 py-3 text-bone focus:border-electric outline-none";
