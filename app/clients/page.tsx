@@ -22,6 +22,7 @@ export default function ClientPortalPage() {
   const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr">("macros");
+  const [trial, setTrial] = useState<{ enabled: boolean; days: number; eligible: boolean } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -33,6 +34,10 @@ export default function ClientPortalPage() {
       const { user } = await res.json();
       setMe(user);
       setLoading(false);
+      fetch("/api/trial-info")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setTrial(d))
+        .catch(() => {});
       if (user?.portalAccess) {
         fetch("/api/payments/subscription")
           .then((r) => (r.ok ? r.json() : null))
@@ -120,9 +125,23 @@ export default function ClientPortalPage() {
                   packageId="remote_coaching_400"
                   className="w-full border-2 border-bone/40 text-bone/80 px-6 py-3 font-display uppercase tracking-wider text-sm hover:border-bone hover:text-bone transition-colors"
                 >
-                  Remote Coaching — $400/mo
+                  {trial?.enabled && trial?.eligible
+                    ? "Remote Coaching — first week FREE, then $400/mo"
+                    : "Remote Coaching — $400/mo"}
                 </CheckoutButton>
               </div>
+
+              {trial?.enabled && trial?.eligible && (
+                <div className="mt-4 border-2 border-electric bg-electric/10 px-5 py-3 text-left">
+                  <p className="font-display uppercase tracking-wider text-electric text-xs">
+                    🎁 Your first {trial.days} day{trial.days === 1 ? "" : "s"} of Remote Coaching are on us
+                  </p>
+                  <p className="mt-1 text-xs text-bone/70 leading-relaxed">
+                    Try the full platform free. We&apos;ll collect your card up front but won&apos;t charge until the
+                    trial ends — cancel anytime before then and you pay nothing.
+                  </p>
+                </div>
+              )}
 
               <p className="mt-8 text-xs text-bone/50 leading-relaxed">
                 Prefer in-person?{" "}

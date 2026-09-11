@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Home, Dumbbell, Apple, MessageSquare, ClipboardCheck } from "lucide-react";
+import { Home, Dumbbell, Apple, MessageSquare, ClipboardCheck, Trophy } from "lucide-react";
 
 const TABS = [
   { href: "/clients", label: "Home", Icon: Home, key: "home", match: (p: string) => p === "/clients" },
   { href: "/clients/workout-log", label: "Workout", Icon: Dumbbell, key: "workout", match: (p: string) => p.startsWith("/clients/workout-log") },
   { href: "/clients/nutrition", label: "Nutrition", Icon: Apple, key: "nutrition", match: (p: string) => p.startsWith("/clients/nutrition") },
+  { href: "/quests", label: "Quests", Icon: Trophy, key: "quests", match: (p: string) => p.startsWith("/quests") },
   { href: "/forum", label: "Forum", Icon: MessageSquare, key: "forum", match: (p: string) => p.startsWith("/forum") },
   { href: "/clients/check-in", label: "Check-In", Icon: ClipboardCheck, key: "checkin", match: (p: string) => p.startsWith("/clients/check-in") },
 ];
@@ -125,7 +126,7 @@ export default function PortalTabBar() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Portal navigation"
       >
-        <div className="mx-auto max-w-lg grid grid-cols-5">
+        <div className="mx-auto max-w-lg grid grid-cols-6">
           {TABS.map(({ href, label, Icon, key, match }) => {
             const active = match(pathname);
             const showDot = key === "forum" && unread > 0;

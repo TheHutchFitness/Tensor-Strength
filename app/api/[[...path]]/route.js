@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, writeFile, mkdir, readdir, rm } from 'fs/promises'
 import nodePath from 'path'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -75,6 +75,14 @@ async function saveUploadBuffer(db, buffer, ext, mime, ownerId, visibility) {
 function keyFromFileUrl(url) {
   const m = String(url || '').match(/\/api\/files\/(uploads\/[^?#]+)/)
   return m ? m[1] : null
+}
+// True only if `url` points at an uploaded object owned by `userId` (prevents a
+// caller from referencing someone else's file when sharing/broadcasting).
+async function ownsUploadKey(db, url, userId) {
+  const key = keyFromFileUrl(url)
+  if (!key || !userId) return false
+  const meta = await db.collection('uploads').findOne({ key })
+  return !!meta && meta.ownerId === userId
 }
 // Grant a specific user read access to a private uploaded file (recipient-scoped).
 async function grantFileAccess(db, url, userId) {
@@ -375,7 +383,7 @@ const PACKAGES = {
   },
 }
 
-async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email }) {
+async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email, trialDays }) {
   const params = new URLSearchParams()
   params.set('mode', pkg.mode)
   params.set('success_url', successUrl)
@@ -394,6 +402,12 @@ async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email
   params.set('line_items[0][price_data][unit_amount]', String(pkg.amount))
   if (pkg.mode === 'subscription') {
     params.set('line_items[0][price_data][recurring][interval]', pkg.interval)
+    // Free trial: Stripe still collects a card up front, charges nothing during the
+    // trial, and auto-bills after unless the client cancels. Access opens immediately
+    // (subscription status = 'trialing', handled by the existing webhook + status poll).
+    if (trialDays && Number(trialDays) > 0) {
+      params.set('subscription_data[trial_period_days]', String(Math.min(365, Math.round(Number(trialDays)))))
+    }
   }
   for (const [k, v] of Object.entries(metadata || {})) {
     params.set(`metadata[${k}]`, String(v))
@@ -1195,6 +1209,11 @@ async function handleRoute(request, { params }) {
       // Whitelist only the fields the check-in form submits — never spread raw
       // body (would let a member forge userId / seenByTrainer / trainerNote).
       const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '')
+      // Optional form-critique video (uploaded via the chunked uploader → /api/files/...).
+      const video = (typeof body.videoUrl === 'string' && body.videoUrl.startsWith('/api/files/')) ? body.videoUrl : null
+      if (video && !(await ownsUploadKey(db, video, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'Invalid video reference.' }, { status: 400 }))
+      }
       const checkin = {
         id: uuidv4(),
         userId: user.id,
@@ -1203,13 +1222,89 @@ async function handleRoute(request, { params }) {
         readiness: str(body.readiness, 200),
         wins: str(body.wins, 4000),
         struggles: str(body.struggles, 4000),
+        video,
+        replies: [],
         seenByTrainer: false,
+        hasCoachReply: false,
         trainerNote: '',
         createdAt: new Date(),
       }
       await db.collection('checkins').insertOne(checkin)
+      // Let the member's assigned coach read the attached video (recipient-scoped ACL).
+      if (video && user.assignedTrainerId) {
+        await grantFileAccess(db, video, user.assignedTrainerId)
+      }
       const { _id, ...clean } = checkin
       return handleCORS(NextResponse.json(clean))
+    }
+
+    // Member views their OWN check-in history (with coach replies + videos).
+    if (route === '/checkins' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const list = await db.collection('checkins')
+        .find({ userId: user.id })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .toArray()
+      return handleCORS(NextResponse.json({ checkins: list.map(({ _id, ...r }) => r) }))
+    }
+
+    // Coach OR member adds a threaded reply (text and/or video) to a check-in.
+    if (route === '/checkins/reply' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      if (!body.checkinId || typeof body.checkinId !== 'string') {
+        return handleCORS(NextResponse.json({ error: 'checkinId is required' }, { status: 400 }))
+      }
+      const ci = await db.collection('checkins').findOne({ id: body.checkinId })
+      if (!ci) return handleCORS(NextResponse.json({ error: 'Check-in not found' }, { status: 404 }))
+      const client = await db.collection('users').findOne({ id: ci.userId })
+      const isOwner = user.id === ci.userId
+      const isCoach = user.role === 'admin' || (user.isTrainer && client && client.assignedTrainerId === user.id)
+      if (!isOwner && !isCoach) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const text = (typeof body.text === 'string' ? body.text.slice(0, 4000) : '')
+      const video = (typeof body.videoUrl === 'string' && body.videoUrl.startsWith('/api/files/')) ? body.videoUrl : null
+      if (!text && !video) {
+        return handleCORS(NextResponse.json({ error: 'A message or video is required.' }, { status: 400 }))
+      }
+      if (video && !(await ownsUploadKey(db, video, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'Invalid video reference.' }, { status: 400 }))
+      }
+      const asCoach = isCoach && !isOwner
+      const reply = {
+        id: uuidv4(),
+        authorId: user.id,
+        authorName: user.username,
+        authorRole: asCoach ? 'coach' : 'member',
+        text,
+        video,
+        createdAt: new Date(),
+      }
+      await db.collection('checkins').updateOne(
+        { id: ci.id },
+        {
+          $push: { replies: reply },
+          // A coach reply marks the check-in reviewed; a member reply re-flags it.
+          $set: asCoach
+            ? { hasCoachReply: true, seenByTrainer: true }
+            : { seenByTrainer: false },
+        }
+      )
+      // Give the other party read access to any attached reply video.
+      if (video) {
+        if (asCoach) {
+          await grantFileAccess(db, video, ci.userId)
+        } else if (client && client.assignedTrainerId) {
+          await grantFileAccess(db, video, client.assignedTrainerId)
+        }
+      }
+      return handleCORS(NextResponse.json({ reply }))
     }
 
     // ---------------- TRAINER PORTAL ----------------
@@ -1969,6 +2064,49 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, enabled, message }))
     }
 
+    // ---- First-week-free trial settings ----
+    // Admin toggles a free trial for NEW remote coaching clients (card on file, no
+    // charge during the trial, auto-bills after unless cancelled).
+    if (route === '/admin/trial-settings' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const doc = await db.collection('site_content').findOne({ key: 'trial_settings' })
+      return handleCORS(NextResponse.json({
+        enabled: !!doc?.enabled,
+        days: Number(doc?.days) > 0 ? Number(doc.days) : 7,
+        updatedAt: doc?.updatedAt || null,
+      }))
+    }
+    if (route === '/admin/trial-settings' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json()
+      const enabled = !!body.enabled
+      let days = Math.round(Number(body.days))
+      if (!Number.isFinite(days) || days < 1) days = 7
+      if (days > 365) days = 365
+      await db.collection('site_content').updateOne(
+        { key: 'trial_settings' },
+        { $set: { key: 'trial_settings', enabled, days, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      return handleCORS(NextResponse.json({ ok: true, enabled, days }))
+    }
+    // Lightweight info for the client portal: is a free week available to THIS user?
+    if (route === '/trial-info' && method === 'GET') {
+      const doc = await db.collection('site_content').findOne({ key: 'trial_settings' })
+      const enabled = !!doc?.enabled
+      const days = Number(doc?.days) > 0 ? Number(doc.days) : 7
+      let eligible = false
+      if (enabled) {
+        const user = await getCurrentUser(request, db)
+        if (user) {
+          const priorPaid = await db.collection('payment_transactions').findOne({ userId: user.id, accessGranted: true })
+          eligible = !user.portalAccess && !user.stripeSubscriptionId && !priorPaid
+        }
+      }
+      return handleCORS(NextResponse.json({ enabled, days, eligible }))
+    }
     // ---- Admin: bulk assign clients to a trainer ----
     if (route === '/admin/bulk-assign' && method === 'POST') {
       const user = await getCurrentUser(request, db)
@@ -2154,6 +2292,109 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // ---- Chunked video upload (bypasses proxy body-size limits for large videos) ----
+    // Flow: init -> append (many) -> complete. Chunks land in a per-upload temp dir,
+    // then are concatenated and pushed to durable R2 storage (private by default).
+    if (route === '/uploads/video/init' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const rl = rateLimit(request, 'video-init', 30, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
+      const body = await request.json().catch(() => ({}))
+      const origName = String(body.filename || 'video').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const ext = origName.includes('.') ? origName.split('.').pop().toLowerCase() : ''
+      const ALLOWED = new Set(['mp4', 'mov', 'webm', 'm4v'])
+      if (!ALLOWED.has(ext)) {
+        return handleCORS(NextResponse.json({ error: 'Use an MP4, MOV, WEBM or M4V video.' }, { status: 400 }))
+      }
+      // Reap abandoned sessions (>1h old) + their temp dirs so /tmp can't fill up.
+      const stale = await db.collection('upload_sessions')
+        .find({ createdAt: { $lt: new Date(Date.now() - 60 * 60 * 1000) } }).limit(200).toArray()
+      for (const s of stale) {
+        await rm('/tmp/ts-chunks/' + s.uploadId, { recursive: true, force: true }).catch(() => {})
+      }
+      if (stale.length) {
+        await db.collection('upload_sessions').deleteMany({ uploadId: { $in: stale.map((s) => s.uploadId) } }).catch(() => {})
+      }
+      // Cap concurrent in-flight uploads per user to bound memory/disk usage.
+      const active = await db.collection('upload_sessions').countDocuments({ ownerId: user.id })
+      if (active >= 5) {
+        return handleCORS(NextResponse.json({ error: 'Too many uploads in progress. Finish or wait, then try again.' }, { status: 429 }))
+      }
+      const uploadId = uuidv4()
+      await db.collection('upload_sessions').insertOne({
+        uploadId, ownerId: user.id, ext, mime: String(body.mime || 'video/mp4'), received: 0, createdAt: new Date(),
+      })
+      await mkdir('/tmp/ts-chunks/' + uploadId, { recursive: true })
+      return handleCORS(NextResponse.json({ uploadId }))
+    }
+
+    if (route === '/uploads/video/append' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const rl = rateLimit(request, 'video-append', 600, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
+      const form = await request.formData()
+      const uploadId = String(form.get('uploadId') || '')
+      const index = parseInt(String(form.get('index') || ''), 10)
+      if (!/^[0-9a-f-]{36}$/.test(uploadId) || !Number.isInteger(index) || index < 0 || index > 200000) {
+        return handleCORS(NextResponse.json({ error: 'Bad upload part' }, { status: 400 }))
+      }
+      const sess = await db.collection('upload_sessions').findOne({ uploadId, ownerId: user.id })
+      if (!sess) return handleCORS(NextResponse.json({ error: 'Upload session not found' }, { status: 404 }))
+      const chunk = form.get('chunk')
+      if (!chunk || typeof chunk === 'string') {
+        return handleCORS(NextResponse.json({ error: 'No chunk provided' }, { status: 400 }))
+      }
+      // Reject an oversized single chunk BEFORE reading it into memory (DoS guard).
+      if (typeof chunk.size === 'number' && chunk.size > 8 * 1024 * 1024) {
+        return handleCORS(NextResponse.json({ error: 'Chunk too large.' }, { status: 400 }))
+      }
+      const buf = Buffer.from(await chunk.arrayBuffer())
+      const newTotal = (sess.received || 0) + buf.length
+      if (newTotal > 500 * 1024 * 1024) {
+        await rm('/tmp/ts-chunks/' + uploadId, { recursive: true, force: true }).catch(() => {})
+        await db.collection('upload_sessions').deleteOne({ uploadId })
+        return handleCORS(NextResponse.json({ error: 'Video too large (max 500MB).' }, { status: 400 }))
+      }
+      await writeFile('/tmp/ts-chunks/' + uploadId + '/' + String(index).padStart(6, '0') + '.part', buf)
+      await db.collection('upload_sessions').updateOne({ uploadId }, { $set: { received: newTotal } })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    if (route === '/uploads/video/complete' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const rl = rateLimit(request, 'video-complete', 60, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
+      const body = await request.json().catch(() => ({}))
+      const uploadId = String(body.uploadId || '')
+      if (!/^[0-9a-f-]{36}$/.test(uploadId)) {
+        return handleCORS(NextResponse.json({ error: 'Bad upload id' }, { status: 400 }))
+      }
+      const sess = await db.collection('upload_sessions').findOne({ uploadId, ownerId: user.id })
+      if (!sess) return handleCORS(NextResponse.json({ error: 'Upload session not found' }, { status: 404 }))
+      const dir = '/tmp/ts-chunks/' + uploadId
+      try {
+        const files = (await readdir(dir)).filter((f) => f.endsWith('.part')).sort()
+        const buffers = []
+        for (const f of files) buffers.push(await readFile(nodePath.join(dir, f)))
+        const buffer = Buffer.concat(buffers)
+        await rm(dir, { recursive: true, force: true }).catch(() => {})
+        await db.collection('upload_sessions').deleteOne({ uploadId })
+        if (!buffer.length) {
+          return handleCORS(NextResponse.json({ error: 'No data received.' }, { status: 400 }))
+        }
+        const url = await saveUploadBuffer(db, buffer, sess.ext, sess.mime, user.id, 'private')
+        return handleCORS(NextResponse.json({ url, mime: sess.mime }))
+      } catch (e) {
+        console.error('Video assemble error:', e)
+        await rm(dir, { recursive: true, force: true }).catch(() => {})
+        await db.collection('upload_sessions').deleteOne({ uploadId }).catch(() => {})
+        return handleCORS(NextResponse.json({ error: 'Upload failed' }, { status: 500 }))
+      }
+    }
+
     // ---- Trainer files (drop files for clients) ----
     if (route === '/trainer/files' && method === 'POST') {
       const user = await getCurrentUser(request, db)
@@ -2235,6 +2476,95 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ files: list.map(({ _id, ...r }) => r) }))
     }
 
+    // ---------------- COACH DEMO VIDEO LIBRARY ----------------
+    // Trainers publish exercise/technique demo videos. scope: 'global' (all their
+    // clients) or a specific client. Reuses the same recipient-scoped file ACL.
+    if (route === '/trainer/videos' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const body = await request.json()
+      if (!body.url || !body.title) {
+        return handleCORS(NextResponse.json({ error: 'A video and title are required.' }, { status: 400 }))
+      }
+      if (typeof body.url !== 'string' || !body.url.startsWith('/api/files/')) {
+        return handleCORS(NextResponse.json({ error: 'Invalid video reference.' }, { status: 400 }))
+      }
+      if (!(await ownsUploadKey(db, body.url, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'You can only publish videos you uploaded.' }, { status: 400 }))
+      }
+      const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '')
+      let clientId = (typeof body.clientId === 'string' && body.clientId) ? body.clientId : null
+      if (clientId) {
+        const c = await db.collection('users').findOne({ id: clientId })
+        if (!c || (user.role !== 'admin' && c.assignedTrainerId !== user.id)) {
+          return handleCORS(NextResponse.json({ error: 'That client is not assigned to you.' }, { status: 400 }))
+        }
+      }
+      const doc = {
+        id: uuidv4(),
+        trainerId: user.id,
+        trainerName: user.username,
+        clientId,
+        title: str(body.title, 120),
+        description: str(body.description, 2000),
+        category: str(body.category, 60),
+        url: body.url,
+        mime: str(body.mime, 100),
+        createdAt: new Date(),
+      }
+      await db.collection('trainer_videos').insertOne(doc)
+      if (clientId) {
+        await grantFileAccess(db, doc.url, clientId)
+      } else {
+        await markFileBroadcast(db, doc.url)
+      }
+      const { _id, ...clean } = doc
+      return handleCORS(NextResponse.json(clean))
+    }
+
+    if (route === '/trainer/videos' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const list = await db.collection('trainer_videos')
+        .find({ trainerId: user.id })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray()
+      return handleCORS(NextResponse.json({ videos: list.map(({ _id, ...r }) => r) }))
+    }
+
+    if (route === '/trainer/videos' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      const existing = await db.collection('trainer_videos').findOne({ id, trainerId: user.id })
+      await db.collection('trainer_videos').deleteOne({ id, trainerId: user.id })
+      if (existing?.url) await deleteUpload(db, existing.url)
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    // Member sees demo videos available to them: their coach's global demos + any
+    // videos targeted specifically at them.
+    if (route === '/member/videos' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      if (!user.assignedTrainerId) return handleCORS(NextResponse.json({ videos: [] }))
+      const list = await db.collection('trainer_videos')
+        .find({ trainerId: user.assignedTrainerId, $or: [{ clientId: user.id }, { clientId: null }] })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray()
+      return handleCORS(NextResponse.json({ videos: list.map(({ _id, ...r }) => r) }))
+    }
 
     // ---------------- PAYMENTS (Stripe via Emergent proxy) ----------------
     // Public list of purchasable packages (display only; amounts enforced server-side).
@@ -2264,12 +2594,25 @@ async function handleRoute(request, { params }) {
       const txId = uuidv4()
       const successUrl = `${base}/billing/success?session_id={CHECKOUT_SESSION_ID}`
       const cancelUrl = `${base}/billing/cancel`
+
+      // First-week-free trial: admin-toggled, remote coaching only, first-time clients only.
+      let trialDays = 0
+      if (body.packageId === 'remote_coaching_400') {
+        const cfg = await db.collection('site_content').findOne({ key: 'trial_settings' })
+        if (cfg?.enabled && Number(cfg.days) > 0) {
+          const priorPaid = await db.collection('payment_transactions').findOne({ userId: user.id, accessGranted: true })
+          const isNewClient = !user.portalAccess && !user.stripeSubscriptionId && !priorPaid
+          if (isNewClient) trialDays = Math.min(365, Math.round(Number(cfg.days)))
+        }
+      }
+
       try {
         const session = await createStripeSession(pkg, {
           successUrl,
           cancelUrl,
           metadata: { txId, userId: user.id, packageId: body.packageId },
           email: user.email,
+          trialDays,
         })
         await db.collection('payment_transactions').insertOne({
           id: txId,
@@ -2284,10 +2627,11 @@ async function handleRoute(request, { params }) {
           status: 'created',
           paymentStatus: 'unpaid',
           accessGranted: false,
+          trialDays,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
-        return handleCORS(NextResponse.json({ url: session.url, sessionId: session.id }))
+        return handleCORS(NextResponse.json({ url: session.url, sessionId: session.id, trialDays }))
       } catch (e) {
         console.error('Checkout error:', e)
         return handleCORS(NextResponse.json({ error: 'Unable to start checkout' }, { status: 500 }))

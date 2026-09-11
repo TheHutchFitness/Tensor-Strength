@@ -172,7 +172,7 @@ export default function QuestsPage() {
 
           {/* Level rewards roadmap — advertised to every member */}
           <h2 className="font-display uppercase text-2xl mt-8 mb-2">Level Up, Get Rewarded</h2>
-          <p className="text-xs text-bone/50 mb-4">Real perks for dedicated members. Your discount is sent to you once you hit the level.</p>
+          <p className="text-xs text-bone/50 mb-4">Real perks for dedicated members. Discounts apply to a single month / pay cycle and your code is sent once you hit the level.</p>
           <div className="grid sm:grid-cols-3 gap-3">
             {LEVEL_REWARDS.map((r) => {
               const reached = game.xp.level >= r.level;
@@ -181,6 +181,9 @@ export default function QuestsPage() {
                   <p className="text-3xl">{r.emoji}</p>
                   <p className="font-display uppercase tracking-wider text-electric text-lg mt-1">Level {r.level}</p>
                   <p className="font-display uppercase text-xl text-bone mt-1">{r.reward}</p>
+                  {r.note && (
+                    <p className="text-[10px] uppercase tracking-wider text-bone/50 mt-1">{r.note}</p>
+                  )}
                   <p className={"mt-2 text-[10px] uppercase tracking-wider " + (reached ? "text-electric" : "text-bone/40")}>
                     {reached ? (game.isPaid ? "Unlocked ✓ — your code is on its way" : "Unlocked — upgrade to claim") : `${(1000 * (r.level - 1) * r.level) / 2 - game.xp.total > 0 ? ((1000 * (r.level - 1) * r.level) / 2 - game.xp.total).toLocaleString() : 0} XP to go`}
                   </p>
@@ -188,7 +191,7 @@ export default function QuestsPage() {
               );
             })}
           </div>
-          <p className="mt-2 text-[11px] text-bone/40">Discount codes are issued personally by your coach when you reach each level — no spam, no auto-charges.</p>
+          <p className="mt-2 text-[11px] text-bone/40">Discount codes are issued personally by your coach when you reach each level and apply to one month / pay cycle only — no spam, no auto-charges.</p>
 
           {msg && <div className="mt-4 border border-electric bg-electric/10 p-3 text-center font-display uppercase tracking-wider text-sm text-electric">{msg}</div>}
 

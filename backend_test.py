@@ -1,739 +1,336 @@
 #!/usr/bin/env python3
 """
-Comprehensive backend API testing for Gamification + Password Change endpoints.
-Tests all /api/gamification/* and /api/account/password routes.
+Backend regression test for video endpoint security hardening.
+Tests ownership guards on video uploads for trainer/videos and checkins.
 """
 
 import requests
 import json
-import random
-import string
-from datetime import datetime
+import io
+import os
 
-# Base URL from environment
-BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
+BASE_URL = os.getenv('NEXT_PUBLIC_BASE_URL', 'https://trainer-profiles-2.preview.emergentagent.com')
+API_BASE = f"{BASE_URL}/api"
 
-# Admin credentials
+# Admin credentials from review request
 ADMIN_USERNAME = "The Hutch"
 ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_ID = "73242b1a-8348-493e-adb3-f2e42e932f68"
 
-# Test results tracking
-tests_passed = 0
-tests_failed = 0
-test_results = []
+def print_test(msg):
+    print(f"\n{'='*80}")
+    print(f"TEST: {msg}")
+    print('='*80)
 
-def log_test(test_name, passed, details=""):
-    """Log test result"""
-    global tests_passed, tests_failed
-    if passed:
-        tests_passed += 1
-        print(f"✅ TEST {tests_passed + tests_failed}: {test_name}")
-        if details:
-            print(f"   {details}")
-    else:
-        tests_failed += 1
-        print(f"❌ TEST {tests_passed + tests_failed}: {test_name}")
-        if details:
-            print(f"   {details}")
-    test_results.append({"test": test_name, "passed": passed, "details": details})
+def print_result(passed, msg):
+    status = "✅ PASS" if passed else "❌ FAIL"
+    print(f"{status}: {msg}")
 
-def random_string(length=8):
-    """Generate random string"""
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+# Create a small fake mp4 file (just a few KB)
+def create_fake_mp4(size_kb=4):
+    """Create a fake mp4 file with valid header"""
+    # MP4 file signature
+    mp4_header = b'\x00\x00\x00\x20\x66\x74\x79\x70\x69\x73\x6f\x6d'
+    # Pad to desired size
+    padding = b'\x00' * (size_kb * 1024 - len(mp4_header))
+    return mp4_header + padding
 
-def check_no_leaks(data):
-    """Check for MongoDB _id or passwordHash leaks"""
-    data_str = json.dumps(data)
-    has_id = '_id' in data_str
-    has_hash = 'passwordHash' in data_str
-    return not (has_id or has_hash)
-
-def register_member(session, username=None, email=None, password=None):
-    """Register a new member and return credentials"""
-    if not username:
-        username = f"testmember_{random_string(10)}"
-    if not email:
-        email = f"{username}@example.com"
-    if not password:
-        password = "testpass123"
+def chunked_upload(session, filename="test.mp4", chunk_size_kb=4):
+    """Perform chunked video upload: init -> append -> complete"""
+    print(f"  → Chunked upload: {filename}")
     
-    resp = session.post(f"{BASE_URL}/auth/register", json={
+    # 1. Init
+    init_resp = session.post(f"{API_BASE}/uploads/video/init", json={
+        "filename": filename,
+        "mime": "video/mp4"
+    })
+    if init_resp.status_code != 200:
+        print(f"    Init failed: {init_resp.status_code} {init_resp.text}")
+        return None
+    
+    upload_id = init_resp.json().get('uploadId')
+    print(f"    Init OK: uploadId={upload_id}")
+    
+    # 2. Append chunk
+    chunk_data = create_fake_mp4(chunk_size_kb)
+    files = {'chunk': ('chunk', io.BytesIO(chunk_data), 'application/octet-stream')}
+    data = {'uploadId': upload_id, 'index': '0'}
+    
+    append_resp = session.post(f"{API_BASE}/uploads/video/append", files=files, data=data)
+    if append_resp.status_code != 200:
+        print(f"    Append failed: {append_resp.status_code} {append_resp.text}")
+        return None
+    print(f"    Append OK: chunk size={len(chunk_data)} bytes")
+    
+    # 3. Complete
+    complete_resp = session.post(f"{API_BASE}/uploads/video/complete", json={"uploadId": upload_id})
+    if complete_resp.status_code != 200:
+        print(f"    Complete failed: {complete_resp.status_code} {complete_resp.text}")
+        return None
+    
+    url = complete_resp.json().get('url')
+    print(f"    Complete OK: url={url}")
+    return url
+
+def register_member(session, username):
+    """Register a new member"""
+    resp = session.post(f"{API_BASE}/auth/register", json={
         "username": username,
-        "email": email,
+        "email": f"{username}@example.com",
+        "password": "testpass123"
+    })
+    if resp.status_code != 200:
+        print(f"  Register failed: {resp.status_code} {resp.text}")
+        return None
+    user = resp.json().get('user', {})
+    print(f"  Registered: {username} (id={user.get('id')})")
+    return user
+
+def login(session, username, password):
+    """Login and return user"""
+    resp = session.post(f"{API_BASE}/auth/login", json={
+        "username": username,
         "password": password
     })
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        return {
-            "username": username,
-            "email": email,
-            "password": password,
-            "user": data.get("user", {}),
-            "session": session
-        }
-    return None
+    if resp.status_code != 200:
+        print(f"  Login failed: {resp.status_code} {resp.text}")
+        return None
+    user = resp.json().get('user', {})
+    print(f"  Logged in: {username} (role={user.get('role')}, id={user.get('id')})")
+    return user
 
-def admin_login():
-    """Login as admin and return session"""
-    session = requests.Session()
-    resp = session.post(f"{BASE_URL}/auth/login", json={
-        "username": ADMIN_USERNAME,
-        "password": ADMIN_PASSWORD
+def main():
+    print(f"\n{'#'*80}")
+    print("# VIDEO ENDPOINT SECURITY HARDENING - REGRESSION TEST")
+    print(f"# Base URL: {BASE_URL}")
+    print(f"{'#'*80}\n")
+    
+    results = []
+    
+    # ========== HAPPY PATH ==========
+    print_test("HAPPY PATH - Legitimate video workflows should still work")
+    
+    # Admin session
+    admin_session = requests.Session()
+    admin_user = login(admin_session, ADMIN_USERNAME, ADMIN_PASSWORD)
+    if not admin_user:
+        print("❌ CRITICAL: Admin login failed")
+        return
+    
+    results.append(("Admin login", admin_user is not None))
+    
+    # 1. Admin uploads video
+    print("\n1. Admin (coach) chunked-upload video")
+    admin_video_url = chunked_upload(admin_session, "coach_demo.mp4")
+    results.append(("Admin chunked upload", admin_video_url is not None))
+    
+    # 2. Admin publishes to trainer/videos (owns the video)
+    print("\n2. Admin POST /api/trainer/videos with own video")
+    resp = admin_session.post(f"{API_BASE}/trainer/videos", json={
+        "title": "Demo Video",
+        "url": admin_video_url,
+        "clientId": None
     })
-    
+    print(f"  Status: {resp.status_code}")
     if resp.status_code == 200:
-        return session
-    return None
-
-print("=" * 80)
-print("GAMIFICATION + PASSWORD CHANGE BACKEND API TESTING")
-print("=" * 80)
-print()
-
-# ============================================================================
-# TEST 1: GET /api/gamification WITHOUT AUTH -> 401
-# ============================================================================
-print("\n--- TEST 1: GET /api/gamification without auth ---")
-try:
-    session_anon = requests.Session()
-    resp = session_anon.get(f"{BASE_URL}/gamification")
-    
-    if resp.status_code == 401:
-        log_test("GET /api/gamification without auth returns 401", True, 
-                 f"Status: {resp.status_code}, Error: {resp.json().get('error', '')}")
+        print(f"  Response: {resp.json()}")
     else:
-        log_test("GET /api/gamification without auth returns 401", False,
-                 f"Expected 401, got {resp.status_code}")
-except Exception as e:
-    log_test("GET /api/gamification without auth returns 401", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 2: Register fresh member and GET /api/gamification -> 200 with correct shape
-# ============================================================================
-print("\n--- TEST 2: Register fresh member and GET /api/gamification ---")
-try:
-    member_session = requests.Session()
-    member_creds = register_member(member_session)
+        print(f"  Error: {resp.text}")
+    results.append(("Admin publish own video", resp.status_code == 200))
     
-    if member_creds:
-        log_test("Fresh member registered successfully", True,
-                 f"Username: {member_creds['username']}, ID: {member_creds['user'].get('id', 'N/A')}")
-        
-        # GET /api/gamification
-        resp = member_session.get(f"{BASE_URL}/gamification")
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            
-            # Check shape
-            has_xp = 'xp' in data and isinstance(data['xp'], dict)
-            has_isPaid = 'isPaid' in data
-            has_goals = 'goals' in data and isinstance(data['goals'], list)
-            has_equippedAvatar = 'equippedAvatar' in data
-            has_equippedTitle = 'equippedTitle' in data
-            has_unlocked = 'unlocked' in data and isinstance(data['unlocked'], dict)
-            has_claims = 'claims' in data
-            has_quests = 'quests' in data and isinstance(data['quests'], list)
-            has_customQuests = 'customQuests' in data and isinstance(data['customQuests'], list)
-            has_avatars = 'avatars' in data and isinstance(data['avatars'], list)
-            has_titles = 'titles' in data and isinstance(data['titles'], list)
-            
-            shape_ok = all([has_xp, has_isPaid, has_goals, has_equippedAvatar, has_equippedTitle,
-                           has_unlocked, has_claims, has_quests, has_customQuests, has_avatars, has_titles])
-            
-            if shape_ok:
-                log_test("GET /api/gamification returns correct shape", True,
-                         f"All required fields present")
-                
-                # Check XP details
-                xp = data['xp']
-                xp_total = xp.get('total', -1)
-                xp_level = xp.get('level', -1)
-                
-                if xp_total == 0 and xp_level == 1:
-                    log_test("New member starts with xp.total=0 and xp.level=1", True,
-                             f"xp.total={xp_total}, xp.level={xp_level}")
-                else:
-                    log_test("New member starts with xp.total=0 and xp.level=1", False,
-                             f"Expected xp.total=0, level=1, got total={xp_total}, level={xp_level}")
-                
-                # Check isPaid
-                if data['isPaid'] == False:
-                    log_test("New member has isPaid=false", True, f"isPaid={data['isPaid']}")
-                else:
-                    log_test("New member has isPaid=false", False, f"Expected isPaid=false, got {data['isPaid']}")
-                
-                # Check unlocked avatars
-                unlocked_avatars = data['unlocked'].get('avatars', [])
-                has_seed = 'seed' in unlocked_avatars
-                has_wolf = 'wolf' in unlocked_avatars
-                
-                if has_seed and not has_wolf:
-                    log_test("Level 1 member has 'seed' unlocked but NOT 'wolf'", True,
-                             f"Unlocked avatars: {unlocked_avatars}")
-                else:
-                    log_test("Level 1 member has 'seed' unlocked but NOT 'wolf'", False,
-                             f"Expected 'seed' unlocked, 'wolf' locked. Got: {unlocked_avatars}")
-                
-                # Check equipped defaults
-                if data['equippedAvatar'] == 'seed' and data['equippedTitle'] == 'newcomer':
-                    log_test("New member has equippedAvatar='seed' and equippedTitle='newcomer'", True,
-                             f"Avatar: {data['equippedAvatar']}, Title: {data['equippedTitle']}")
-                else:
-                    log_test("New member has equippedAvatar='seed' and equippedTitle='newcomer'", False,
-                             f"Expected seed/newcomer, got {data['equippedAvatar']}/{data['equippedTitle']}")
-                
-                # Check built-in quests
-                if len(data['quests']) == 4:
-                    log_test("4 built-in quests present", True, f"Quest count: {len(data['quests'])}")
-                else:
-                    log_test("4 built-in quests present", False, f"Expected 4 quests, got {len(data['quests'])}")
-                
-                # Check no leaks
-                if check_no_leaks(data):
-                    log_test("No _id or passwordHash leaks in gamification response", True)
-                else:
-                    log_test("No _id or passwordHash leaks in gamification response", False,
-                             "Found _id or passwordHash in response")
-            else:
-                log_test("GET /api/gamification returns correct shape", False,
-                         f"Missing fields. has_xp={has_xp}, has_isPaid={has_isPaid}, etc.")
-        else:
-            log_test("GET /api/gamification returns 200", False,
-                     f"Expected 200, got {resp.status_code}")
-    else:
-        log_test("Fresh member registered successfully", False, "Registration failed")
-except Exception as e:
-    log_test("Register fresh member and GET /api/gamification", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 3: POST /api/gamification/goals
-# ============================================================================
-print("\n--- TEST 3: POST /api/gamification/goals ---")
-try:
-    goals = ["Build Muscle", "Get Stronger"]
-    resp = member_session.post(f"{BASE_URL}/gamification/goals", json={"goals": goals})
+    # 3. Register memberA
+    print("\n3. Register memberA")
+    memberA_session = requests.Session()
+    memberA = register_member(memberA_session, f"memberA_{os.urandom(4).hex()}")
+    results.append(("Register memberA", memberA is not None))
     
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get('ok') and data.get('goals') == goals:
-            log_test("POST /api/gamification/goals sets goals", True,
-                     f"Goals set: {data.get('goals')}")
-            
-            # Verify goals persist
-            resp2 = member_session.get(f"{BASE_URL}/gamification")
-            if resp2.status_code == 200:
-                data2 = resp2.json()
-                if data2.get('goals') == goals:
-                    log_test("Goals persist in GET /api/gamification", True,
-                             f"Goals: {data2.get('goals')}")
-                else:
-                    log_test("Goals persist in GET /api/gamification", False,
-                             f"Expected {goals}, got {data2.get('goals')}")
-        else:
-            log_test("POST /api/gamification/goals sets goals", False,
-                     f"Response: {data}")
-    else:
-        log_test("POST /api/gamification/goals sets goals", False,
-                 f"Expected 200, got {resp.status_code}")
-except Exception as e:
-    log_test("POST /api/gamification/goals", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 4: POST /api/gamification/workout - XP award and deduplication
-# ============================================================================
-print("\n--- TEST 4: POST /api/gamification/workout ---")
-try:
-    # First workout
-    resp = member_session.post(f"{BASE_URL}/gamification/workout", json={"workoutId": "w1"})
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get('awarded') == True and data.get('gained') == 50:
-            xp_total = data.get('xp', {}).get('total', 0)
-            if xp_total == 50:
-                log_test("First workout awards 50 XP", True,
-                         f"awarded={data.get('awarded')}, gained={data.get('gained')}, xp.total={xp_total}")
-            else:
-                log_test("First workout awards 50 XP", False,
-                         f"Expected xp.total=50, got {xp_total}")
-        else:
-            log_test("First workout awards 50 XP", False,
-                     f"Expected awarded=true, gained=50, got {data}")
-    else:
-        log_test("First workout awards 50 XP", False,
-                 f"Expected 200, got {resp.status_code}")
-    
-    # Repeat same workout (should be deduped)
-    resp = member_session.post(f"{BASE_URL}/gamification/workout", json={"workoutId": "w1"})
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get('awarded') == False:
-            xp_total = data.get('xp', {}).get('total', 0)
-            if xp_total == 50:
-                log_test("Repeat same workoutId is deduped (awarded=false, xp stays 50)", True,
-                         f"awarded={data.get('awarded')}, xp.total={xp_total}")
-            else:
-                log_test("Repeat same workoutId is deduped (awarded=false, xp stays 50)", False,
-                         f"Expected xp.total=50, got {xp_total}")
-        else:
-            log_test("Repeat same workoutId is deduped (awarded=false, xp stays 50)", False,
-                     f"Expected awarded=false, got {data}")
-    else:
-        log_test("Repeat same workoutId is deduped", False,
-                 f"Expected 200, got {resp.status_code}")
-    
-    # Second distinct workout
-    resp = member_session.post(f"{BASE_URL}/gamification/workout", json={"workoutId": "w2"})
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get('awarded') == True and data.get('gained') == 50:
-            xp_total = data.get('xp', {}).get('total', 0)
-            if xp_total == 100:
-                log_test("Second distinct workoutId awards XP (xp.total=100)", True,
-                         f"awarded={data.get('awarded')}, gained={data.get('gained')}, xp.total={xp_total}")
-            else:
-                log_test("Second distinct workoutId awards XP (xp.total=100)", False,
-                         f"Expected xp.total=100, got {xp_total}")
-        else:
-            log_test("Second distinct workoutId awards XP", False,
-                     f"Expected awarded=true, gained=50, got {data}")
-    else:
-        log_test("Second distinct workoutId awards XP", False,
-                 f"Expected 200, got {resp.status_code}")
-    
-    # Missing workoutId
-    resp = member_session.post(f"{BASE_URL}/gamification/workout", json={})
-    
-    if resp.status_code == 400:
-        log_test("Missing workoutId returns 400", True,
-                 f"Status: {resp.status_code}, Error: {resp.json().get('error', '')}")
-    else:
-        log_test("Missing workoutId returns 400", False,
-                 f"Expected 400, got {resp.status_code}")
-except Exception as e:
-    log_test("POST /api/gamification/workout", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 5: POST /api/gamification/claim - Quest claim and deduplication
-# ============================================================================
-print("\n--- TEST 5: POST /api/gamification/claim ---")
-try:
-    # Claim daily_log quest
-    resp = member_session.post(f"{BASE_URL}/gamification/claim", json={"questId": "daily_log"})
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get('gained') == 40:
-            xp_total = data.get('xp', {}).get('total', 0)
-            if xp_total == 140:  # 100 from workouts + 40 from quest
-                log_test("Claim daily_log quest awards 40 XP", True,
-                         f"gained={data.get('gained')}, xp.total={xp_total}")
-            else:
-                log_test("Claim daily_log quest awards 40 XP", False,
-                         f"Expected xp.total=140, got {xp_total}")
-        else:
-            log_test("Claim daily_log quest awards 40 XP", False,
-                     f"Expected gained=40, got {data}")
-    else:
-        log_test("Claim daily_log quest awards 40 XP", False,
-                 f"Expected 200, got {resp.status_code}")
-    
-    # Immediate repeat (should be 409)
-    resp = member_session.post(f"{BASE_URL}/gamification/claim", json={"questId": "daily_log"})
-    
-    if resp.status_code == 409:
-        data = resp.json()
-        if 'Already claimed this period' in data.get('error', ''):
-            log_test("Immediate repeat of daily_log returns 409 'Already claimed this period'", True,
-                     f"Status: {resp.status_code}, Error: {data.get('error')}")
-        else:
-            log_test("Immediate repeat of daily_log returns 409 'Already claimed this period'", False,
-                     f"Expected 'Already claimed this period', got {data.get('error')}")
-    else:
-        log_test("Immediate repeat of daily_log returns 409", False,
-                 f"Expected 409, got {resp.status_code}")
-    
-    # Unknown questId
-    resp = member_session.post(f"{BASE_URL}/gamification/claim", json={"questId": "does_not_exist"})
-    
-    if resp.status_code == 400:
-        log_test("Unknown questId returns 400", True,
-                 f"Status: {resp.status_code}, Error: {resp.json().get('error', '')}")
-    else:
-        log_test("Unknown questId returns 400", False,
-                 f"Expected 400, got {resp.status_code}")
-except Exception as e:
-    log_test("POST /api/gamification/claim", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 6: POST /api/gamification/equip - FREE member (portalAccess=false) -> 403
-# ============================================================================
-print("\n--- TEST 6: POST /api/gamification/equip as FREE member ---")
-try:
-    resp = member_session.post(f"{BASE_URL}/gamification/equip", json={"avatarId": "seed"})
-    
-    if resp.status_code == 403:
-        data = resp.json()
-        if 'Rewards are for members' in data.get('error', ''):
-            log_test("FREE member (portalAccess=false) equip returns 403", True,
-                     f"Status: {resp.status_code}, Error: {data.get('error')}")
-        else:
-            log_test("FREE member (portalAccess=false) equip returns 403", False,
-                     f"Expected 'Rewards are for members', got {data.get('error')}")
-    else:
-        log_test("FREE member (portalAccess=false) equip returns 403", False,
-                 f"Expected 403, got {resp.status_code}")
-except Exception as e:
-    log_test("POST /api/gamification/equip as FREE member", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 7: POST /api/gamification/equip as ADMIN (portalAccess=true)
-# ============================================================================
-print("\n--- TEST 7: POST /api/gamification/equip as ADMIN ---")
-try:
-    admin_session = admin_login()
-    
-    if admin_session:
-        log_test("Admin login successful", True, f"Username: {ADMIN_USERNAME}")
-        
-        # Equip unlocked avatar (seed, level 1)
-        resp = admin_session.post(f"{BASE_URL}/gamification/equip", json={"avatarId": "seed"})
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('ok') and data.get('equippedAvatar') == 'seed':
-                log_test("Admin equips unlocked avatar 'seed' (level 1) -> 200", True,
-                         f"equippedAvatar={data.get('equippedAvatar')}")
-            else:
-                log_test("Admin equips unlocked avatar 'seed' (level 1) -> 200", False,
-                         f"Response: {data}")
-        else:
-            log_test("Admin equips unlocked avatar 'seed' (level 1) -> 200", False,
-                     f"Expected 200, got {resp.status_code}")
-        
-        # Try to equip locked high-level avatar (goat, level 12)
-        # Admin likely doesn't have level 12, so should get 403
-        resp = admin_session.post(f"{BASE_URL}/gamification/equip", json={"avatarId": "goat"})
-        
-        if resp.status_code == 403:
-            data = resp.json()
-            if 'still locked' in data.get('error', '').lower():
-                log_test("Admin equips locked avatar 'goat' (level 12) -> 403 'still locked'", True,
-                         f"Status: {resp.status_code}, Error: {data.get('error')}")
-            else:
-                log_test("Admin equips locked avatar 'goat' (level 12) -> 403 'still locked'", False,
-                         f"Expected 'still locked', got {data.get('error')}")
-        elif resp.status_code == 200:
-            # Admin might have enough XP, which is fine
-            log_test("Admin equips 'goat' -> 200 (admin has level >= 12)", True,
-                     "Admin has sufficient level to equip goat")
-        else:
-            log_test("Admin equips locked avatar 'goat' (level 12)", False,
-                     f"Expected 403 or 200, got {resp.status_code}")
-        
-        # Equip title
-        resp = admin_session.post(f"{BASE_URL}/gamification/equip", json={"titleId": "newcomer"})
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('ok') and data.get('equippedTitle') == 'newcomer':
-                log_test("Admin equips title 'newcomer' -> 200", True,
-                         f"equippedTitle={data.get('equippedTitle')}")
-            else:
-                log_test("Admin equips title 'newcomer' -> 200", False,
-                         f"Response: {data}")
-        else:
-            log_test("Admin equips title 'newcomer' -> 200", False,
-                     f"Expected 200, got {resp.status_code}")
-    else:
-        log_test("Admin login successful", False, "Admin login failed")
-except Exception as e:
-    log_test("POST /api/gamification/equip as ADMIN", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 8: GET /api/gamification/leaderboard
-# ============================================================================
-print("\n--- TEST 8: GET /api/gamification/leaderboard ---")
-try:
-    resp = admin_session.get(f"{BASE_URL}/gamification/leaderboard")
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        leaderboard = data.get('leaderboard', [])
-        
-        if isinstance(leaderboard, list):
-            log_test("GET /api/gamification/leaderboard returns 200 with leaderboard array", True,
-                     f"Leaderboard entries: {len(leaderboard)}")
-            
-            # Check sorting (descending by xp)
-            if len(leaderboard) > 1:
-                sorted_ok = all(leaderboard[i]['xp'] >= leaderboard[i+1]['xp'] 
-                               for i in range(len(leaderboard)-1))
-                if sorted_ok:
-                    log_test("Leaderboard sorted by xp descending", True,
-                             f"First entry xp: {leaderboard[0]['xp']}, Last entry xp: {leaderboard[-1]['xp']}")
-                else:
-                    log_test("Leaderboard sorted by xp descending", False,
-                             "Leaderboard not sorted correctly")
-            
-            # Check entries have required fields
-            if len(leaderboard) > 0:
-                entry = leaderboard[0]
-                has_username = 'username' in entry
-                has_level = 'level' in entry
-                has_xp = 'xp' in entry
-                has_avatar = 'avatar' in entry
-                has_title = 'title' in entry
-                
-                if all([has_username, has_level, has_xp, has_avatar, has_title]):
-                    log_test("Leaderboard entries have required fields (username, level, xp, avatar, title)", True,
-                             f"Sample entry: {entry}")
-                else:
-                    log_test("Leaderboard entries have required fields", False,
-                             f"Missing fields in entry: {entry}")
-            
-            # Check no _id leaks
-            if check_no_leaks(data):
-                log_test("No _id leaks in leaderboard response", True)
-            else:
-                log_test("No _id leaks in leaderboard response", False,
-                         "Found _id in response")
-        else:
-            log_test("GET /api/gamification/leaderboard returns leaderboard array", False,
-                     f"Expected array, got {type(leaderboard)}")
-    else:
-        log_test("GET /api/gamification/leaderboard returns 200", False,
-                 f"Expected 200, got {resp.status_code}")
-except Exception as e:
-    log_test("GET /api/gamification/leaderboard", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 9: POST /api/gamification/quests - Normal member -> 403
-# ============================================================================
-print("\n--- TEST 9: POST /api/gamification/quests as normal member ---")
-try:
-    resp = member_session.post(f"{BASE_URL}/gamification/quests", json={
-        "title": "Test Quest",
-        "desc": "Do something",
-        "period": "weekly",
-        "xp": 100,
-        "scope": "site"
+    # 4. Admin sets memberA portalAccess + assignedTrainerId
+    print("\n4. Admin sets memberA portalAccess=true + assignedTrainerId")
+    resp = admin_session.put(f"{API_BASE}/admin/users", json={
+        "id": memberA['id'],
+        "portalAccess": True,
+        "assignedTrainerId": admin_user['id']
     })
+    print(f"  Status: {resp.status_code}")
+    results.append(("Admin set memberA access", resp.status_code == 200))
     
-    if resp.status_code == 403:
-        log_test("Normal member POST /api/gamification/quests returns 403", True,
-                 f"Status: {resp.status_code}, Error: {resp.json().get('error', '')}")
-    else:
-        log_test("Normal member POST /api/gamification/quests returns 403", False,
-                 f"Expected 403, got {resp.status_code}")
-except Exception as e:
-    log_test("POST /api/gamification/quests as normal member", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 10: POST /api/gamification/quests as ADMIN
-# ============================================================================
-print("\n--- TEST 10: POST /api/gamification/quests as ADMIN ---")
-try:
-    # Create quest with valid data
-    resp = admin_session.post(f"{BASE_URL}/gamification/quests", json={
-        "title": "Test Quest",
-        "desc": "Do it",
-        "period": "weekly",
-        "xp": 100,
-        "scope": "site"
+    # 5. memberA uploads video
+    print("\n5. memberA chunked-upload video")
+    memberA_video_url = chunked_upload(memberA_session, "memberA_checkin.mp4")
+    results.append(("MemberA chunked upload", memberA_video_url is not None))
+    
+    # 6. memberA POST checkin with video
+    print("\n6. memberA POST /api/checkins with video")
+    resp = memberA_session.post(f"{API_BASE}/checkins", json={
+        "week": "Week 1",
+        "readiness": "Good",
+        "wins": "PR on squat",
+        "struggles": "None",
+        "videoUrl": memberA_video_url
     })
-    
+    print(f"  Status: {resp.status_code}")
     if resp.status_code == 200:
-        data = resp.json()
-        quest = data.get('quest', {})
-        if data.get('ok') and quest.get('scope') == 'site':
-            log_test("Admin creates site-wide quest -> 200 with scope='site'", True,
-                     f"Quest: {quest.get('title')}, scope={quest.get('scope')}")
-            
-            # Verify quest appears in GET /api/gamification
-            resp2 = admin_session.get(f"{BASE_URL}/gamification")
-            if resp2.status_code == 200:
-                data2 = resp2.json()
-                custom_quests = data2.get('customQuests', [])
-                quest_found = any(q.get('id') == quest.get('id') for q in custom_quests)
-                
-                if quest_found:
-                    log_test("Created quest appears in GET /api/gamification customQuests", True,
-                             f"Quest ID: {quest.get('id')}")
-                else:
-                    log_test("Created quest appears in GET /api/gamification customQuests", False,
-                             f"Quest not found in customQuests")
-        else:
-            log_test("Admin creates site-wide quest -> 200", False,
-                     f"Response: {data}")
+        checkin_data = resp.json()
+        checkin_id = checkin_data.get('id')
+        print(f"  Checkin created: id={checkin_id}, video={checkin_data.get('video')}")
     else:
-        log_test("Admin creates site-wide quest -> 200", False,
-                 f"Expected 200, got {resp.status_code}")
+        print(f"  Error: {resp.text}")
+        checkin_id = None
+    results.append(("MemberA checkin with video", resp.status_code == 200 and checkin_id is not None))
     
-    # Test XP clamping (xp > 500 should be clamped to 500)
-    resp = admin_session.post(f"{BASE_URL}/gamification/quests", json={
-        "title": "High XP Quest",
-        "desc": "Too much XP",
-        "period": "weekly",
-        "xp": 9999,
-        "scope": "site"
-    })
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        quest = data.get('quest', {})
-        if quest.get('xp') == 500:
-            log_test("XP clamping: xp=9999 clamped to 500", True,
-                     f"Requested xp=9999, stored xp={quest.get('xp')}")
-        else:
-            log_test("XP clamping: xp=9999 clamped to 500", False,
-                     f"Expected xp=500, got {quest.get('xp')}")
-    
-    # Test XP clamping (xp < 10 should be clamped to 10)
-    resp = admin_session.post(f"{BASE_URL}/gamification/quests", json={
-        "title": "Low XP Quest",
-        "desc": "Too little XP",
-        "period": "weekly",
-        "xp": 1,
-        "scope": "site"
-    })
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        quest = data.get('quest', {})
-        if quest.get('xp') == 10:
-            log_test("XP clamping: xp=1 clamped to 10", True,
-                     f"Requested xp=1, stored xp={quest.get('xp')}")
-        else:
-            log_test("XP clamping: xp=1 clamped to 10", False,
-                     f"Expected xp=10, got {quest.get('xp')}")
-    
-    # Missing title
-    resp = admin_session.post(f"{BASE_URL}/gamification/quests", json={
-        "desc": "No title",
-        "period": "weekly",
-        "xp": 100,
-        "scope": "site"
-    })
-    
-    if resp.status_code == 400:
-        log_test("Missing title returns 400", True,
-                 f"Status: {resp.status_code}, Error: {resp.json().get('error', '')}")
-    else:
-        log_test("Missing title returns 400", False,
-                 f"Expected 400, got {resp.status_code}")
-except Exception as e:
-    log_test("POST /api/gamification/quests as ADMIN", False, f"Exception: {str(e)}")
-
-# ============================================================================
-# TEST 11: POST /api/account/password - Change password
-# ============================================================================
-print("\n--- TEST 11: POST /api/account/password ---")
-try:
-    # Register a new member for password change test
-    pw_session = requests.Session()
-    pw_username = f"pwtest_{random_string(10)}"
-    pw_email = f"{pw_username}@example.com"
-    pw_old = "oldpass123"
-    pw_new = "newpass456"
-    
-    pw_creds = register_member(pw_session, pw_username, pw_email, pw_old)
-    
-    if pw_creds:
-        log_test("Registered member for password change test", True,
-                 f"Username: {pw_username}")
-        
-        # Change password with correct current password
-        resp = pw_session.post(f"{BASE_URL}/account/password", json={
-            "currentPassword": pw_old,
-            "newPassword": pw_new
+    # 7. memberA POST checkin reply
+    print("\n7. memberA POST /api/checkins/reply")
+    if checkin_id:
+        resp = memberA_session.post(f"{API_BASE}/checkins/reply", json={
+            "checkinId": checkin_id,
+            "text": "Looking forward to feedback"
         })
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('ok'):
-                log_test("Change password with correct currentPassword -> 200", True,
-                         f"Password changed successfully")
-                
-                # Try to login with NEW password
-                login_session = requests.Session()
-                resp2 = login_session.post(f"{BASE_URL}/auth/login", json={
-                    "username": pw_username,
-                    "password": pw_new
-                })
-                
-                if resp2.status_code == 200:
-                    log_test("Login with NEW password succeeds", True,
-                             f"Login successful with new password")
-                else:
-                    log_test("Login with NEW password succeeds", False,
-                             f"Expected 200, got {resp2.status_code}")
-            else:
-                log_test("Change password with correct currentPassword -> 200", False,
-                         f"Response: {data}")
-        else:
-            log_test("Change password with correct currentPassword -> 200", False,
-                     f"Expected 200, got {resp.status_code}")
-        
-        # Wrong current password
-        resp = pw_session.post(f"{BASE_URL}/account/password", json={
-            "currentPassword": "wrongpassword",
-            "newPassword": "anotherpass123"
-        })
-        
-        if resp.status_code == 400:
-            data = resp.json()
-            if 'incorrect' in data.get('error', '').lower():
-                log_test("Wrong currentPassword returns 400", True,
-                         f"Status: {resp.status_code}, Error: {data.get('error')}")
-            else:
-                log_test("Wrong currentPassword returns 400", False,
-                         f"Expected 'incorrect', got {data.get('error')}")
-        else:
-            log_test("Wrong currentPassword returns 400", False,
-                     f"Expected 400, got {resp.status_code}")
-        
-        # New password too short (< 8 chars)
-        resp = pw_session.post(f"{BASE_URL}/account/password", json={
-            "currentPassword": pw_new,
-            "newPassword": "short"
-        })
-        
-        if resp.status_code == 400:
-            data = resp.json()
-            if '8 characters' in data.get('error', ''):
-                log_test("newPassword < 8 chars returns 400", True,
-                         f"Status: {resp.status_code}, Error: {data.get('error')}")
-            else:
-                log_test("newPassword < 8 chars returns 400", False,
-                         f"Expected '8 characters', got {data.get('error')}")
-        else:
-            log_test("newPassword < 8 chars returns 400", False,
-                     f"Expected 400, got {resp.status_code}")
+        print(f"  Status: {resp.status_code}")
+        results.append(("MemberA reply to checkin", resp.status_code == 200))
     else:
-        log_test("Registered member for password change test", False,
-                 "Registration failed")
-except Exception as e:
-    log_test("POST /api/account/password", False, f"Exception: {str(e)}")
+        print("  Skipped (no checkin_id)")
+        results.append(("MemberA reply to checkin", False))
+    
+    # 8. Admin (coach) POST checkin reply
+    print("\n8. Admin (coach) POST /api/checkins/reply")
+    if checkin_id:
+        resp = admin_session.post(f"{API_BASE}/checkins/reply", json={
+            "checkinId": checkin_id,
+            "text": "Great work!"
+        })
+        print(f"  Status: {resp.status_code}")
+        results.append(("Admin reply to checkin", resp.status_code == 200))
+    else:
+        print("  Skipped (no checkin_id)")
+        results.append(("Admin reply to checkin", False))
+    
+    # ========== OWNERSHIP GUARD ==========
+    print_test("OWNERSHIP GUARD - Cross-user video references should be blocked")
+    
+    # 9. Register memberB
+    print("\n9. Register memberB")
+    memberB_session = requests.Session()
+    memberB = register_member(memberB_session, f"memberB_{os.urandom(4).hex()}")
+    results.append(("Register memberB", memberB is not None))
+    
+    # 10. memberB uploads video
+    print("\n10. memberB chunked-upload video")
+    memberB_video_url = chunked_upload(memberB_session, "memberB_video.mp4")
+    results.append(("MemberB chunked upload", memberB_video_url is not None))
+    
+    # 11. Admin tries to publish memberB's video (should fail - admin doesn't own it)
+    print("\n11. Admin POST /api/trainer/videos with memberB's video (should FAIL)")
+    resp = admin_session.post(f"{API_BASE}/trainer/videos", json={
+        "title": "Stolen Video",
+        "url": memberB_video_url,
+        "clientId": None
+    })
+    print(f"  Status: {resp.status_code}")
+    print(f"  Response: {resp.text}")
+    is_blocked = resp.status_code == 400 and ("Invalid video reference" in resp.text or "You can only publish videos you uploaded" in resp.text)
+    results.append(("Admin blocked from memberB video", is_blocked))
+    
+    # 12. memberA tries to use memberB's video in checkin (should fail)
+    print("\n12. memberA POST /api/checkins with memberB's video (should FAIL)")
+    resp = memberA_session.post(f"{API_BASE}/checkins", json={
+        "week": "Week 2",
+        "readiness": "Good",
+        "wins": "Test",
+        "struggles": "None",
+        "videoUrl": memberB_video_url
+    })
+    print(f"  Status: {resp.status_code}")
+    print(f"  Response: {resp.text}")
+    is_blocked = resp.status_code == 400 and "Invalid video reference" in resp.text
+    results.append(("MemberA blocked from memberB video in checkin", is_blocked))
+    
+    # 13. memberA tries to use memberB's video in reply (should fail)
+    print("\n13. memberA POST /api/checkins/reply with memberB's video (should FAIL)")
+    if checkin_id:
+        resp = memberA_session.post(f"{API_BASE}/checkins/reply", json={
+            "checkinId": checkin_id,
+            "videoUrl": memberB_video_url
+        })
+        print(f"  Status: {resp.status_code}")
+        print(f"  Response: {resp.text}")
+        is_blocked = resp.status_code == 400 and "Invalid video reference" in resp.text
+        results.append(("MemberA blocked from memberB video in reply", is_blocked))
+    else:
+        print("  Skipped (no checkin_id)")
+        results.append(("MemberA blocked from memberB video in reply", False))
+    
+    # 14. Sanity: memberA can use own video in reply (should succeed)
+    print("\n14. Sanity: memberA POST /api/checkins/reply with own video (should SUCCEED)")
+    if checkin_id and memberA_video_url:
+        resp = memberA_session.post(f"{API_BASE}/checkins/reply", json={
+            "checkinId": checkin_id,
+            "text": "Here's another angle",
+            "videoUrl": memberA_video_url
+        })
+        print(f"  Status: {resp.status_code}")
+        results.append(("MemberA can use own video in reply", resp.status_code == 200))
+    else:
+        print("  Skipped (no checkin_id or video)")
+        results.append(("MemberA can use own video in reply", False))
+    
+    # ========== RATE/SIZE GUARDS ==========
+    print_test("RATE/SIZE GUARDS - Normal chunks should not be rejected")
+    
+    # 15. Normal ~4KB chunk should work (not rejected by 8MB cap)
+    print("\n15. Normal ~4KB chunk append (should SUCCEED)")
+    test_session = requests.Session()
+    login(test_session, ADMIN_USERNAME, ADMIN_PASSWORD)
+    
+    init_resp = test_session.post(f"{API_BASE}/uploads/video/init", json={
+        "filename": "size_test.mp4",
+        "mime": "video/mp4"
+    })
+    if init_resp.status_code == 200:
+        upload_id = init_resp.json().get('uploadId')
+        print(f"  Init OK: uploadId={upload_id}")
+        
+        # Append 4KB chunk
+        chunk_data = create_fake_mp4(4)
+        files = {'chunk': ('chunk', io.BytesIO(chunk_data), 'application/octet-stream')}
+        data = {'uploadId': upload_id, 'index': '0'}
+        
+        append_resp = test_session.post(f"{API_BASE}/uploads/video/append", files=files, data=data)
+        print(f"  Append status: {append_resp.status_code}")
+        print(f"  Chunk size: {len(chunk_data)} bytes (~4KB)")
+        results.append(("Normal 4KB chunk accepted", append_resp.status_code == 200))
+        
+        # Verify init returns UUID
+        import re
+        uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        is_uuid = bool(re.match(uuid_pattern, upload_id))
+        print(f"  Init returns UUID: {is_uuid}")
+        results.append(("Init returns UUID", is_uuid))
+    else:
+        print(f"  Init failed: {init_resp.status_code}")
+        results.append(("Normal 4KB chunk accepted", False))
+        results.append(("Init returns UUID", False))
+    
+    # ========== SUMMARY ==========
+    print(f"\n\n{'#'*80}")
+    print("# TEST SUMMARY")
+    print(f"{'#'*80}\n")
+    
+    passed = sum(1 for _, result in results if result)
+    total = len(results)
+    
+    for test_name, result in results:
+        print_result(result, test_name)
+    
+    print(f"\n{'='*80}")
+    print(f"TOTAL: {passed}/{total} tests passed ({100*passed//total}%)")
+    print(f"{'='*80}\n")
+    
+    if passed == total:
+        print("✅ ALL TESTS PASSED - Security hardening working correctly")
+        return 0
+    else:
+        print(f"❌ {total - passed} TEST(S) FAILED - Review failures above")
+        return 1
 
-# ============================================================================
-# FINAL SUMMARY
-# ============================================================================
-print("\n" + "=" * 80)
-print("TEST SUMMARY")
-print("=" * 80)
-print(f"Total Tests: {tests_passed + tests_failed}")
-print(f"✅ Passed: {tests_passed}")
-print(f"❌ Failed: {tests_failed}")
-print(f"Success Rate: {(tests_passed / (tests_passed + tests_failed) * 100):.1f}%")
-print("=" * 80)
-
-# Check for any 500 errors or leaks across all tests
-print("\nFINAL CHECKS:")
-print("- No 500 errors encountered: ✅")
-print("- No MongoDB _id or passwordHash leaks detected: ✅")
-print()
+if __name__ == "__main__":
+    exit(main())

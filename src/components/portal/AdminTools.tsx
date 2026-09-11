@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type ATab = "analytics" | "revenue" | "announcement" | "assign" | "export";
+type ATab = "analytics" | "revenue" | "announcement" | "trial" | "assign" | "export";
 const card = "border border-bone/15 bg-ink/20 p-5";
 const label = "block text-[11px] uppercase tracking-wider text-bone/50 mb-1 font-display";
 const input = "w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none";
@@ -168,12 +168,70 @@ function ExportCsv() {
   );
 }
 
+function TrialSettings() {
+  const [enabled, setEnabled] = useState(false);
+  const [days, setDays] = useState(7);
+  const [flash, setFlash] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    fetch("/api/admin/trial-settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) { setEnabled(!!d.enabled); setDays(Number(d.days) > 0 ? Number(d.days) : 7); } setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+  async function save() {
+    const res = await fetch("/api/admin/trial-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, days }),
+    });
+    setFlash(res.ok ? "\u2713 Saved" : "Error");
+    if (res.ok) setTimeout(() => setFlash(""), 2500);
+  }
+  if (!loaded) return <p className="text-bone/50 font-display uppercase tracking-wider text-sm">Loading…</p>;
+  return (
+    <div className="grid gap-4 max-w-xl">
+      <p className="text-bone/60 text-sm leading-relaxed">
+        Give <span className="text-bone">new remote coaching clients</span> a free trial before billing starts.
+        Their card is collected up front, nothing is charged during the trial, and it auto-bills after unless they
+        cancel. Portal access opens immediately. Only applies to <span className="text-bone">Remote Coaching ($400/mo)</span>{" "}
+        and to first-time clients (never had access before).
+      </p>
+      <label className="flex items-center gap-2 text-sm text-bone/70">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enable first-week-free trial
+      </label>
+      <div className="max-w-[180px]">
+        <label className={label}>Free days</label>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          className={input}
+          value={days}
+          onChange={(e) => setDays(Math.max(1, Math.min(365, parseInt(e.target.value || "7", 10) || 7)))}
+          disabled={!enabled}
+        />
+      </div>
+      {enabled && (
+        <div className="border border-electric/40 bg-electric/5 px-4 py-2.5 text-sm text-bone/80">
+          New remote coaching clients get <span className="text-electric font-display uppercase">{days} day{days === 1 ? "" : "s"} free</span>, then $400/mo.
+        </div>
+      )}
+      <div className="flex items-center gap-4">
+        <button className={btn} onClick={save}>Save trial settings</button>
+        {flash && <span className="text-electric font-display uppercase tracking-wider text-xs">{flash}</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminTools() {
   const [t, setT] = useState<ATab>("analytics");
   const tabs: { id: ATab; label: string }[] = [
     { id: "analytics", label: "Analytics" },
     { id: "revenue", label: "Revenue & Coupons" },
     { id: "announcement", label: "Announcement" },
+    { id: "trial", label: "Free Trial" },
     { id: "assign", label: "Bulk Assign" },
     { id: "export", label: "Export CSV" },
   ];
@@ -181,7 +239,7 @@ export default function AdminTools() {
     <div>
       <div className="mb-6 border-l-2 border-electric/50 pl-4">
         <p className="font-display uppercase tracking-wider text-electric text-sm">Admin tools</p>
-        <p className="text-bone/60 text-sm mt-1">Analytics, revenue, site announcement, bulk assignment and exports.</p>
+        <p className="text-bone/60 text-sm mt-1">Analytics, revenue, site announcement, free trial, bulk assignment and exports.</p>
       </div>
       <div className="flex flex-wrap gap-2 mb-6">
         {tabs.map((x) => (
@@ -191,6 +249,7 @@ export default function AdminTools() {
       {t === "analytics" && <Analytics />}
       {t === "revenue" && <Revenue />}
       {t === "announcement" && <Announcement />}
+      {t === "trial" && <TrialSettings />}
       {t === "assign" && <BulkAssign />}
       {t === "export" && <ExportCsv />}
     </div>

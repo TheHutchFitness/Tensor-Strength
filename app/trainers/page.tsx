@@ -10,6 +10,8 @@ import TrainerFiles from "@/components/portal/TrainerFiles";
 import TrainerMeals from "@/components/portal/TrainerMeals";
 import TrainerMessages from "@/components/portal/TrainerMessages";
 import CoachTools from "@/components/portal/CoachTools";
+import TrainerVideos from "@/components/portal/TrainerVideos";
+import CoachCheckinReply from "@/components/portal/CoachCheckinReply";
 
 type Client = {
   id: string;
@@ -21,6 +23,16 @@ type Client = {
   lastCheckinAt: string | null;
 };
 
+type Reply = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole: "coach" | "member";
+  text: string;
+  video: string | null;
+  createdAt: string;
+};
+
 type CheckIn = {
   id: string;
   week?: string;
@@ -28,10 +40,13 @@ type CheckIn = {
   struggles?: string;
   readiness?: string;
   trainerNote?: string;
+  video?: string | null;
+  hasCoachReply?: boolean;
+  replies?: Reply[];
   createdAt: string;
 };
 
-type Tab = "clients" | "messages" | "programs" | "meals" | "files" | "tools" | "profile";
+type Tab = "clients" | "messages" | "programs" | "meals" | "files" | "videos" | "tools" | "profile";
 
 function fmt(d?: string | null) {
   if (!d) return "—";
@@ -274,6 +289,7 @@ export default function TrainersPage() {
     { id: "programs", label: "Programs" },
     { id: "meals", label: "Meals" },
     { id: "files", label: "Files" },
+    { id: "videos", label: "Demo Videos" },
     { id: "tools", label: "Coach Tools" },
     { id: "profile", label: "My Profile" },
   ];
@@ -616,6 +632,13 @@ export default function TrainersPage() {
                                     <span className="text-bone/90">{ci.struggles}</span>
                                   </p>
                                 )}
+                                <CoachCheckinReply
+                                  checkinId={ci.id}
+                                  video={ci.video}
+                                  replies={ci.replies}
+                                  meId={meId}
+                                  onReplied={() => selected && openClient(selected)}
+                                />
                                 <div className="mt-4 border-t border-bone/10 pt-4">
                                   <p className="text-[10px] uppercase tracking-wider text-electric mb-2">
                                     Private coach note
@@ -651,6 +674,7 @@ export default function TrainersPage() {
               {tab === "programs" && <TrainerPrograms />}
               {tab === "meals" && <TrainerMeals />}
               {tab === "files" && <TrainerFiles />}
+              {tab === "videos" && <TrainerVideos clients={clients.map((c) => ({ id: c.id, username: c.username }))} />}
               {tab === "tools" && <CoachTools />}
               {tab === "profile" && (
                 <TrainerProfileForm onSaved={() => setProfileCompleted(true)} />
