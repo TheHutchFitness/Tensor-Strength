@@ -519,7 +519,7 @@ function xpSummary(xp) {
   const next = cumulativeXp(level + 1)
   return { total, level, into: total - cur, needed: next - cur, nextLevelAt: next }
 }
-const XP_AWARD = { workout: 50 }
+const XP_AWARD = { workout: 38 }
 // Preset unlockable avatars (emoji + gradient — friendly for all ages).
 const AVATARS = [
   { id: 'seed', name: 'Fresh Start', emoji: '🌱', level: 1, grad: ['#1f6f43', '#0a2a1a'] },
