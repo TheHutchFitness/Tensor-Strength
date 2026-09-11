@@ -262,6 +262,10 @@ export default function AccountPage() {
                     >
                       Upgrade · $9.99/mo →
                     </CheckoutButton>
+                    <p className="mt-2 text-xs text-bone/50 leading-relaxed">
+                      💳 Have a code? Enter it at checkout — click{" "}
+                      <span className="text-electric">&ldquo;Add promotion code&rdquo;</span> on the payment page.
+                    </p>
                   </div>
                 )}
                 </>

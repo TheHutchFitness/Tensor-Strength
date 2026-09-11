@@ -132,6 +132,12 @@ export default function ClientPortalPage() {
                 </CheckoutButton>
               </div>
 
+              <p className="mt-3 text-xs text-bone/50 leading-relaxed">
+                💳 Have a discount or promo code?{" "}
+                <span className="text-bone/70">Enter it at checkout</span> — on the secure payment page,
+                click <span className="text-electric">&ldquo;Add promotion code&rdquo;</span> before you pay.
+              </p>
+
               {trial?.enabled && trial?.eligible && (
                 <div className="mt-4 border-2 border-electric bg-electric/10 px-5 py-3 text-left">
                   <p className="font-display uppercase tracking-wider text-electric text-xs">
