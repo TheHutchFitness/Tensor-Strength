@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AccountReferrals from "@/components/portal/AccountReferrals";
 import SiteTabBar from "@/components/SiteTabBar";
 import CheckoutButton from "@/components/CheckoutButton";
 import Avatar from "@/components/Avatar";
@@ -66,6 +67,21 @@ export default function AccountPage() {
   const [pwd, setPwd] = useState({ current: "", next: "" });
   const [pwdMsg, setPwdMsg] = useState("");
   const [pwdState, setPwdState] = useState<"idle" | "saving">("idle");
+  const [pausing, setPausing] = useState(false);
+  const [pauseMsg, setPauseMsg] = useState("");
+  const [pausedOverride, setPausedOverride] = useState<null | boolean>(null);
+
+  async function pauseSub(next: boolean) {
+    setPausing(true);
+    setPauseMsg("");
+    try {
+      const res = await fetch(next ? "/api/payments/pause" : "/api/payments/resume", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setPauseMsg(data.error || "Something went wrong."); }
+      else { setPausedOverride(next); setPauseMsg(next ? "Membership paused — no charges until you resume." : "Membership resumed."); }
+    } catch { setPauseMsg("Network error — please try again."); }
+    finally { setPausing(false); }
+  }
 
   async function changePassword() {
     setPwdState("saving");
@@ -335,6 +351,26 @@ export default function AccountPage() {
               {isSubscribed && (
                 <div className="border-2 border-bone/15 bg-ink/30 p-6 md:p-8">
                   <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-4">Manage Subscription</p>
+                  {(() => {
+                    const paused = pausedOverride ?? (me?.subscriptionStatus === "paused");
+                    return (
+                      <div className="mb-6 border-b border-bone/10 pb-6">
+                        <p className="text-sm text-bone/70 leading-relaxed max-w-2xl">
+                          {paused
+                            ? "Your membership is paused — you won't be billed until you resume. Resume anytime to pick back up."
+                            : "Going travelling or need a break? Pause your membership to stop billing without losing your data, and resume whenever you're ready."}
+                        </p>
+                        <button
+                          onClick={() => pauseSub(!paused)}
+                          disabled={pausing}
+                          className="mt-4 border border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-xs hover:bg-electric hover:text-ink transition-colors disabled:opacity-60"
+                        >
+                          {pausing ? "Working…" : paused ? "Resume membership" : "Pause membership"}
+                        </button>
+                        {pauseMsg && <p className="mt-2 text-xs text-bone/70">{pauseMsg}</p>}
+                      </div>
+                    );
+                  })()}
                   {cancelState === "done" ? (
                     <p className="text-sm text-bone/80 leading-relaxed">
                       Your membership is set to cancel at the end of the current billing period — you keep
@@ -377,6 +413,8 @@ export default function AccountPage() {
                   )}
                 </div>
               )}
+
+              <AccountReferrals />
             </div>
           )}
         </section>

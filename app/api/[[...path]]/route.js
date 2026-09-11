@@ -84,6 +84,151 @@ async function ownsUploadKey(db, url, userId) {
   const meta = await db.collection('uploads').findOne({ key })
   return !!meta && meta.ownerId === userId
 }
+
+// Read an uploaded object's bytes from R2 (used to embed photos in the PDF report).
+async function fetchUploadBytes(url) {
+  const key = keyFromFileUrl(url)
+  if (!key) return null
+  try {
+    const obj = await getS3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }))
+    const b = await obj.Body.transformToByteArray()
+    return Buffer.from(b)
+  } catch { return null }
+}
+
+// Build a branded, single-page monthly progress report PDF for a member.
+async function buildProgressReportPdf(db, u) {
+  const now = new Date()
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const tr = await db.collection('tracker').findOne({ userId: u.id })
+  const workouts = Array.isArray(tr?.workouts) ? tr.workouts : []
+  const wTimes = workouts.map((w) => new Date(w.date).getTime()).filter((t) => Number.isFinite(t))
+  const last30 = wTimes.filter((t) => Date.now() - t <= 30 * 86400000).length
+  const metrics = await db.collection('body_metrics').find({ userId: u.id }).sort({ date: 1 }).toArray()
+  const firstM = metrics[0] || null
+  const lastM = metrics[metrics.length - 1] || null
+  const photos = await db.collection('progress_photos').find({ userId: u.id }).sort({ date: 1 }).toArray()
+  const checkinCount = await db.collection('checkins').countDocuments({ userId: u.id })
+  const sum = xpSummary(u.xp)
+
+  const doc = await PDFDocument.create()
+  const page = doc.addPage([612, 792])
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const ink = rgb(0.04, 0.02, 0.13)
+  const electric = rgb(0.13, 0.45, 1)
+  const grey = rgb(0.4, 0.4, 0.45)
+  const M = 56
+  let y = 736
+
+  page.drawRectangle({ x: 0, y: 748, width: 612, height: 44, color: ink })
+  page.drawText('TENSOR STRENGTH', { x: M, y: 762, size: 16, font: bold, color: rgb(1, 1, 1) })
+  page.drawText('PROGRESS', { x: 612 - M - bold.widthOfTextAtSize('PROGRESS', 16), y: 762, size: 16, font: bold, color: electric })
+
+  y = 700
+  page.drawText('Monthly progress report', { x: M, y, size: 22, font: bold, color: ink })
+  y -= 26
+  page.drawText(`${u.username || 'Member'}  ·  ${monthLabel}`, { x: M, y, size: 12, font, color: grey })
+
+  // Snapshot cards
+  y -= 34
+  const cards = [
+    ['LEVEL', String(sum.level)],
+    ['DAY STREAK', String(u.streak || 0)],
+    ['WORKOUTS (30d)', String(last30)],
+    ['CHECK-INS', String(checkinCount)],
+  ]
+  const cw = (612 - M * 2 - 24) / 4
+  cards.forEach((c, i) => {
+    const x = M + i * (cw + 8)
+    page.drawRectangle({ x, y: y - 46, width: cw, height: 46, color: rgb(0.96, 0.97, 1) })
+    page.drawText(c[1], { x: x + 10, y: y - 24, size: 20, font: bold, color: electric })
+    page.drawText(c[0], { x: x + 10, y: y - 40, size: 7, font: bold, color: grey })
+  })
+  y -= 46
+
+  // Body metrics table
+  y -= 34
+  page.drawText('BODY METRICS', { x: M, y, size: 9, font: bold, color: electric })
+  y -= 16
+  const fmtNum = (v) => (v == null ? '—' : String(v))
+  const fmtDelta = (a, b) => {
+    if (a == null || b == null) return '—'
+    const d = Math.round((b - a) * 10) / 10
+    return (d > 0 ? '+' : '') + d
+  }
+  const METRIC_ROWS = [
+    ['Bodyweight', 'weight'], ['Waist', 'waist'], ['Chest', 'chest'], ['Hips', 'hips'],
+    ['Arms', 'arms'], ['Thighs', 'thighs'], ['Sleep (hrs)', 'sleepHrs'], ['Steps', 'steps'], ['Resting HR', 'restingHr'],
+  ].filter(([, k]) => (firstM && firstM[k] != null) || (lastM && lastM[k] != null))
+  page.drawText('METRIC', { x: M, y, size: 8, font: bold, color: grey })
+  page.drawText('START', { x: 280, y, size: 8, font: bold, color: grey })
+  page.drawText('LATEST', { x: 360, y, size: 8, font: bold, color: grey })
+  page.drawText('CHANGE', { x: 450, y, size: 8, font: bold, color: grey })
+  y -= 4
+  page.drawLine({ start: { x: M, y }, end: { x: 612 - M, y }, thickness: 0.7, color: rgb(0.85, 0.85, 0.88) })
+  y -= 14
+  if (METRIC_ROWS.length === 0) {
+    page.drawText('No metrics logged yet.', { x: M, y, size: 10, font, color: grey })
+    y -= 14
+  } else {
+    for (const [label, key] of METRIC_ROWS) {
+      page.drawText(label, { x: M, y, size: 10, font, color: ink })
+      page.drawText(fmtNum(firstM ? firstM[key] : null), { x: 280, y, size: 10, font, color: ink })
+      page.drawText(fmtNum(lastM ? lastM[key] : null), { x: 360, y, size: 10, font, color: ink })
+      page.drawText(fmtDelta(firstM ? firstM[key] : null, lastM ? lastM[key] : null), { x: 450, y, size: 10, font: bold, color: electric })
+      y -= 15
+    }
+  }
+
+  // Recent training
+  y -= 20
+  page.drawText('RECENT TRAINING', { x: M, y, size: 9, font: bold, color: electric })
+  y -= 16
+  const recent = [...workouts].sort((a, b) => (new Date(b.date).getTime() || 0) - (new Date(a.date).getTime() || 0)).slice(0, 5)
+  if (recent.length === 0) {
+    page.drawText('No sessions logged yet.', { x: M, y, size: 10, font, color: grey }); y -= 14
+  } else {
+    for (const w of recent) {
+      const line = `${w.date || ''}   ${(w.title || 'Workout').slice(0, 60)}`
+      page.drawText(line, { x: M, y, size: 10, font, color: ink }); y -= 15
+    }
+  }
+
+  // Progress photos (embed then/now front if available)
+  y -= 20
+  page.drawText('PROGRESS PHOTOS', { x: M, y, size: 9, font: bold, color: electric })
+  y -= 8
+  const firstFront = photos.find((p) => p.front)?.front
+  const lastFront = [...photos].reverse().find((p) => p.front)?.front
+  const embedInto = async (url, x) => {
+    if (!url) return
+    const bytes = await fetchUploadBytes(url)
+    if (!bytes) return
+    let img = null
+    try { img = await doc.embedJpg(bytes) } catch { try { img = await doc.embedPng(bytes) } catch { img = null } }
+    if (!img) return
+    const w = 150
+    const h = (img.height / img.width) * w
+    const drawH = Math.min(h, 150)
+    const drawW = (img.width / img.height) * drawH
+    page.drawImage(img, { x, y: y - 8 - drawH, width: drawW, height: drawH })
+  }
+  if (firstFront || lastFront) {
+    page.drawText('Then', { x: M, y: y - 20, size: 8, font: bold, color: grey })
+    page.drawText('Now', { x: M + 170, y: y - 20, size: 8, font: bold, color: grey })
+    y -= 22
+    await embedInto(firstFront, M)
+    await embedInto(lastFront, M + 170)
+    y -= 156
+  } else {
+    y -= 6
+    page.drawText(`${photos.length} photo${photos.length === 1 ? '' : 's'} on file.`, { x: M, y, size: 10, font, color: grey })
+  }
+
+  page.drawText('Generated by Tensor Strength — keep pushing.', { x: M, y: 60, size: 9, font, color: grey })
+  return await doc.save()
+}
 // Grant a specific user read access to a private uploaded file (recipient-scoped).
 async function grantFileAccess(db, url, userId) {
   const key = keyFromFileUrl(url)
@@ -3358,6 +3503,145 @@ async function handleRoute(request, { params }) {
       } catch (e) {
         return handleCORS(NextResponse.json({ error: e.message || 'Could not cancel subscription.' }, { status: 500 }))
       }
+    }
+
+
+    // ---- Member: pause / resume their subscription (Stripe pause_collection) ----
+    if (route === '/payments/pause' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      if (!user.stripeSubscriptionId) {
+        return handleCORS(NextResponse.json({ error: 'No active subscription found on your account.' }, { status: 400 }))
+      }
+      try {
+        const params = new URLSearchParams()
+        params.set('pause_collection[behavior]', 'void') // no invoices while paused
+        const r = await fetch(`${STRIPE_BASE}/subscriptions/${user.stripeSubscriptionId}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${STRIPE_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        })
+        const data = await r.json()
+        if (!r.ok) throw new Error(data?.error?.message || 'Stripe pause failed')
+        await db.collection('users').updateOne({ id: user.id }, { $set: { subscriptionStatus: 'paused' } })
+        return handleCORS(NextResponse.json({ ok: true, paused: true }))
+      } catch (e) {
+        return handleCORS(NextResponse.json({ error: e.message || 'Could not pause subscription.' }, { status: 500 }))
+      }
+    }
+    if (route === '/payments/resume' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      if (!user.stripeSubscriptionId) {
+        return handleCORS(NextResponse.json({ error: 'No subscription found on your account.' }, { status: 400 }))
+      }
+      try {
+        const params = new URLSearchParams()
+        params.set('pause_collection', '') // clearing it resumes billing
+        const r = await fetch(`${STRIPE_BASE}/subscriptions/${user.stripeSubscriptionId}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${STRIPE_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        })
+        const data = await r.json()
+        if (!r.ok) throw new Error(data?.error?.message || 'Stripe resume failed')
+        await db.collection('users').updateOne({ id: user.id }, { $set: { subscriptionStatus: 'active' } })
+        return handleCORS(NextResponse.json({ ok: true, paused: false }))
+      } catch (e) {
+        return handleCORS(NextResponse.json({ error: e.message || 'Could not resume subscription.' }, { status: 500 }))
+      }
+    }
+
+    // ---- Monthly progress report PDF (member downloads own; coach downloads client's) ----
+    if (route === '/progress/report' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      try {
+        const bytes = await buildProgressReportPdf(db, user)
+        const headers = new Headers()
+        headers.set('Content-Type', 'application/pdf')
+        headers.set('Content-Disposition', `inline; filename="Tensor-Strength-Progress-${(user.username || 'member').replace(/[^a-zA-Z0-9]/g, '-')}.pdf"`)
+        headers.set('Cache-Control', 'private, no-store')
+        return new NextResponse(Buffer.from(bytes), { status: 200, headers })
+      } catch (e) {
+        console.error('Progress report error:', e)
+        return handleCORS(NextResponse.json({ error: 'Unable to generate the report right now.' }, { status: 502 }))
+      }
+    }
+    if (route === '/trainer/progress-report' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      if (!clientId) return handleCORS(NextResponse.json({ error: 'clientId is required' }, { status: 400 }))
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      try {
+        const bytes = await buildProgressReportPdf(db, client)
+        const headers = new Headers()
+        headers.set('Content-Type', 'application/pdf')
+        headers.set('Content-Disposition', `inline; filename="Tensor-Strength-Progress-${(client.username || 'member').replace(/[^a-zA-Z0-9]/g, '-')}.pdf"`)
+        headers.set('Cache-Control', 'private, no-store')
+        return new NextResponse(Buffer.from(bytes), { status: 200, headers })
+      } catch (e) {
+        console.error('Progress report error:', e)
+        return handleCORS(NextResponse.json({ error: 'Unable to generate the report right now.' }, { status: 502 }))
+      }
+    }
+
+    // ---- Referrals (track in-app; credit applied manually by the coach) ----
+    if (route === '/referrals/me' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      let code = user.referralCode
+      if (!code) {
+        code = 'TS' + Math.random().toString(36).slice(2, 8).toUpperCase()
+        await db.collection('users').updateOne({ id: user.id }, { $set: { referralCode: code } })
+      }
+      const refs = await db.collection('referrals').find({ referrerId: user.id }).sort({ createdAt: -1 }).limit(500).toArray()
+      return handleCORS(NextResponse.json({
+        code,
+        referredBy: user.referredBy || null,
+        referrals: refs.map((r) => ({ refereeName: r.refereeName, status: r.status, createdAt: r.createdAt })),
+        creditsEarned: refs.filter((r) => r.status === 'credited').length,
+      }))
+    }
+    if (route === '/referrals/apply' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      if (user.referredBy) return handleCORS(NextResponse.json({ error: 'You have already used a referral code.' }, { status: 400 }))
+      const body = await request.json().catch(() => ({}))
+      const code = String(body.code || '').trim().toUpperCase()
+      if (!code) return handleCORS(NextResponse.json({ error: 'Enter a referral code.' }, { status: 400 }))
+      const referrer = await db.collection('users').findOne({ referralCode: code })
+      if (!referrer) return handleCORS(NextResponse.json({ error: 'That code isn\'t valid.' }, { status: 400 }))
+      if (referrer.id === user.id) return handleCORS(NextResponse.json({ error: 'You can\'t refer yourself.' }, { status: 400 }))
+      await db.collection('users').updateOne({ id: user.id }, { $set: { referredBy: referrer.id } })
+      await db.collection('referrals').insertOne({
+        id: uuidv4(), referrerId: referrer.id, refereeId: user.id, refereeName: user.username, status: 'pending', createdAt: new Date(),
+      })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    if (route === '/admin/referrals' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const refs = await db.collection('referrals').find({}).sort({ createdAt: -1 }).limit(2000).toArray()
+      const ids = [...new Set(refs.map((r) => r.referrerId))]
+      const referrers = await db.collection('users').find({ id: { $in: ids } }).toArray()
+      const nameOf = Object.fromEntries(referrers.map((u) => [u.id, u.username]))
+      return handleCORS(NextResponse.json({
+        referrals: refs.map(({ _id, ...r }) => ({ ...r, referrerName: nameOf[r.referrerId] || 'Member' })),
+      }))
+    }
+    if (route === '/admin/referrals' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user || user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      if (!body.id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      const status = body.status === 'credited' ? 'credited' : 'pending'
+      await db.collection('referrals').updateOne({ id: body.id }, { $set: { status, updatedAt: new Date() } })
+      return handleCORS(NextResponse.json({ ok: true, status }))
     }
 
 

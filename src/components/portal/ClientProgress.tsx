@@ -40,6 +40,14 @@ export default function ClientProgress({ clientId }: { clientId: string }) {
 
   return (
     <div className="grid gap-6">
+      <a
+        href={`/api/trainer/progress-report?clientId=${encodeURIComponent(clientId)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-fit border border-electric text-electric px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-electric hover:text-ink transition-colors"
+      >
+        ⬇ Progress report (PDF)
+      </a>
       {photos.length > 0 && (
         <div>
           <p className="font-display uppercase tracking-wider text-electric text-xs mb-2">Progress photos ({photos.length})</p>

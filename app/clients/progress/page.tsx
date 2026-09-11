@@ -58,6 +58,14 @@ export default function ProgressPage() {
         <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
           Log weekly photos and body metrics. Everything is private to you and your coach — compare where you started to where you are now.
         </p>
+        <a
+          href="/api/progress/report"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block mt-4 border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
+        >
+          ⬇ Download progress report (PDF)
+        </a>
 
         <div className="flex gap-2 mt-8 mb-8 border-b border-bone/15 pb-2">
           {([["photos", "Progress Photos"], ["metrics", "Body Metrics"]] as const).map(([id, label]) => (
