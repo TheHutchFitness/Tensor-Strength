@@ -545,16 +545,16 @@ const TITLES = [
 // Built-in quests. Client computes progress from the member's own workouts and
 // goals; the server dedupes claims per period so a quest pays out once per cycle.
 const QUEST_DEFS = [
-  { id: 'daily_log', period: 'daily', title: 'Log a workout today', desc: 'Record any session in the tracker.', xp: 40, target: 1, metric: 'workoutsToday' },
-  { id: 'daily_sets', period: 'daily', title: 'Grind 20 sets today', desc: 'Rack up 20 working sets in one day.', xp: 60, target: 20, metric: 'setsToday' },
-  { id: 'weekly_4', period: 'weekly', title: 'Train 4 times this week', desc: 'Log four workouts (Mon–Sun).', xp: 150, target: 4, metric: 'workoutsThisWeek' },
-  { id: 'weekly_6', period: 'weekly', title: 'Train 6 times this week', desc: 'Six sessions in a week — serious work.', xp: 260, target: 6, metric: 'workoutsThisWeek' },
-  { id: 'weekly_rotation', period: 'weekly', title: 'Full Hutch Touch rotation', desc: 'Log all 4 rotation sessions this week.', xp: 200, target: 4, metric: 'rotationThisWeek' },
-  { id: 'weekly_volume', period: 'weekly', title: 'Log 100 sets this week', desc: 'Accumulate 100 working sets across the week.', xp: 200, target: 100, metric: 'setsThisWeek' },
-  { id: 'weekly_variety', period: 'weekly', title: 'Hit 12 different exercises', desc: 'Train 12 distinct movements this week.', xp: 180, target: 12, metric: 'exercisesThisWeek' },
-  { id: 'monthly_12', period: 'monthly', title: '12 workouts this month', desc: 'Stay consistent all month long.', xp: 500, target: 12, metric: 'workoutsThisMonth' },
-  { id: 'monthly_20', period: 'monthly', title: '20 workouts this month', desc: 'Elite-level monthly consistency.', xp: 900, target: 20, metric: 'workoutsThisMonth' },
-  { id: 'monthly_sets', period: 'monthly', title: 'Log 400 sets this month', desc: 'Big monthly volume — earn it.', xp: 700, target: 400, metric: 'setsThisMonth' },
+  { id: 'daily_log', period: 'daily', title: 'Log a workout today', desc: 'Record any session in the tracker.', xp: 15, target: 1, metric: 'workoutsToday' },
+  { id: 'daily_sets', period: 'daily', title: 'Grind 20 sets today', desc: 'Rack up 20 working sets in one day.', xp: 25, target: 20, metric: 'setsToday' },
+  { id: 'weekly_4', period: 'weekly', title: 'Train 4 times this week', desc: 'Log four workouts (Mon–Sun).', xp: 60, target: 4, metric: 'workoutsThisWeek' },
+  { id: 'weekly_6', period: 'weekly', title: 'Train 6 times this week', desc: 'Six sessions in a week — serious work.', xp: 110, target: 6, metric: 'workoutsThisWeek' },
+  { id: 'weekly_rotation', period: 'weekly', title: 'Full Hutch Touch rotation', desc: 'Log all 4 rotation sessions this week.', xp: 80, target: 4, metric: 'rotationThisWeek' },
+  { id: 'weekly_volume', period: 'weekly', title: 'Log 100 sets this week', desc: 'Accumulate 100 working sets across the week.', xp: 80, target: 100, metric: 'setsThisWeek' },
+  { id: 'weekly_variety', period: 'weekly', title: 'Hit 12 different exercises', desc: 'Train 12 distinct movements this week.', xp: 70, target: 12, metric: 'exercisesThisWeek' },
+  { id: 'monthly_12', period: 'monthly', title: '12 workouts this month', desc: 'Stay consistent all month long.', xp: 200, target: 12, metric: 'workoutsThisMonth' },
+  { id: 'monthly_20', period: 'monthly', title: '20 workouts this month', desc: 'Elite-level monthly consistency.', xp: 375, target: 20, metric: 'workoutsThisMonth' },
+  { id: 'monthly_sets', period: 'monthly', title: 'Log 400 sets this month', desc: 'Big monthly volume — earn it.', xp: 275, target: 400, metric: 'setsThisMonth' },
 ]
 function periodId(period, d = new Date()) {
   const y = d.getUTCFullYear()
@@ -595,12 +595,12 @@ function evalBadges(stats, earned) {
 function badgeXp(ids) { return ids.reduce((s, id) => s + ((BADGES.find(b => b.id === id) || {}).xp || 0), 0) }
 // Goal-based weekly quests generated from the member's signup goals.
 const GOAL_QUESTS = {
-  'Build Muscle': { id: 'goal_muscle', title: 'Build Muscle — 3 sessions', desc: 'Log 3 training sessions this week to drive growth.', target: 3, xp: 120 },
-  'Get Stronger': { id: 'goal_strong', title: 'Get Stronger — 3 heavy sessions', desc: 'Log 3 sessions this week built around the main lifts.', target: 3, xp: 120 },
-  'Lose Fat': { id: 'goal_fat', title: 'Lose Fat — 4 sessions', desc: 'Log 4 sessions this week to keep the routine tight.', target: 4, xp: 150 },
-  'Athletic Performance': { id: 'goal_athletic', title: 'Athletic — 3 sessions', desc: 'Log 3 sessions this week including power / plyo work.', target: 3, xp: 120 },
-  'Stay Consistent': { id: 'goal_consistent', title: 'Consistency — 5 sessions', desc: 'Log 5 sessions this week. Showing up is the win.', target: 5, xp: 180 },
-  'General Health': { id: 'goal_health', title: 'General Health — 3 sessions', desc: 'Log 3 balanced sessions this week.', target: 3, xp: 120 },
+  'Build Muscle': { id: 'goal_muscle', title: 'Build Muscle — 3 sessions', desc: 'Log 3 training sessions this week to drive growth.', target: 3, xp: 50 },
+  'Get Stronger': { id: 'goal_strong', title: 'Get Stronger — 3 heavy sessions', desc: 'Log 3 sessions this week built around the main lifts.', target: 3, xp: 50 },
+  'Lose Fat': { id: 'goal_fat', title: 'Lose Fat — 4 sessions', desc: 'Log 4 sessions this week to keep the routine tight.', target: 4, xp: 60 },
+  'Athletic Performance': { id: 'goal_athletic', title: 'Athletic — 3 sessions', desc: 'Log 3 sessions this week including power / plyo work.', target: 3, xp: 50 },
+  'Stay Consistent': { id: 'goal_consistent', title: 'Consistency — 5 sessions', desc: 'Log 5 sessions this week. Showing up is the win.', target: 5, xp: 70 },
+  'General Health': { id: 'goal_health', title: 'General Health — 3 sessions', desc: 'Log 3 balanced sessions this week.', target: 3, xp: 50 },
 }
 function goalQuestsFor(goals) {
   return (goals || [])
