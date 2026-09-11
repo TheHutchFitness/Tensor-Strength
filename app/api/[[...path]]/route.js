@@ -3090,7 +3090,12 @@ async function handleRoute(request, { params }) {
         streakBonus = Math.min(50, streak * 5) // escalating daily bonus, capped
       }
       const newAwarded = already ? awarded : [wid, ...awarded].slice(0, 400)
-      const workoutXp = already ? 0 : XP_AWARD.workout
+      // Anti-cheat: pay workout XP at most ONCE per day (logging extra sessions
+      // still counts for streak/badges but can't farm XP). Streak bonus is already
+      // gated to once/day via lastActiveDay above.
+      const paidToday = user.lastWorkoutXpDay === todayStr
+      const awardWorkoutXp = !already && !paidToday
+      const workoutXp = awardWorkoutXp ? XP_AWARD.workout : 0
       let newXp = (user.xp || 0) + workoutXp + streakBonus
       // Evaluate one-off badges against fresh stats.
       const stats = { workouts: newAwarded.length, streak, questClaims: user.questClaimCount || 0, level: levelFromXp(newXp) }
@@ -3102,11 +3107,12 @@ async function handleRoute(request, { params }) {
           awardedWorkouts: newAwarded,
           streak,
           lastActiveDay: todayStr,
+          ...(awardWorkoutXp ? { lastWorkoutXpDay: todayStr } : {}),
           badges: [...(user.badges || []), ...newBadges],
         },
       })
       return handleCORS(NextResponse.json({
-        ok: true, awarded: !already, gained: workoutXp + streakBonus,
+        ok: true, awarded: awardWorkoutXp, gained: workoutXp + streakBonus,
         streak, streakBonus, newBadges, xp: xpSummary(newXp),
       }))
     }

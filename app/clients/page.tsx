@@ -9,6 +9,7 @@ import OneRepMaxCalculator from "@/components/tools/OneRepMaxCalculator";
 import WilksDotsCalculator from "@/components/tools/WilksDotsCalculator";
 import PRTracker from "@/components/tools/PRTracker";
 import ClientCoaching from "@/components/portal/ClientCoaching";
+import PortalHero from "@/components/portal/PortalHero";
 import PRSubmit from "@/components/PRSubmit";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
@@ -157,6 +158,7 @@ export default function ClientPortalPage() {
           ) : (
             /* ---------- APPROVED — FULL PORTAL ---------- */
             <div>
+              {me?.id && <div className="mb-10"><PortalHero username={me.username} /></div>}
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                 Client Portal
               </p>

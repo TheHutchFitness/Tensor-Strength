@@ -942,6 +942,26 @@ export default function WorkoutLog() {
           </div>
         </div>
 
+        {/* Repeat last session — one tap to reload your most recent workout */}
+        {workouts.length > 0 && (
+          <div className="mt-5 border border-bone/20 bg-ink/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-display uppercase tracking-wider text-bone/80 text-sm">Repeat last session</p>
+              <p className="text-xs text-bone/60 mt-1 leading-relaxed">
+                Reload <span className="text-bone/90">{workouts[0].title || "your last workout"}</span>
+                {workouts[0].date ? <span className="text-bone/50"> ({workouts[0].date})</span> : null} into the builder — same
+                exercises &amp; sets, ready to log again.
+              </p>
+            </div>
+            <button
+              onClick={() => loadWorkoutAsTemplate(workouts[0])}
+              className="border-2 border-bone/40 text-bone px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:border-electric hover:text-electric transition-colors whitespace-nowrap"
+            >
+              ↻ Repeat last session
+            </button>
+          </div>
+        )}
+
         {/* Main-lift variation order — a list to follow on which variation, and in what order */}
         <div className="mt-3 border border-bone/15 bg-ink/20">
           <button

@@ -10,6 +10,7 @@ const NAV = [
   { href: "/clients/about", label: "About Me" },
   { href: "/forum", label: "Forum" },
   { href: "/clients/workout-log", label: "Workout Tracker" },
+  { href: "/clients/calendar", label: "Calendar" },
   { href: "/clients/nutrition", label: "Nutrition Tracker" },
   { href: "/clients/check-in", label: "Check-In" },
   { href: "/clients/progress", label: "Progress" },
