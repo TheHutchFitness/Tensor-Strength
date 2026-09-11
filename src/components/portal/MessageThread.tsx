@@ -32,7 +32,10 @@ export default function MessageThread({
   const fileRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const timerRef = useRef<any>(null);
   const [recording, setRecording] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const MAX_SECS = 120; // keep voice notes short & snappy
 
   async function load(scroll = false) {
     const res = await fetch(`/api/messages?withUserId=${encodeURIComponent(withUserId)}`);
@@ -131,6 +134,7 @@ export default function MessageThread({
       mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
         setRecording(false);
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
         if (blob.size > 0) await uploadBlob(blob, "voice-note.webm", "audio");
@@ -138,6 +142,14 @@ export default function MessageThread({
       recorderRef.current = mr;
       mr.start();
       setRecording(true);
+      setRecSecs(0);
+      timerRef.current = setInterval(() => {
+        setRecSecs((s) => {
+          const n = s + 1;
+          if (n >= MAX_SECS) { try { recorderRef.current?.stop(); } catch {} }
+          return n;
+        });
+      }, 1000);
     } catch {
       setError("Microphone access is needed to record a voice note.");
     }
@@ -226,6 +238,13 @@ export default function MessageThread({
         >
           {recording ? "⏹" : "🎙"}
         </button>
+        {recording && (
+          <span className="shrink-0 flex items-center gap-1.5 text-xs font-display text-red-400 tabular-nums" title="Recording — auto-stops at 2:00">
+            <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            {`${Math.floor(recSecs / 60)}:${String(recSecs % 60).padStart(2, "0")}`}
+            <span className="text-bone/40">/ 2:00</span>
+          </span>
+        )}
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
