@@ -30,6 +30,9 @@ export default function MessageThread({
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const [recording, setRecording] = useState(false);
 
   async function load(scroll = false) {
     const res = await fetch(`/api/messages?withUserId=${encodeURIComponent(withUserId)}`);
@@ -100,6 +103,46 @@ export default function MessageThread({
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  async function uploadBlob(blob: Blob, filename: string, mediaType: string) {
+    setUploading(true);
+    setError("");
+    const fd = new FormData();
+    fd.append("file", new File([blob], filename, { type: blob.type || "audio/webm" }));
+    const res = await fetch("/api/uploads/file", { method: "POST", body: fd });
+    if (res.ok) {
+      const d = await res.json();
+      await send(d.url, mediaType);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error || "Upload failed.");
+    }
+    setUploading(false);
+  }
+
+  async function toggleRecord() {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (blob.size > 0) await uploadBlob(blob, "voice-note.webm", "audio");
+      };
+      recorderRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch {
+      setError("Microphone access is needed to record a voice note.");
+    }
+  }
+
   return (
     <div className="border border-bone/15 bg-ink/20 flex flex-col">
       <div ref={scrollRef} className={"overflow-y-auto p-4 space-y-3 " + heightClass}>
@@ -125,6 +168,9 @@ export default function MessageThread({
                   )}
                   {m.mediaUrl && m.mediaType === "video" && (
                     <video src={m.mediaUrl} controls className="max-h-56 rounded mb-2" />
+                  )}
+                  {m.mediaUrl && m.mediaType === "audio" && (
+                    <audio src={m.mediaUrl} controls className="w-56 max-w-full mb-2" />
                   )}
                   {m.mediaUrl && m.mediaType === "file" && (
                     <a
@@ -165,11 +211,20 @@ export default function MessageThread({
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          disabled={uploading || sending}
+          disabled={uploading || sending || recording}
           title="Attach a photo, video or PDF"
           className="shrink-0 border border-bone/25 text-bone/70 px-3 py-2.5 font-display text-lg hover:border-electric hover:text-electric transition-colors disabled:opacity-50"
         >
           {uploading ? "…" : "＋"}
+        </button>
+        <button
+          type="button"
+          onClick={toggleRecord}
+          disabled={uploading || sending}
+          title={recording ? "Stop & send voice note" : "Record a voice note"}
+          className={"shrink-0 border px-3 py-2.5 font-display text-lg transition-colors disabled:opacity-50 " + (recording ? "border-red-500 text-red-400 animate-pulse" : "border-bone/25 text-bone/70 hover:border-electric hover:text-electric")}
+        >
+          {recording ? "⏹" : "🎙"}
         </button>
         <textarea
           value={text}

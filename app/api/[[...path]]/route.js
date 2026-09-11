@@ -253,6 +253,24 @@ async function deleteUpload(db, url) {
 
 // ---- Forum notifications & @mentions ----
 // Insert a notification for a recipient (skips self-notifications).
+// Pluggable email sender. Until an email provider key is configured (e.g. RESEND_API_KEY),
+// this is a no-op that reports "not configured" so callers can fall back to in-app
+// notifications. Wiring a provider later only touches this one function.
+async function sendEmail({ to, subject, text }) {
+  const from = process.env.EMAIL_FROM
+  if (process.env.RESEND_API_KEY && from) {
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, subject, text }),
+      })
+      return { ok: r.ok }
+    } catch { return { ok: false } }
+  }
+  return { ok: false, skipped: true }
+}
+
 async function pushNotification(db, { recipientId, actorId, actorName, type, postId, postTitle, replyId, snippet, emoji, targetType }) {
   if (!recipientId || recipientId === actorId) return
   await db.collection('forum_notifications').insertOne({
@@ -2615,7 +2633,7 @@ async function handleRoute(request, { params }) {
         const rawExt = origName.includes('.') ? origName.split('.').pop().toLowerCase() : ''
         // Allowlist safe extensions only — never persist HTML/SVG/scripts that could
         // execute on our own origin (SEC-001).
-        const ALLOWED = new Set(['png','jpg','jpeg','webp','gif','heic','heif','mp4','mov','webm','m4v','pdf','doc','docx','xls','xlsx','csv','txt'])
+        const ALLOWED = new Set(['png','jpg','jpeg','webp','gif','heic','heif','mp4','mov','webm','m4v','pdf','doc','docx','xls','xlsx','csv','txt','m4a','mp3','wav','ogg','oga','aac'])
         if (!ALLOWED.has(rawExt)) {
           return handleCORS(NextResponse.json({ error: 'That file type is not allowed. Use images, video, PDF or documents.' }, { status: 400 }))
         }
@@ -3644,6 +3662,44 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, status }))
     }
 
+    // ---- Secure daily cron: remind clients whose free week ends within 24h ----
+    // Point an external scheduler (cron-job.org / EasyCron) at this once a day with
+    // ?secret=<CRON_SECRET> (or x-cron-secret header). Idempotent per user.
+    if (route === '/cron/trial-reminders' && (method === 'POST' || method === 'GET')) {
+      const secret = request.nextUrl.searchParams.get('secret') || request.headers.get('x-cron-secret')
+      if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 401 }))
+      }
+      const now = Date.now()
+      const soon = new Date(now + 24 * 3600 * 1000)
+      const due = await db.collection('users').find({
+        subscriptionStatus: 'trialing',
+        trialReminderSent: { $ne: true },
+        trialEndsAt: { $ne: null, $gte: new Date(now), $lte: soon },
+      }).limit(500).toArray()
+      let reminded = 0
+      for (const u of due) {
+        const when = u.trialEndsAt ? new Date(u.trialEndsAt).toLocaleDateString() : 'soon'
+        await pushNotification(db, {
+          recipientId: u.id, actorName: 'Tensor Strength', type: 'announcement', emoji: '🎁',
+          snippet: `Your free week ends ${when}. Keep training — or cancel anytime before then and pay nothing.`,
+        })
+        if (u.email) {
+          await sendEmail({
+            to: u.email,
+            subject: 'Your Tensor Strength free week is ending',
+            text: `Hi ${u.username || 'there'} — your free week ends on ${when}. If coaching's a fit, do nothing and your plan continues. To cancel, open your account before then and you won't be charged.`,
+          })
+        }
+        await db.collection('users').updateOne({ id: u.id }, { $set: { trialReminderSent: true } })
+        reminded++
+      }
+      return handleCORS(NextResponse.json({
+        ok: true, reminded, checked: due.length,
+        emailConfigured: !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+      }))
+    }
+
 
     // ---------------- HUTCH TOUCH — ATHLETE EDITION (admin/owner only) ----------------
     // The Performance Edition PDF is a public static file (/programs/...). The
@@ -3936,12 +3992,20 @@ async function handleRoute(request, { params }) {
           const u = await findUser(obj)
           if (REVOKE_STATES.includes(obj.status)) await setAccess(u, false, obj.status)
           else if (['active', 'trialing'].includes(obj.status)) await setAccess(u, true, obj.status)
+          if (u && obj.status === 'trialing' && obj.trial_end) {
+            await db.collection('users').updateOne({ id: u.id }, { $set: { trialEndsAt: new Date(obj.trial_end * 1000) } })
+          } else if (u && obj.status === 'active') {
+            await db.collection('users').updateOne({ id: u.id }, { $set: { trialEndsAt: null } })
+          }
           // past_due: keep access (grace period) — do nothing.
           break
         }
         case 'customer.subscription.created': {
           const u = await findUser(obj)
           if (['active', 'trialing'].includes(obj.status)) await setAccess(u, true, obj.status)
+          if (u && obj.status === 'trialing' && obj.trial_end) {
+            await db.collection('users').updateOne({ id: u.id }, { $set: { trialEndsAt: new Date(obj.trial_end * 1000), trialReminderSent: false } })
+          }
           break
         }
         case 'invoice.payment_failed': {
