@@ -13,6 +13,7 @@ import CoachTools from "@/components/portal/CoachTools";
 import TrainerVideos from "@/components/portal/TrainerVideos";
 import CoachCheckinReply from "@/components/portal/CoachCheckinReply";
 import ClientProgress from "@/components/portal/ClientProgress";
+import CoachInsights from "@/components/portal/CoachInsights";
 
 type Client = {
   id: string;
@@ -47,7 +48,7 @@ type CheckIn = {
   createdAt: string;
 };
 
-type Tab = "clients" | "messages" | "programs" | "meals" | "files" | "videos" | "tools" | "profile";
+type Tab = "clients" | "insights" | "messages" | "programs" | "meals" | "files" | "videos" | "tools" | "profile";
 
 function fmt(d?: string | null) {
   if (!d) return "—";
@@ -286,6 +287,7 @@ export default function TrainersPage() {
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "clients", label: "Clients", badge: unseenCheckins },
+    { id: "insights", label: "Insights" },
     { id: "messages", label: "Messages", badge: unread },
     { id: "programs", label: "Programs" },
     { id: "meals", label: "Meals" },
@@ -672,6 +674,15 @@ export default function TrainersPage() {
                     )}
                   </div>
                 </div>
+              )}
+
+              {tab === "insights" && (
+                <CoachInsights
+                  onOpenClient={(id) => {
+                    const c = clients.find((x) => x.id === id);
+                    if (c) { setTab("clients"); openClient(c); }
+                  }}
+                />
               )}
 
               {tab === "messages" && meId && (

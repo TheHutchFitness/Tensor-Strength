@@ -2058,7 +2058,81 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ clients: out }))
     }
 
-    // ---- Coach Tools: per-client goals & milestones ----
+    // ---- Coach Insights: adherence scorecard, needs-attention flags, RPE/readiness ----
+    if (route === '/trainer/insights' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).limit(500).toArray()
+      const now = Date.now()
+      const DAY = 86400000
+      const weekKey = (d) => {
+        const x = new Date(d)
+        if (isNaN(x.getTime())) return null
+        const oneJan = new Date(Date.UTC(x.getUTCFullYear(), 0, 1))
+        const wk = Math.ceil((((x - oneJan) / DAY) + oneJan.getUTCDay() + 1) / 7)
+        return `${x.getUTCFullYear()}-W${wk}`
+      }
+      const out = []
+      for (const c of clients) {
+        const tr = await db.collection('tracker').findOne({ userId: c.id })
+        const workouts = Array.isArray(tr?.workouts) ? tr.workouts : []
+        const wTimes = workouts.map((w) => new Date(w.date).getTime()).filter((t) => Number.isFinite(t))
+        const lastWorkoutTs = wTimes.length ? Math.max(...wTimes) : null
+        const workoutsLast7 = wTimes.filter((t) => now - t <= 7 * DAY).length
+        const target = parseInt((c.clientProfile && c.clientProfile.workoutsPerWeek) || '', 10) || 3
+        const workoutPct = Math.min(100, Math.round((workoutsLast7 / target) * 100))
+        // Nutrition adherence over last 7 logged days
+        const nut = await db.collection('nutrition_logs').find({ userId: c.id }).sort({ date: -1 }).limit(7).toArray()
+        let hit = 0, counted = 0
+        for (const d of nut) {
+          const goalCal = d.goal && d.goal.calories
+          const cal = d.totals && d.totals.cal
+          if (goalCal && cal != null) { counted++; if (Math.abs(cal - goalCal) <= goalCal * 0.1) hit++ }
+        }
+        const macroHitRate = counted ? Math.round((hit / counted) * 100) : null
+        const lastNutritionTs = nut[0]?.date ? new Date(nut[0].date).getTime() : null
+        // Check-ins + consecutive-week streak
+        const cis = await db.collection('checkins').find({ userId: c.id }).sort({ createdAt: -1 }).limit(60).toArray()
+        const lastCheckin = cis[0]?.createdAt || null
+        const weeks = new Set(cis.map((ci) => weekKey(ci.createdAt)).filter(Boolean))
+        let streak = 0
+        let cursor = new Date()
+        for (;;) { const k = weekKey(cursor); if (k && weeks.has(k)) { streak++; cursor = new Date(cursor.getTime() - 7 * DAY) } else break }
+        const latestReadiness = (cis[0]?.readiness || '').trim()
+        const lowReadiness = /^(1|4)/.test(latestReadiness)
+        // Average RPE across last 3 workouts
+        const recent3 = [...workouts].sort((a, b) => (new Date(b.date).getTime() || 0) - (new Date(a.date).getTime() || 0)).slice(0, 3)
+        let rpeSum = 0, rpeN = 0
+        for (const w of recent3) for (const ex of (w.exercises || [])) for (const s of (ex.sets || [])) {
+          const r = parseFloat(s.rpe); if (Number.isFinite(r)) { rpeSum += r; rpeN++ }
+        }
+        const avgRpe = rpeN ? Math.round((rpeSum / rpeN) * 10) / 10 : null
+        const highRpe = avgRpe != null && avgRpe >= 9
+        // Needs-attention flags
+        const flags = []
+        const dwo = lastWorkoutTs ? Math.floor((now - lastWorkoutTs) / DAY) : null
+        if (dwo === null || dwo > 5) flags.push({ type: 'no_workout', label: dwo === null ? 'No workouts logged yet' : `No workout in ${dwo} days` })
+        const dci = lastCheckin ? Math.floor((now - new Date(lastCheckin).getTime()) / DAY) : null
+        if (dci === null || dci > 8) flags.push({ type: 'missed_checkin', label: dci === null ? 'No check-in yet' : `No check-in in ${dci} days` })
+        const dnut = lastNutritionTs ? Math.floor((now - lastNutritionTs) / DAY) : null
+        if (dnut === null || dnut > 4) flags.push({ type: 'no_nutrition', label: dnut === null ? 'No nutrition logged' : `No nutrition in ${dnut} days` })
+        else if (macroHitRate != null && macroHitRate < 40) flags.push({ type: 'macros_dropping', label: `Macros off target (${macroHitRate}% hit)` })
+        if (lowReadiness) flags.push({ type: 'low_readiness', label: `Low readiness reported`, suggestion: 'Consider a lighter/deload session or drop top-set load ~5–10%.' })
+        if (highRpe) flags.push({ type: 'high_rpe', label: `RPE trending high (avg ${avgRpe})`, suggestion: 'Fatigue building — suggest a deload or reduce top-set load.' })
+        out.push({
+          id: c.id, username: c.username, email: c.email,
+          adherence: { workoutsLast7, workoutTarget: target, workoutPct, macroHitRate, checkinStreak: streak },
+          lastWorkout: lastWorkoutTs ? new Date(lastWorkoutTs).toISOString() : null,
+          lastCheckin, lastNutrition: nut[0]?.date || null,
+          avgRpe, latestReadiness,
+          flags,
+        })
+      }
+      out.sort((a, b) => b.flags.length - a.flags.length)
+      return handleCORS(NextResponse.json({ clients: out }))
+    }
     if (route === '/trainer/client-goals' && (method === 'GET' || method === 'PUT')) {
       const user = await getCurrentUser(request, db)
       if (!user || (!user.isTrainer && user.role !== 'admin')) {
