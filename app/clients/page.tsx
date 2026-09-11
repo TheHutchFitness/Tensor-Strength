@@ -368,6 +368,12 @@ export default function ClientPortalPage() {
                   >
                     Nutrition Tracker →
                   </a>
+                  <a
+                    href="/clients/progress"
+                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
+                  >
+                    Progress →
+                  </a>
                   {([
                     { id: "macros", label: "Macro Calculator" },
                     { id: "1rm", label: "1-Rep Max" },

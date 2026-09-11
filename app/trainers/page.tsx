@@ -12,6 +12,7 @@ import TrainerMessages from "@/components/portal/TrainerMessages";
 import CoachTools from "@/components/portal/CoachTools";
 import TrainerVideos from "@/components/portal/TrainerVideos";
 import CoachCheckinReply from "@/components/portal/CoachCheckinReply";
+import ClientProgress from "@/components/portal/ClientProgress";
 
 type Client = {
   id: string;
@@ -596,6 +597,11 @@ export default function TrainersPage() {
                               </button>
                             </div>
                           </div>
+                        </div>
+
+                        <div className="mt-8 border-t border-bone/10 pt-6">
+                          <p className="glow font-display uppercase tracking-[0.25em] text-electric text-xs mb-4">Progress — Photos &amp; Metrics</p>
+                          <ClientProgress clientId={selected.id} />
                         </div>
 
                         {loadingCheckins ? (

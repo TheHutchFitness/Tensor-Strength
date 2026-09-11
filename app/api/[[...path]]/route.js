@@ -1307,6 +1307,127 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ reply }))
     }
 
+    // ---------------- PROGRESS: PHOTOS & BODY METRICS ----------------
+    // Weekly progress photos (front/side/back). Files are uploaded privately via
+    // /api/uploads/file first; here we record the entry and grant the member's
+    // assigned coach read access to each photo.
+    if (route === '/progress/photos' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      const isFileUrl = (u) => typeof u === 'string' && u.startsWith('/api/files/')
+      const front = isFileUrl(body.front) ? body.front : null
+      const side = isFileUrl(body.side) ? body.side : null
+      const back = isFileUrl(body.back) ? body.back : null
+      if (!front && !side && !back) {
+        return handleCORS(NextResponse.json({ error: 'Add at least one photo.' }, { status: 400 }))
+      }
+      // Only reference photos the member actually owns.
+      for (const u of [front, side, back]) {
+        if (u && !(await ownsUploadKey(db, u, user.id))) {
+          return handleCORS(NextResponse.json({ error: 'Invalid photo reference.' }, { status: 400 }))
+        }
+      }
+      const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '')
+      const doc = {
+        id: uuidv4(),
+        userId: user.id,
+        date: str(body.date, 20) || new Date().toISOString().slice(0, 10),
+        front, side, back,
+        weight: str(body.weight, 20),
+        note: str(body.note, 1000),
+        createdAt: new Date(),
+      }
+      await db.collection('progress_photos').insertOne(doc)
+      if (user.assignedTrainerId) {
+        for (const u of [front, side, back]) if (u) await grantFileAccess(db, u, user.assignedTrainerId)
+      }
+      const { _id, ...clean } = doc
+      return handleCORS(NextResponse.json(clean))
+    }
+    if (route === '/progress/photos' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const list = await db.collection('progress_photos').find({ userId: user.id }).sort({ date: 1, createdAt: 1 }).limit(500).toArray()
+      return handleCORS(NextResponse.json({ photos: list.map(({ _id, ...r }) => r) }))
+    }
+    if (route === '/progress/photos' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      const existing = await db.collection('progress_photos').findOne({ id, userId: user.id })
+      await db.collection('progress_photos').deleteOne({ id, userId: user.id })
+      if (existing) for (const u of [existing.front, existing.side, existing.back]) if (u) await deleteUpload(db, u)
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    // Coach views an assigned client's progress photo timeline.
+    if (route === '/trainer/progress-photos' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      if (!clientId) return handleCORS(NextResponse.json({ error: 'clientId is required' }, { status: 400 }))
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const list = await db.collection('progress_photos').find({ userId: clientId }).sort({ date: 1, createdAt: 1 }).limit(500).toArray()
+      return handleCORS(NextResponse.json({ photos: list.map(({ _id, ...r }) => r) }))
+    }
+
+    // Body metrics — one entry per date (upsert). Weight, measurements, sleep,
+    // steps, resting HR. Coach reads an assigned client's series.
+    if (route === '/progress/metrics' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      const num = (v) => {
+        const n = parseFloat(v)
+        return Number.isFinite(n) && n >= 0 && n < 100000 ? n : null
+      }
+      const date = (typeof body.date === 'string' ? body.date.slice(0, 20) : '') || new Date().toISOString().slice(0, 10)
+      const fields = {
+        weight: num(body.weight), waist: num(body.waist), chest: num(body.chest),
+        hips: num(body.hips), arms: num(body.arms), thighs: num(body.thighs),
+        sleepHrs: num(body.sleepHrs), steps: num(body.steps), restingHr: num(body.restingHr),
+        note: (typeof body.note === 'string' ? body.note.slice(0, 500) : ''),
+      }
+      await db.collection('body_metrics').updateOne(
+        { userId: user.id, date },
+        { $set: { ...fields, userId: user.id, date, updatedAt: new Date() }, $setOnInsert: { id: uuidv4(), createdAt: new Date() } },
+        { upsert: true }
+      )
+      const saved = await db.collection('body_metrics').findOne({ userId: user.id, date })
+      const { _id, ...clean } = saved
+      return handleCORS(NextResponse.json(clean))
+    }
+    if (route === '/progress/metrics' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || !user.portalAccess) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const list = await db.collection('body_metrics').find({ userId: user.id }).sort({ date: 1 }).limit(1000).toArray()
+      return handleCORS(NextResponse.json({ metrics: list.map(({ _id, ...r }) => r) }))
+    }
+    if (route === '/progress/metrics' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      await db.collection('body_metrics').deleteOne({ id, userId: user.id })
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    if (route === '/trainer/progress-metrics' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      if (!clientId) return handleCORS(NextResponse.json({ error: 'clientId is required' }, { status: 400 }))
+      const client = await db.collection('users').findOne({ id: clientId })
+      if (!client || (user.role !== 'admin' && client.assignedTrainerId !== user.id)) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const list = await db.collection('body_metrics').find({ userId: clientId }).sort({ date: 1 }).limit(1000).toArray()
+      return handleCORS(NextResponse.json({ metrics: list.map(({ _id, ...r }) => r) }))
+    }
+
     // ---------------- TRAINER PORTAL ----------------
     // Trainer sees the clients assigned to them by the admin.
     if (route === '/trainer/clients' && method === 'GET') {

@@ -12,6 +12,7 @@ const NAV = [
   { href: "/clients/workout-log", label: "Workout Tracker" },
   { href: "/clients/nutrition", label: "Nutrition Tracker" },
   { href: "/clients/check-in", label: "Check-In" },
+  { href: "/clients/progress", label: "Progress" },
   { href: "/quests", label: "Quests" },
   { href: "/clients#tools", label: "Tools" },
 ];
