@@ -376,37 +376,30 @@ export default function ClientPortalPage() {
                   calculator. Everything saves to your account and syncs across your devices.
                 </p>
 
-                <div className="flex flex-wrap gap-2 mb-6 mt-8 border-b border-bone/15 pb-2">
-                  <a
-                    href="/clients/workout-log"
-                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
-                  >
-                    Workout Tracker →
-                  </a>
-                  <a
-                    href="/clients/my-programs"
-                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
-                  >
-                    My Programs →
-                  </a>
-                  <a
-                    href="/clients/nutrition"
-                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
-                  >
-                    Nutrition Tracker →
-                  </a>
-                  <a
-                    href="/clients/progress"
-                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
-                  >
-                    Progress →
-                  </a>
-                  <a
-                    href="/clients/book"
-                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
-                  >
-                    Book a Session →
-                  </a>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8 mb-8">
+                  {[
+                    { href: "/clients/workout-log", label: "Workout Log", icon: "🏋️" },
+                    { href: "/clients/my-programs", label: "My Programs", icon: "📋" },
+                    { href: "/clients/nutrition", label: "Nutrition", icon: "🍎" },
+                    { href: "/clients/progress", label: "Progress", icon: "📈" },
+                    { href: "/clients/calendar", label: "Calendar", icon: "🗓️" },
+                    { href: "/clients/check-in", label: "Check-In", icon: "✅" },
+                    { href: "/clients/book", label: "Book", icon: "💻" },
+                    { href: "/quests", label: "Quests", icon: "🏆" },
+                  ].map((t) => (
+                    <a
+                      key={t.href}
+                      href={t.href}
+                      className="flex flex-col items-center justify-center gap-1.5 border border-bone/15 bg-ink/30 py-4 hover:border-electric hover:bg-electric/5 transition-colors"
+                    >
+                      <span className="text-2xl">{t.icon}</span>
+                      <span className="font-display uppercase tracking-wider text-xs text-bone/80 text-center">{t.label}</span>
+                    </a>
+                  ))}
+                </div>
+
+                <p className="font-display uppercase tracking-wider text-xs text-bone/50 mb-2">Quick calculators</p>
+                <div className="flex flex-wrap gap-2 mb-6 border-b border-bone/15 pb-2">
                   {([
                     { id: "macros", label: "Macro Calculator" },
                     { id: "1rm", label: "1-Rep Max" },

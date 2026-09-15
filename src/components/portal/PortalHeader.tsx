@@ -7,16 +7,14 @@ import OfflineBadge from "./OfflineBadge";
 import SyncIndicator from "./SyncIndicator";
 
 const NAV = [
-  { href: "/clients/about", label: "About Me" },
-  { href: "/forum", label: "Forum" },
-  { href: "/clients/workout-log", label: "Workout Tracker" },
-  { href: "/clients/calendar", label: "Calendar" },
-  { href: "/clients/nutrition", label: "Nutrition Tracker" },
-  { href: "/clients/check-in", label: "Check-In" },
-  { href: "/clients/book", label: "Book" },
+  { href: "/clients/workout-log", label: "Workout" },
+  { href: "/clients/nutrition", label: "Nutrition" },
   { href: "/clients/progress", label: "Progress" },
+  { href: "/clients/book", label: "Book" },
+  { href: "/clients/check-in", label: "Check-In" },
   { href: "/quests", label: "Quests" },
-  { href: "/clients#tools", label: "Tools" },
+  { href: "/forum", label: "Forum" },
+  { href: "/clients/about", label: "About Me" },
 ];
 
 export default function PortalHeader({ simple = false }: { simple?: boolean }) {

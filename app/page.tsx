@@ -7,11 +7,11 @@ import Footer from "@/components/Footer";
 import SiteTabBar from "@/components/SiteTabBar";
 import MemberHub from "@/components/MemberHub";
 import PortalAutoOpen from "@/components/PortalAutoOpen";
+import UnpaidOnly from "@/components/UnpaidOnly";
 
-// Logged-in member home = a lean hub. All the heavy marketing (Hero, About,
-// PR board, program finder, custom program, contact) lives on the public
-// landing page for logged-out visitors. Members get: their hub, the library,
-// a short "why upgrade" (pricing), and the honest stats/FAQ.
+// Logged-in member home = a lean hub. Paid members see just their hub; the
+// "why upgrade" marketing (pricing, stats/FAQ, library pitch) only shows to
+// logged-in users who haven't purchased yet, so the app stays uncluttered.
 export default function Home() {
   return (
     <>
@@ -20,9 +20,11 @@ export default function Home() {
       <Announcement />
       <main>
         <MemberHub />
-        <Content />
-        <Pricing />
-        <MarketingExtras />
+        <UnpaidOnly>
+          <Content />
+          <Pricing />
+          <MarketingExtras />
+        </UnpaidOnly>
       </main>
       <Footer />
       <SiteTabBar />
