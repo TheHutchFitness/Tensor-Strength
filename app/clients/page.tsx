@@ -382,6 +382,12 @@ export default function ClientPortalPage() {
                   >
                     Progress →
                   </a>
+                  <a
+                    href="/clients/book"
+                    className="px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors bg-electric text-ink hover:bg-bone"
+                  >
+                    Book a Session →
+                  </a>
                   {([
                     { id: "macros", label: "Macro Calculator" },
                     { id: "1rm", label: "1-Rep Max" },
