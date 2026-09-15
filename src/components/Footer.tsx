@@ -35,6 +35,19 @@ export default function Footer() {
 
         <div className="flex flex-col gap-2">
           <p className="glow font-display uppercase tracking-[0.3em] text-bone/40 text-xs mb-2">
+            Contact
+          </p>
+          <a href="mailto:thehutch@tensorstrength.com" className="hover:text-electric transition-colors break-all">
+            thehutch@tensorstrength.com
+          </a>
+          <a href="tel:+15197708657" className="hover:text-electric transition-colors">
+            (519) 770-8657
+          </a>
+          <p className="text-bone/50 text-xs mt-1">Toronto area · Eastern Time (ET)</p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="glow font-display uppercase tracking-[0.3em] text-bone/40 text-xs mb-2">
             Follow
           </p>
           {[

@@ -17,6 +17,9 @@ export default function BookPage() {
   const [tab, setTab] = useState<"inperson" | "remote">("inperson");
 
   useEffect(() => {
+    // Deep-link to a specific schedule, e.g. /clients/book?type=remote
+    const t = new URLSearchParams(window.location.search).get("type");
+    if (t === "remote" || t === "inperson") setTab(t);
     (async () => {
       const me = await fetch("/api/auth/me");
       if (!me.ok) { window.location.href = "/login?from=/clients/book"; return; }

@@ -130,6 +130,12 @@ export default function CheckInPage() {
           Submit your check-in and drop a form video so your coach can review your
           progress and reply — with notes or a video of their own.
         </p>
+        <a
+          href="/clients/book?type=remote"
+          className="inline-flex items-center gap-2 mt-4 border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
+        >
+          💻 Book a video check-in (Google Meet)
+        </a>
 
         {loading || !authorized ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
