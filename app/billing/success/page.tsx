@@ -83,14 +83,14 @@ export default function BillingSuccessPage() {
                   Client Portal unlocked
                 </p>
                 <p className="mt-3 text-bone/80 text-sm leading-relaxed">
-                  Your access is active. Head to the portal to start training —
-                  tools, libraries, programs, and check-ins are all yours.
+                  Your access is active. Next, take 2 minutes to complete your intake so your
+                  coach can tailor your training — then explore the portal.
                 </p>
                 <a
-                  href="/clients"
+                  href="/clients/intake"
                   className="mt-6 inline-block w-full bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
                 >
-                  Enter the Portal →
+                  Complete your intake →
                 </a>
               </div>
             </>

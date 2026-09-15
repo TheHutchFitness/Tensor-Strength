@@ -15,19 +15,26 @@ const openUrl = (id: string) => `https://calendar.google.com/calendar/appointmen
 export default function BookPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"inperson" | "remote">("inperson");
+  const [accessType, setAccessType] = useState<string>("");
 
   useEffect(() => {
     // Deep-link to a specific schedule, e.g. /clients/book?type=remote
     const t = new URLSearchParams(window.location.search).get("type");
-    if (t === "remote" || t === "inperson") setTab(t);
     (async () => {
       const me = await fetch("/api/auth/me");
       if (!me.ok) { window.location.href = "/login?from=/clients/book"; return; }
       const { user } = await me.json();
       if (!user.portalAccess) { window.location.href = "/clients"; return; }
+      setAccessType(user.accessType || "");
+      // Default to the schedule matching the client's plan (URL param wins).
+      if (t === "remote" || t === "inperson") setTab(t);
+      else if (user.accessType === "remote_coaching") setTab("remote");
+      else if (user.accessType === "in_person") setTab("inperson");
       setLoading(false);
     })();
   }, []);
+
+  const coachingClient = accessType === "remote_coaching" || accessType === "in_person";
 
   const id = SCHEDULES[tab];
 
@@ -46,6 +53,18 @@ export default function BookPage() {
 
         {loading ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
+        ) : !coachingClient ? (
+          <div className="mt-8 border-2 border-electric/40 bg-electric/5 p-8">
+            <p className="font-display uppercase tracking-wider text-electric">1:1 sessions are for coaching clients</p>
+            <p className="mt-2 text-bone/70 text-sm leading-relaxed max-w-xl">
+              Booking in-person sessions and remote video check-ins is included with{" "}
+              <span className="text-bone">In-Person</span> or <span className="text-bone">Remote Coaching</span>.
+              Upgrade your plan and you&apos;ll be able to book right here.
+            </p>
+            <a href="/account" className="mt-5 inline-block bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">
+              View coaching plans →
+            </a>
+          </div>
         ) : (
           <>
             <div className="flex gap-2 mt-8 mb-6 border-b border-bone/15 pb-2">

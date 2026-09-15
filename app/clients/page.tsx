@@ -10,6 +10,7 @@ import WilksDotsCalculator from "@/components/tools/WilksDotsCalculator";
 import PRTracker from "@/components/tools/PRTracker";
 import ClientCoaching from "@/components/portal/ClientCoaching";
 import PortalHero from "@/components/portal/PortalHero";
+import OnboardingChecklist from "@/components/portal/OnboardingChecklist";
 import PRSubmit from "@/components/PRSubmit";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
@@ -102,34 +103,51 @@ export default function ClientPortalPage() {
                 </p>
               </div>
 
-              {/* Instant self-serve access */}
-              <div className="mt-6 grid gap-3 text-left">
-                <CheckoutButton
-                  packageId="monthly_9_99"
-                  className="w-full bg-electric text-ink px-6 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
-                >
-                  Get instant access — $9.99 CAD/mo
-                </CheckoutButton>
-                <CheckoutButton
-                  packageId="yearly_90"
-                  className="w-full border-2 border-electric text-electric px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
-                >
-                  Annual — $90 CAD/yr (save ~25%)
-                </CheckoutButton>
-                <CheckoutButton
-                  packageId="custom_program_200"
-                  className="w-full border-2 border-bone px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors"
-                >
-                  Custom Program — $200 CAD one-time
-                </CheckoutButton>
-                <CheckoutButton
-                  packageId="remote_coaching_400"
-                  className="w-full border-2 border-bone/40 text-bone/80 px-6 py-3 font-display uppercase tracking-wider text-sm hover:border-bone hover:text-bone transition-colors"
-                >
-                  {trial?.enabled && trial?.eligible
-                    ? "Remote Coaching — first week FREE, then $400 CAD/mo"
-                    : "Remote Coaching — $400 CAD/mo"}
-                </CheckoutButton>
+              {/* Instant self-serve access — plan comparison */}
+              <div className="mt-6 grid sm:grid-cols-2 gap-4 text-left">
+                {/* Membership */}
+                <div className="border-2 border-electric bg-electric/5 p-5 flex flex-col">
+                  <p className="font-display uppercase tracking-wider text-electric text-sm">Membership</p>
+                  <p className="mt-1 font-display uppercase text-2xl text-bone">$9.99 <span className="text-sm text-bone/50">CAD/mo</span></p>
+                  <ul className="mt-3 space-y-1.5 text-xs text-bone/70 flex-1">
+                    <li>✓ Full app: workout &amp; nutrition trackers</li>
+                    <li>✓ Programs, tools, quests &amp; community</li>
+                    <li>✓ Progress photos &amp; body metrics</li>
+                    <li className="text-bone/40">— No 1:1 coaching or sessions</li>
+                  </ul>
+                  <CheckoutButton packageId="monthly_9_99" className="mt-4 w-full bg-electric text-ink px-4 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">
+                    Join — $9.99 CAD/mo
+                  </CheckoutButton>
+                  <CheckoutButton packageId="yearly_90" className="mt-2 w-full border border-electric/60 text-electric px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-electric hover:text-ink transition-colors">
+                    or Annual — $90 CAD/yr (save ~25%)
+                  </CheckoutButton>
+                </div>
+
+                {/* Remote Coaching */}
+                <div className="border-2 border-bone/25 bg-ink/30 p-5 flex flex-col">
+                  <p className="font-display uppercase tracking-wider text-bone/80 text-sm">Remote Coaching</p>
+                  <p className="mt-1 font-display uppercase text-2xl text-bone">$400 <span className="text-sm text-bone/50">CAD/mo</span></p>
+                  <ul className="mt-3 space-y-1.5 text-xs text-bone/70 flex-1">
+                    <li>✓ Everything in Membership</li>
+                    <li>✓ Custom programming built for you</li>
+                    <li>✓ Weekly video check-ins (Google Meet)</li>
+                    <li>✓ Form reviews, messaging &amp; accountability</li>
+                  </ul>
+                  <CheckoutButton packageId="remote_coaching_400" className="mt-4 w-full border-2 border-bone/50 text-bone px-4 py-3 font-display uppercase tracking-wider text-sm hover:border-electric hover:text-electric transition-colors">
+                    {trial?.enabled && trial?.eligible ? "First week FREE, then $400 CAD/mo" : "Start — $400 CAD/mo"}
+                  </CheckoutButton>
+                </div>
+
+                {/* Custom program */}
+                <div className="border border-bone/20 bg-ink/20 p-5 flex flex-col sm:col-span-2 sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="font-display uppercase tracking-wider text-bone/80 text-sm">One-Time Custom Program</p>
+                    <p className="mt-1 text-xs text-bone/60">A personalized training plan to run on your own — <span className="text-bone">$200 CAD</span>, one-time.</p>
+                  </div>
+                  <CheckoutButton packageId="custom_program_200" className="shrink-0 border-2 border-bone px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors">
+                    Get Custom Program — $200 CAD
+                  </CheckoutButton>
+                </div>
               </div>
 
               <p className="mt-3 text-xs text-bone/50 leading-relaxed">
@@ -164,13 +182,8 @@ export default function ClientPortalPage() {
           ) : (
             /* ---------- APPROVED — FULL PORTAL ---------- */
             <div>
-              {me?.id && !me?.clientProfile?.goal && (
-                <a href="/clients/intake" className="block mb-6 border-2 border-electric bg-electric/10 px-5 py-4 hover:bg-electric/20 transition-colors">
-                  <p className="font-display uppercase tracking-wider text-electric text-sm">👋 Finish your intake to personalize your training →</p>
-                  <p className="mt-1 text-xs text-bone/70">Tell your coach your goal, injuries and training days — takes 2 minutes and powers your program &amp; targets.</p>
-                </a>
-              )}
               {me?.id && <div className="mb-10"><PortalHero username={me.username} /></div>}
+              {me?.id && <OnboardingChecklist intakeDone={!!me?.clientProfile?.goal} />}
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                 Client Portal
               </p>
