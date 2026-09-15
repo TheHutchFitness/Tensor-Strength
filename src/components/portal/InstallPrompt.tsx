@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 
 const DISMISS_KEY = "ts-install-dismissed";
+// Dismissing snoozes the nudge for a week rather than hiding it forever, so a
+// member who taps away still gets one gentle reminder later. Once the app is
+// actually installed we store "installed" and never nudge again.
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState<any>(null);
@@ -23,11 +27,16 @@ export default function InstallPrompt() {
       (window.navigator as any).standalone === true;
     if (standalone) return;
 
-    let dismissed = false;
+    // Respect an earlier dismissal: "installed" is permanent, a timestamp
+    // snoozes for SNOOZE_MS (legacy "1" is treated as a permanent dismissal).
     try {
-      dismissed = localStorage.getItem(DISMISS_KEY) === "1";
+      const val = localStorage.getItem(DISMISS_KEY);
+      if (val === "installed" || val === "1") return;
+      if (val) {
+        const ts = parseInt(val, 10);
+        if (!Number.isNaN(ts) && Date.now() - ts < SNOOZE_MS) return;
+      }
     } catch {}
-    if (dismissed) return;
 
     const ua = window.navigator.userAgent || "";
     const isIOS = /iphone|ipad|ipod/i.test(ua);
@@ -52,7 +61,13 @@ export default function InstallPrompt() {
       }, 2500);
     }
 
-    const onInstalled = () => close();
+    const onInstalled = () => {
+      // They installed — retire the nudge permanently.
+      setShow(false);
+      try {
+        localStorage.setItem(DISMISS_KEY, "installed");
+      } catch {}
+    };
     window.addEventListener("appinstalled", onInstalled);
 
     return () => {
@@ -64,9 +79,10 @@ export default function InstallPrompt() {
   }, []);
 
   function close() {
+    // Snooze rather than hide forever: store the dismissal time.
     setShow(false);
     try {
-      localStorage.setItem(DISMISS_KEY, "1");
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
     } catch {}
   }
 

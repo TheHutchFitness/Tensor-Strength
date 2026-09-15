@@ -1,0 +1,56 @@
+/* ============================================================
+   Tensor Strength — "Engineered Exclusivity" landing revamp
+   High-energy premium polish. Loaded last to refine hierarchy,
+   motion and accent discipline without touching structure.
+   ============================================================ */
+:root { --steel:#8a93a3; }
+
+/* --- Type & rhythm: tighter display, more section breathing room --- */
+.hero h1 { letter-spacing:-.02em; line-height:.9; }
+.section { padding-top:clamp(72px,10vw,148px); padding-bottom:clamp(72px,10vw,148px); }
+.hero p, .section p { max-width:65ch; }
+.eyebrow, .section-kicker, .offer-tag, .frame-spec span { letter-spacing:.28em !important; text-transform:uppercase; }
+
+/* --- CTA hierarchy: ONE punchy primary, subdued ghosts --- */
+.hero-actions { gap:14px; }
+.hero-actions .button:first-child {
+  background:var(--electric); color:#04030d; border-color:var(--electric); font-weight:800; letter-spacing:.05em;
+  box-shadow:0 10px 30px -12px rgba(51,204,255,.6);
+}
+.hero-actions .button:first-child:hover { background:#5ad7ff; box-shadow:0 16px 40px -10px rgba(51,204,255,.7); }
+.hero-actions .button-ghost { background:transparent; border-color:rgba(230,232,236,.2); color:rgba(230,232,236,.82); }
+.hero-actions .button-ghost:hover { border-color:var(--electric); color:#fff; }
+
+/* --- Unified button motion --- */
+.button { transition:transform .16s ease, box-shadow .28s ease, background .2s ease, border-color .2s ease; will-change:transform; }
+.button:hover { transform:translateY(-2px); }
+.button span { display:inline-block; transition:transform .2s ease; }
+.button:hover span { transform:translate(3px,-3px); }
+
+/* --- Cards: thin border + electric inner glow on hover (craft cue) --- */
+.principle, .result-card, .offer, .coach-card {
+  transition:transform .22s ease, border-color .22s ease, box-shadow .32s ease;
+}
+.principle:hover, .result-card:hover, .offer:hover {
+  transform:translateY(-4px);
+  border-color:rgba(51,204,255,.45);
+  box-shadow:0 22px 55px -24px rgba(51,204,255,.4), inset 0 0 0 1px rgba(51,204,255,.14);
+}
+
+/* --- Accent discipline: reserve electric for the featured tier + key stats --- */
+.offer .offer-tag { color:var(--steel); }
+.offer-featured .offer-tag { color:var(--electric); }
+.offer-featured { box-shadow:0 26px 64px -26px rgba(51,204,255,.5); }
+.offer .price small { color:var(--steel); }
+.result-card strong { text-shadow:0 0 24px rgba(51,204,255,.25); }
+
+/* --- Motion: scroll cue + subtle energy --- */
+.scroll-cue span { display:inline-block; animation:tsBounce 1.8s ease-in-out infinite; }
+@keyframes tsBounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }
+.orb-one, .orb-two { filter:blur(64px); opacity:.55; }
+
+/* --- Fallback so content is never hidden if reveal JS is absent --- */
+.reveal { opacity:1 !important; }
+
+/* --- A11y focus polish --- */
+a:focus-visible, .button:focus-visible { outline:2px solid var(--electric); outline-offset:3px; border-radius:2px; }

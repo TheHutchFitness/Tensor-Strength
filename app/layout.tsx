@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
+import InstallPrompt from "@/components/portal/InstallPrompt";
 
 export const metadata: Metadata = {
   title: "Tensor Strength — Strength & Performance Coaching",
@@ -72,6 +73,7 @@ export default function RootLayout({
         </div>
         <AnnouncementBanner />
         {children}
+        <InstallPrompt />
       </body>
     </html>
   );
