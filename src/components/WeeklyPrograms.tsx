@@ -225,7 +225,7 @@ export default function WeeklyPrograms({ mode, single }: { mode: Mode; single?: 
                 rel="noopener noreferrer"
                 className="group border border-bone/15 bg-ink/30 backdrop-blur-sm p-6 hover:border-electric transition-colors flex flex-col"
               >
-                <span className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5">
+                <span className="font-display uppercase tracking-wider text-[10px] text-steel border border-line inline-block w-fit px-2 py-0.5">
                   {p.tag}
                 </span>
                 <p className="font-display uppercase tracking-wider text-bone text-xl mt-4">

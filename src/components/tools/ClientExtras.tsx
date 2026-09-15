@@ -87,7 +87,7 @@ function Deload() {
       {q.map((item) => (
         <div key={item.k}>
           <label className={label}>{item.label} <span className="text-bone/30">({v[item.k]}/5)</span></label>
-          <input type="range" min={1} max={5} value={v[item.k]} onChange={(e) => setV((s) => ({ ...s, [item.k]: parseInt(e.target.value) }))} className="w-full accent-[#00A8FF]" />
+          <input type="range" min={1} max={5} value={v[item.k]} onChange={(e) => setV((s) => ({ ...s, [item.k]: parseInt(e.target.value) }))} className="w-full accent-[#3d8cff]" />
         </div>
       ))}
       <div className={card + " text-center"}>
@@ -173,7 +173,7 @@ function Bodyweight() {
             <p className="font-display uppercase tracking-wider text-bone/60 text-xs">Weight trend</p>
             <span className={"text-xs font-display " + (delta <= 0 ? "text-electric" : "text-amber-400")}>{delta > 0 ? "+" : ""}{delta} lb</span>
           </div>
-          <svg viewBox={`0 0 ${chart.W} ${chart.H}`} className="w-full h-auto"><polyline points={chart.pts} fill="none" stroke="#00A8FF" strokeWidth="2" /></svg>
+          <svg viewBox={`0 0 ${chart.W} ${chart.H}`} className="w-full h-auto"><polyline points={chart.pts} fill="none" stroke="#3d8cff" strokeWidth="2" /></svg>
           <p className="text-[10px] uppercase tracking-wider text-bone/40 mt-1">{rows[0].date} → {rows[rows.length - 1].date}</p>
         </div>
       )}

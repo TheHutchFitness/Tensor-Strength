@@ -1435,10 +1435,10 @@ export default function WorkoutLog() {
                 </span>
               </div>
               <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
-                <polyline points={pts} fill="none" stroke="#00A8FF" strokeWidth="2.5" />
+                <polyline points={pts} fill="none" stroke="#3d8cff" strokeWidth="2.5" />
                 {series.map((p, i) => (
                   <g key={i}>
-                    <circle cx={x(i)} cy={y(p.e1rm)} r="4" fill="#00A8FF" />
+                    <circle cx={x(i)} cy={y(p.e1rm)} r="4" fill="#3d8cff" />
                   </g>
                 ))}
               </svg>

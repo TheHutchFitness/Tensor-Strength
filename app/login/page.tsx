@@ -47,7 +47,7 @@ export default function LoginPage() {
   }, []);
 
   const inputCls =
-    "w-full bg-transparent border-b-2 border-bone/40 py-3 text-bone focus:border-electric outline-none";
+    "w-full bg-transparent border-b border-line py-3 text-bone focus:border-electric outline-none transition-colors";
 
   function signInWithGoogle() {
     // Remember where the user wanted to go, then hand off to Emergent-managed auth.
@@ -105,17 +105,20 @@ export default function LoginPage() {
 
   return (
     <main className="text-bone min-h-screen flex items-center justify-center px-6 py-16">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md relative border border-line bg-ink/50 backdrop-blur px-7 py-10 sm:px-9">
+        {/* Thin electric top-rule — the single disciplined accent on the gate. */}
+        <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-electric to-transparent opacity-70" />
         <div className="flex flex-col items-center text-center mb-10">
           <img
             src="/tensor-strength-logo.jpg"
             alt="Tensor Strength"
             className="h-20 w-20 object-contain rounded-full mb-6"
           />
-          <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-3">
+          <p className="flex items-center gap-3 font-display uppercase tracking-[0.22em] text-[11px] text-steel mb-4">
+            <span className="h-px w-8 bg-electric" />
             Tensor Strength
           </p>
-          <h1 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
+          <h1 className="font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
             {mode === "login" ? (
               <>
                 Members
@@ -197,7 +200,7 @@ export default function LoginPage() {
                       "px-3 py-2 font-display uppercase tracking-wider text-[11px] border transition-colors " +
                       (goals.includes(g)
                         ? "border-electric bg-electric/10 text-electric"
-                        : "border-bone/20 text-bone/60 hover:border-bone/40")
+                        : "border-line text-bone/60 hover:border-bone/40")
                     }
                   >
                     {g}
@@ -235,9 +238,9 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 flex items-center gap-4">
-          <span className="h-px flex-1 bg-bone/15" />
+          <span className="h-px flex-1 bg-line" />
           <span className="font-display uppercase tracking-wider text-[10px] text-bone/40">or</span>
-          <span className="h-px flex-1 bg-bone/15" />
+          <span className="h-px flex-1 bg-line" />
         </div>
 
         <button
@@ -279,7 +282,7 @@ export default function LoginPage() {
           — no sign-up needed.
         </p>
 
-        <div className="mt-6 border-t border-bone/10 pt-5 text-center">
+        <div className="mt-6 border-t border-line pt-5 text-center">
           <p className="text-sm text-bone/60 leading-relaxed">
             In-person training is only available at{" "}
             <a

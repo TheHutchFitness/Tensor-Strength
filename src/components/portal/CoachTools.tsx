@@ -126,11 +126,11 @@ function ProgressDashboard({ clients }: { clients: Client[] }) {
                       </span>
                     </div>
                     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
-                      <polyline points={pts} fill="none" stroke="#00A8FF" strokeWidth="2" />
+                      <polyline points={pts} fill="none" stroke="#3d8cff" strokeWidth="2" />
                       {s.pts.map((p, i) => {
                         const x = pad + (i * (W - pad * 2)) / (s.pts.length - 1);
                         const y = H - pad - ((p.e1rm - min) / range) * (H - pad * 2);
-                        return <circle key={i} cx={x} cy={y} r="2.5" fill="#00A8FF" />;
+                        return <circle key={i} cx={x} cy={y} r="2.5" fill="#3d8cff" />;
                       })}
                     </svg>
                     <p className="text-[11px] uppercase tracking-wider text-bone/50 mt-1">

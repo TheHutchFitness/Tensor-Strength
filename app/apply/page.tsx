@@ -12,7 +12,7 @@ export default function ApplyPage() {
   return (
     <>
       {/* Minimal public header */}
-      <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b-2 border-electric">
+      <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b border-line">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <a href="/apply" className="flex items-center gap-3">
             <img

@@ -69,7 +69,7 @@ export default function RootLayout({
       </head>
       <body>
         <div className="fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-          <div className="absolute inset-0 bg-[#07021c]" />
+          <div className="absolute inset-0 bg-[#05070b]" />
         </div>
         <AnnouncementBanner />
         {children}

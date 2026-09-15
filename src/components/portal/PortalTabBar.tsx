@@ -122,7 +122,7 @@ export default function PortalTabBar() {
         </div>
       )}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur border-t-2 border-electric"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur border-t border-line"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Portal navigation"
       >

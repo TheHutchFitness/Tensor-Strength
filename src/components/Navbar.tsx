@@ -57,27 +57,30 @@ export default function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b-2 border-electric">
+    <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b border-line">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="/" className="flex items-center">
+        <a href="/" className="flex items-center gap-3 group">
           <img
             src="/tensor-strength-logo.jpg"
             alt="Tensor Strength"
-            className="h-11 w-11 object-contain rounded-full"
+            className="h-10 w-10 object-contain rounded-full"
           />
+          <span className="hidden sm:inline font-display uppercase tracking-[0.2em] text-sm text-bone">
+            Tensor <span className="text-electric">Strength</span>
+          </span>
         </a>
 
-        <ul className="hidden md:flex items-center gap-6">
+        <ul className="hidden md:flex items-center gap-7">
           {menus.map((m) => (
             <li key={m.label} className="relative group">
               <a
                 href={m.href}
-                className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors inline-flex items-center gap-1"
+                className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-bone transition-colors inline-flex items-center gap-1"
               >
                 {m.label}
                 {m.items && (
                   <svg
-                    className="h-3 w-3 text-bone/50 group-hover:text-electric transition-colors"
+                    className="h-3 w-3 text-steel group-hover:text-bone transition-colors"
                     viewBox="0 0 12 12"
                     fill="none"
                     aria-hidden="true"
@@ -86,15 +89,15 @@ export default function Navbar() {
                   </svg>
                 )}
               </a>
-              {/* Hover panel — pt-2 keeps a bridge so the menu doesn't close on the gap */}
+              {/* Hover panel — pt-3 keeps a bridge so the menu doesn't close on the gap */}
               {m.items && (
                 <div className="absolute left-0 top-full pt-3 hidden group-hover:block">
-                  <div className="min-w-[230px] bg-ink/95 backdrop-blur border-2 border-electric/60 shadow-xl shadow-electric/10">
+                  <div className="min-w-[230px] bg-ink/95 backdrop-blur border border-line shadow-2xl">
                     {m.items.map((it, i) => (
                       <a
                         key={it.href + i}
                         href={it.href}
-                        className="block px-4 py-3 font-display uppercase tracking-wider text-xs text-bone/80 hover:text-electric hover:bg-electric/5 transition-colors border-b border-bone/5 last:border-b-0"
+                        className="block px-4 py-3 font-display uppercase tracking-[0.14em] text-[11px] text-bone/70 hover:text-bone hover:bg-white/[0.03] transition-colors border-b border-line last:border-b-0"
                       >
                         {it.label}
                       </a>
@@ -107,7 +110,7 @@ export default function Navbar() {
           <li>
             <a
               href="/clients"
-              className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors"
+              className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-bone transition-colors"
             >
               Client Portal
             </a>
@@ -115,7 +118,7 @@ export default function Navbar() {
           <li>
             <a
               href="/forum"
-              className="font-display uppercase text-sm tracking-wider hover:text-electric transition-colors"
+              className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-bone transition-colors"
             >
               Forum
             </a>
@@ -124,7 +127,7 @@ export default function Navbar() {
             <li>
               <a
                 href="/trainers"
-                className="font-display uppercase text-sm tracking-wider text-electric hover:text-bone transition-colors"
+                className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-electric transition-colors"
               >
                 Trainers
               </a>
@@ -134,42 +137,48 @@ export default function Navbar() {
             <li>
               <a
                 href="/admin"
-                className="font-display uppercase text-sm tracking-wider text-electric hover:text-bone transition-colors"
+                className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-electric transition-colors"
               >
                 Admin
               </a>
             </li>
           )}
           {me ? (
-            <li className="flex items-center gap-3">
+            <li className="flex items-center gap-4">
               {!me.portalAccess && me.role !== "admin" && (
                 <a
                   href="/#pricing"
-                  className="bg-electric text-ink px-4 py-2 font-display uppercase text-xs tracking-wider hover:bg-bone transition-colors"
+                  className="bg-electric text-ink px-4 py-2 font-display uppercase text-xs tracking-[0.12em] hover:bg-bone transition-colors"
                 >
                   Upgrade
                 </a>
               )}
               <a
                 href="/account"
-                className="font-display uppercase text-xs tracking-wider text-bone/60 hover:text-electric transition-colors"
+                className="font-display uppercase text-[11px] tracking-[0.14em] text-steel hover:text-bone transition-colors"
               >
                 {me.username}
               </a>
               <button
                 onClick={logout}
-                className="border border-bone/30 px-4 py-2 font-display uppercase text-xs tracking-wider hover:border-electric hover:text-electric transition-colors"
+                className="border border-line px-4 py-2 font-display uppercase text-[11px] tracking-[0.12em] text-bone/80 hover:border-electric hover:text-electric transition-colors"
               >
                 Logout
               </button>
             </li>
           ) : (
-            <li>
+            <li className="flex items-center gap-5">
               <a
                 href="/login"
-                className="bg-electric text-ink px-5 py-2 font-display uppercase text-sm tracking-wider hover:bg-bone transition-colors"
+                className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-bone transition-colors"
               >
-                Sign In
+                Member Login
+              </a>
+              <a
+                href="/apply"
+                className="bg-electric text-ink px-5 py-2 font-display uppercase text-xs tracking-[0.12em] hover:bg-bone transition-colors"
+              >
+                Apply Now
               </a>
             </li>
           )}
@@ -179,7 +188,7 @@ export default function Navbar() {
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
           aria-expanded={open}
-          className="md:hidden flex flex-col items-center justify-center gap-1 h-9 w-9 border border-bone/30 hover:border-electric transition-colors"
+          className="md:hidden flex flex-col items-center justify-center gap-1 h-9 w-9 border border-line hover:border-electric transition-colors"
         >
           <span className={"block h-0.5 w-5 bg-bone transition-transform " + (open ? "translate-y-[6px] rotate-45" : "")} />
           <span className={"block h-0.5 w-5 bg-bone transition-opacity " + (open ? "opacity-0" : "")} />
@@ -188,13 +197,13 @@ export default function Navbar() {
       </nav>
 
       {open && (
-        <nav className="md:hidden flex flex-col px-6 pb-4 border-t border-bone/10 bg-ink/95">
+        <nav className="md:hidden flex flex-col px-6 pb-4 border-t border-line bg-ink/95">
           {links.map((l) => (
             <a
               key={l.href}
               href={l.href}
               onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-bone/5"
+              className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-line"
             >
               {l.label}
             </a>
@@ -202,14 +211,14 @@ export default function Navbar() {
           <a
             href="/clients"
             onClick={() => setOpen(false)}
-            className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-bone/5"
+            className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-line"
           >
             Client Portal →
           </a>
           <a
             href="/forum"
             onClick={() => setOpen(false)}
-            className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-bone/5"
+            className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-line"
           >
             Forum →
           </a>
@@ -217,7 +226,7 @@ export default function Navbar() {
             <a
               href="/trainers"
               onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-bone/5"
+              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-line"
             >
               Trainers →
             </a>
@@ -226,7 +235,7 @@ export default function Navbar() {
             <a
               href="/admin"
               onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-bone/5"
+              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-line"
             >
               Admin →
             </a>
@@ -236,7 +245,7 @@ export default function Navbar() {
               <a
                 href="/account"
                 onClick={() => setOpen(false)}
-                className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-bone/5"
+                className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-line"
               >
                 My Account →
               </a>
@@ -248,13 +257,22 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <a
-              href="/login"
-              onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors"
-            >
-              Sign In →
-            </a>
+            <>
+              <a
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-line"
+              >
+                Member Login →
+              </a>
+              <a
+                href="/apply"
+                onClick={() => setOpen(false)}
+                className="mt-3 block text-center bg-electric text-ink py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
+              >
+                Apply Now
+              </a>
+            </>
           )}
         </nav>
       )}

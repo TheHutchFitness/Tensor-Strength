@@ -26,7 +26,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
   }, []);
   return (
     <>
-    <header className="sticky top-0 z-50 bg-ink/90 backdrop-blur text-bone border-b-2 border-electric">
+    <header className="sticky top-0 z-50 bg-ink/90 backdrop-blur text-bone border-b border-line">
       <div className="mx-auto max-w-6xl px-6 py-3 flex items-center justify-between gap-4">
         {/* Logo (top-left) */}
         <a href="/clients" className="flex items-center gap-3 shrink-0">

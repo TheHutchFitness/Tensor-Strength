@@ -51,7 +51,7 @@ export default function FreeProgramsPage() {
   return (
     <>
       {/* Minimal public header */}
-      <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b-2 border-electric">
+      <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b border-line">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <a
             href="/free-programs"
@@ -112,7 +112,7 @@ export default function FreeProgramsPage() {
                   rel="noopener noreferrer"
                   className="group border border-bone/15 bg-ink/30 backdrop-blur-sm p-6 hover:border-electric transition-colors flex flex-col"
                 >
-                  <span className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5">
+                  <span className="font-display uppercase tracking-wider text-[10px] text-steel border border-line inline-block w-fit px-2 py-0.5">
                     {p.tag}
                   </span>
                   <p className="font-display uppercase tracking-wider text-bone text-xl mt-4">
