@@ -1372,3 +1372,26 @@ agent_communication:
     -message: "Test BACKEND ONLY for backend_phase5 cron endpoint. CRON_SECRET value is: cbd2d811304c3db96d4d1bb24b4a2bb3f004500de6b69ab0 . Tests: (1) GET /api/cron/trial-reminders with NO secret -> 401. (2) GET /api/cron/trial-reminders?secret=WRONG -> 401. (3) GET /api/cron/trial-reminders?secret=cbd2d811304c3db96d4d1bb24b4a2bb3f004500de6b69ab0 -> 200 {ok:true, reminded (int>=0), checked (int>=0), emailConfigured:false}. (4) Same but secret via header x-cron-secret -> 200. (5) POST also works with valid secret -> 200. It's fine if reminded/checked are 0 (no trialing users in test data) — key is auth gating + valid shape, no 500s, no _id leaks. Also sanity: POST /api/uploads/file with a small audio blob named voice.webm (mime audio/webm) as a logged-in member -> 200 {url} (webm is allowed); optionally an .mp3 -> 200."
     -agent: "testing"
     -message: "✅ Phase 5 backend testing COMPLETE. All 8 tests passed (100% success rate). CRON endpoint: Auth gating working correctly (401 for no/wrong secret, 200 for correct secret via query param OR header, both GET and POST methods supported). Response shape verified: {ok:true, reminded:0, checked:0, emailConfigured:false}. AUDIO UPLOADS: webm and mp3 audio files upload successfully with correct URL format (/api/files/uploads/<uuid>.<ext>). Disallowed file types (exe) correctly rejected with 400. No 500 errors, no MongoDB _id leaks. Phase 5 backend fully functional and ready for production."
+
+# ============ PHASE A: CAD currency, coach auto-assign, in-app intake ============
+backend_phaseA:
+  - task: "CAD currency + intake goal/injuries + coach auto-assign"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "All PACKAGES currency changed usd->cad. client/profile PUT now also stores goal + injuries. ensureCoachAssigned(db,userId) sets assignedTrainerId to the first admin (solo coach) if unset; called in both access-grant paths (/payments/status success + webhook checkout.session.completed)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 2 tests (100% success rate). BACKEND PHASE A VERIFICATION COMPLETE: TEST 1 - PAYMENTS PACKAGES CURRENCY (1/1 test): (1) GET /api/payments/packages returns 200 with 4 packages. ALL 4 packages have currency === 'cad' (monthly_9_99, yearly_90, custom_program_200, remote_coaching_400). No MongoDB _id leaks detected. TEST 2 - CLIENT PROFILE WITH GOAL/INJURIES (1/1 test): (2) Registered fresh member 'member_f3s1ft1i' (auto-logged-in via ts_token cookie). (3) PUT /api/client/profile with {goal:'Build muscle', injuries:'left knee', workoutsPerWeek:'4', gym:'The Fit Effect', diet:'high protein'} returns 200. (4) PUT response includes goal='Build muscle', injuries='left knee', workoutsPerWeek='4' (all required fields present). (5) GET /api/client/profile returns 200 with persisted values: goal='Build muscle', injuries='left knee', workoutsPerWeek='4' (data persistence verified). (6) No MongoDB _id leaks detected in registration, PUT, or GET responses. (7) No 500 errors encountered. ALL REQUIREMENTS VERIFIED: (1) Every package in GET /api/payments/packages has currency === 'cad' (was previously 'usd'). (2) Client profile PUT/GET correctly stores and retrieves goal, injuries, and workoutsPerWeek fields. (3) No MongoDB _id leaks in any response. (4) No 500 errors. NOTE: Coach auto-assign (ensureCoachAssigned) was NOT tested as it only triggers on real Stripe payment webhook/status, which was explicitly excluded from testing scope per main agent instructions."
+
+agent_communication:
+    -agent: "main"
+    -message: "Quick BACKEND test. Admin 'The Hutch'/'Vzkfjf3n!3'. (1) GET /api/payments/packages -> 200; every package.currency === 'cad'. (2) Register memberA (auto-logged-in). PUT /api/client/profile {goal:'Build muscle', injuries:'left knee', workoutsPerWeek:'4', gym:'The Fit Effect'} -> 200 and returned profile includes goal='Build muscle', injuries='left knee', workoutsPerWeek='4'. GET /api/client/profile -> same persisted. (3) Just confirm no 500s / no _id leaks. NOTE: coach auto-assign triggers only on a real Stripe payment webhook/status — do NOT attempt payment; just confirm the two endpoints above."
+    -agent: "testing"
+    -message: "✅ BACKEND PHASE A TESTING COMPLETE - ALL TESTS PASSED (2/2). (1) GET /api/payments/packages: ALL 4 packages have currency === 'cad' (monthly_9_99, yearly_90, custom_program_200, remote_coaching_400). (2) Client profile: Registered fresh member, PUT /api/client/profile with goal/injuries/workoutsPerWeek/gym/diet -> 200 with all fields in response; GET /api/client/profile -> 200 with persisted values. (3) No 500 errors, no MongoDB _id leaks detected in any response. Coach auto-assign NOT tested (requires real Stripe payment webhook, excluded per instructions). All backend requirements verified successfully."

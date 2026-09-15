@@ -260,7 +260,7 @@ export default function AccountPage() {
                       packageId="monthly_9_99"
                       className="inline-flex bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
                     >
-                      Upgrade · $9.99/mo →
+                      Upgrade · $9.99 CAD/mo →
                     </CheckoutButton>
                     <p className="mt-2 text-xs text-bone/50 leading-relaxed">
                       💳 Have a code? Enter it at checkout — click{" "}

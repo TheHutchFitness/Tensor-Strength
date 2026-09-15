@@ -29,7 +29,7 @@ const tiers: Tier[] = [
   },
   {
     name: "Membership",
-    price: "$9.99",
+    price: "$9.99 CAD",
     cadence: "/ month",
     tagline: "Self-guided. Full portal.",
     features: [
@@ -39,11 +39,11 @@ const tiers: Tier[] = [
       "Self-directed — build and run your own training",
     ],
     packageId: "monthly_9_99",
-    cta: { label: "Subscribe — $9.99/mo" },
+    cta: { label: "Subscribe — $9.99 CAD/mo" },
   },
   {
     name: "Annual Membership",
-    price: "$90",
+    price: "$90 CAD",
     cadence: "/ year",
     tagline: "Self-guided — save ~25%.",
     features: [
@@ -53,11 +53,11 @@ const tiers: Tier[] = [
       "One payment a year — cheaper than monthly",
     ],
     packageId: "yearly_90",
-    cta: { label: "Subscribe — $90/yr" },
+    cta: { label: "Subscribe — $90 CAD/yr" },
   },
   {
     name: "Custom Program",
-    price: "$200",
+    price: "$200 CAD",
     cadence: "one-time",
     tagline: "The most popular step up.",
     featured: true,
@@ -72,7 +72,7 @@ const tiers: Tier[] = [
   },
   {
     name: "Remote Coaching",
-    price: "$400",
+    price: "$400 CAD",
     cadence: "/ month",
     tagline: "Ongoing coaching, anywhere.",
     features: [
@@ -123,8 +123,8 @@ export default function Pricing() {
               Military, first responder &amp; student discounts
             </p>
             <p className="text-bone/70 text-sm mt-1">
-              Remote Coaching is <span className="text-electric">$350/mo</span> for military,
-              and <span className="text-electric">$300/mo</span> for first responders &amp; students.
+              Remote Coaching is <span className="text-electric">$350 CAD/mo</span> for military,
+              and <span className="text-electric">$300 CAD/mo</span> for first responders &amp; students.
               Ask for your code before checkout.
             </p>
           </div>

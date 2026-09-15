@@ -14,7 +14,7 @@ import PRSubmit from "@/components/PRSubmit";
 import { clientResources } from "@/data/client-resources";
 import CheckoutButton from "@/components/CheckoutButton";
 
-type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string } | null;
+type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string; clientProfile?: { goal?: string } | null } | null;
 
 const resources: never[] = [];
 
@@ -108,27 +108,27 @@ export default function ClientPortalPage() {
                   packageId="monthly_9_99"
                   className="w-full bg-electric text-ink px-6 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors"
                 >
-                  Get instant access — $9.99/mo
+                  Get instant access — $9.99 CAD/mo
                 </CheckoutButton>
                 <CheckoutButton
                   packageId="yearly_90"
                   className="w-full border-2 border-electric text-electric px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
                 >
-                  Annual — $90/yr (save ~25%)
+                  Annual — $90 CAD/yr (save ~25%)
                 </CheckoutButton>
                 <CheckoutButton
                   packageId="custom_program_200"
                   className="w-full border-2 border-bone px-6 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors"
                 >
-                  Custom Program — $200 one-time
+                  Custom Program — $200 CAD one-time
                 </CheckoutButton>
                 <CheckoutButton
                   packageId="remote_coaching_400"
                   className="w-full border-2 border-bone/40 text-bone/80 px-6 py-3 font-display uppercase tracking-wider text-sm hover:border-bone hover:text-bone transition-colors"
                 >
                   {trial?.enabled && trial?.eligible
-                    ? "Remote Coaching — first week FREE, then $400/mo"
-                    : "Remote Coaching — $400/mo"}
+                    ? "Remote Coaching — first week FREE, then $400 CAD/mo"
+                    : "Remote Coaching — $400 CAD/mo"}
                 </CheckoutButton>
               </div>
 
@@ -164,6 +164,12 @@ export default function ClientPortalPage() {
           ) : (
             /* ---------- APPROVED — FULL PORTAL ---------- */
             <div>
+              {me?.id && !me?.clientProfile?.goal && (
+                <a href="/clients/intake" className="block mb-6 border-2 border-electric bg-electric/10 px-5 py-4 hover:bg-electric/20 transition-colors">
+                  <p className="font-display uppercase tracking-wider text-electric text-sm">👋 Finish your intake to personalize your training →</p>
+                  <p className="mt-1 text-xs text-bone/70">Tell your coach your goal, injuries and training days — takes 2 minutes and powers your program &amp; targets.</p>
+                </a>
+              )}
               {me?.id && <div className="mb-10"><PortalHero username={me.username} /></div>}
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                 Client Portal

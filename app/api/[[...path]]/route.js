@@ -96,6 +96,17 @@ async function fetchUploadBytes(url) {
   } catch { return null }
 }
 
+// Solo-coach convenience: connect a new member to the primary coach (first admin)
+// so messaging, progress, insights & check-in ACLs work immediately after payment.
+async function ensureCoachAssigned(db, userId) {
+  const u = await db.collection('users').findOne({ id: userId })
+  if (!u || u.assignedTrainerId) return
+  const coach = await db.collection('users').findOne({ role: 'admin' })
+  if (coach && coach.id !== userId) {
+    await db.collection('users').updateOne({ id: userId }, { $set: { assignedTrainerId: coach.id } })
+  }
+}
+
 // Build a branded, single-page monthly progress report PDF for a member.
 async function buildProgressReportPdf(db, u) {
   const now = new Date()
@@ -517,7 +528,7 @@ const PACKAGES = {
     label: 'Tensor Strength Membership',
     mode: 'subscription',
     amount: 999,
-    currency: 'usd',
+    currency: 'cad',
     interval: 'month',
     accessType: 'membership',
   },
@@ -525,7 +536,7 @@ const PACKAGES = {
     label: 'Tensor Strength Membership (Annual)',
     mode: 'subscription',
     amount: 9000,
-    currency: 'usd',
+    currency: 'cad',
     interval: 'year',
     accessType: 'membership',
   },
@@ -533,14 +544,14 @@ const PACKAGES = {
     label: 'Custom Program',
     mode: 'payment',
     amount: 20000,
-    currency: 'usd',
+    currency: 'cad',
     accessType: 'custom_program',
   },
   remote_coaching_400: {
     label: 'Remote Coaching',
     mode: 'subscription',
     amount: 40000,
-    currency: 'usd',
+    currency: 'cad',
     interval: 'month',
     accessType: 'remote_coaching',
   },
@@ -2014,6 +2025,8 @@ async function handleRoute(request, { params }) {
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const b = await request.json()
       const clientProfile = {
+        goal: String(b.goal || '').trim(),
+        injuries: String(b.injuries || '').trim(),
         squat: String(b.squat || '').trim(),
         bench: String(b.bench || '').trim(),
         deadlift: String(b.deadlift || '').trim(),
@@ -3035,6 +3048,7 @@ async function handleRoute(request, { params }) {
           { id: tx.id },
           { $set: { accessGranted: true, completedAt: new Date() } }
         )
+        await ensureCoachAssigned(db, user.id)
       }
       return handleCORS(NextResponse.json({
         paid,
@@ -3117,7 +3131,7 @@ async function handleRoute(request, { params }) {
       try {
         const pkg = PACKAGES[tx.packageId] || {}
         const itemLabel = pkg.label || tx.accessType || 'Tensor Strength purchase'
-        const currency = (tx.currency || 'usd').toUpperCase()
+        const currency = (tx.currency || 'cad').toUpperCase()
         const amount = ((tx.amount || 0) / 100).toFixed(2)
         const dateStr = new Date(tx.completedAt || tx.createdAt || Date.now()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         const receiptNo = `TS-${String(tx.id).slice(0, 8).toUpperCase()}`
@@ -3751,7 +3765,7 @@ async function handleRoute(request, { params }) {
               cancelAtPeriodEnd: s.cancel_at_period_end,
               currentPeriodEnd: s.current_period_end,
               amount: item?.price?.unit_amount ?? null,
-              currency: item?.price?.currency ?? 'usd',
+              currency: item?.price?.currency ?? 'cad',
               interval: item?.price?.recurring?.interval ?? null,
             }
           }
@@ -3980,6 +3994,7 @@ async function handleRoute(request, { params }) {
                 { $set: { accessGranted: true, status: obj.status, paymentStatus: obj.payment_status, completedAt: new Date() } }
               )
             }
+            await ensureCoachAssigned(db, u.id)
           }
           break
         }

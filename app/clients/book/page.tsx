@@ -72,6 +72,12 @@ export default function BookPage() {
               />
             </div>
 
+            {tab === "remote" && (
+              <p className="mt-3 text-xs text-electric/90 leading-relaxed border-l-2 border-electric pl-3">
+                📌 One remote check-in per week, please — book the slot that works and I&apos;ll see you on Google Meet.
+              </p>
+            )}
+
             <p className="mt-4 text-xs text-bone/50 leading-relaxed">
               Trouble loading the calendar?{" "}
               <a href={openUrl(id)} target="_blank" rel="noopener noreferrer" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors">
