@@ -41,12 +41,19 @@ async function checkDatabase() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const strict = new URL(request.url).searchParams.get("strict") === "1";
   const missingRequired = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
-  const db = await checkDatabase();
+  const db = strict
+    ? await checkDatabase()
+    : { ok: null, skipped: true, reason: "skipped-non-strict" };
+  const ok = missingRequired.length === 0 && db.ok === true;
+  const ready = missingRequired.length === 0 && (strict ? db.ok : true);
 
   const body = {
-    ok: missingRequired.length === 0 && db.ok,
+    ok,
+    live: true,
+    ready,
     checks: {
       env: {
         ok: missingRequired.length === 0,
@@ -69,5 +76,5 @@ export async function GET() {
     },
   };
 
-  return NextResponse.json(body, { status: body.ok ? 200 : 503 });
+  return NextResponse.json(body, { status: ready ? 200 : 503 });
 }
