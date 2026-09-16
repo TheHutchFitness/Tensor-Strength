@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { clearCurrentUserCache, fetchCurrentUser } from "../lib/currentUser";
+import type { CurrentUser } from "../lib/currentUser";
 
 const links = [
   { href: "/meet-the-team", label: "Meet the Team" },
@@ -38,21 +40,21 @@ const menus = [
   },
 ];
 
-type Me = { username: string; role: string; portalAccess: boolean; isTrainer?: boolean } | null;
+type Me = CurrentUser;
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [me, setMe] = useState<Me>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setMe(d?.user ?? null))
+    fetchCurrentUser()
+      .then((user) => setMe(user))
       .catch(() => setMe(null));
   }, []);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    clearCurrentUserCache();
     window.location.href = "/login";
   }
 
