@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Footer from "@/components/Footer";
-import HutchTouchPreview from "@/components/HutchTouchPreview";
+import Footer from "../../src/components/Footer";
+import HutchTouchPreview from "../../src/components/HutchTouchPreview";
 
 export const metadata: Metadata = {
   title: "Free Programs — Tensor Strength",

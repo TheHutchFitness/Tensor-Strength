@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import TrainerProfileForm from "@/components/portal/TrainerProfileForm";
-import { exercises as EXERCISE_LIBRARY } from "@/data/exercises";
-import TrainerPrograms from "@/components/portal/TrainerPrograms";
-import TrainerFiles from "@/components/portal/TrainerFiles";
-import TrainerMeals from "@/components/portal/TrainerMeals";
-import TrainerMessages from "@/components/portal/TrainerMessages";
-import CoachTools from "@/components/portal/CoachTools";
-import TrainerVideos from "@/components/portal/TrainerVideos";
-import CoachCheckinReply from "@/components/portal/CoachCheckinReply";
-import ClientProgress from "@/components/portal/ClientProgress";
-import CoachInsights from "@/components/portal/CoachInsights";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import TrainerProfileForm from "../../src/components/portal/TrainerProfileForm";
+import { exercises as EXERCISE_LIBRARY } from "../../src/data/exercises";
+import TrainerPrograms from "../../src/components/portal/TrainerPrograms";
+import TrainerFiles from "../../src/components/portal/TrainerFiles";
+import TrainerMeals from "../../src/components/portal/TrainerMeals";
+import TrainerMessages from "../../src/components/portal/TrainerMessages";
+import CoachTools from "../../src/components/portal/CoachTools";
+import TrainerVideos from "../../src/components/portal/TrainerVideos";
+import CoachCheckinReply from "../../src/components/portal/CoachCheckinReply";
+import ClientProgress from "../../src/components/portal/ClientProgress";
+import CoachInsights from "../../src/components/portal/CoachInsights";
 
 type Client = {
   id: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 type Photo = { id: string; date: string; front: string | null; side: string | null; back: string | null; weight: string; note: string; createdAt: string };

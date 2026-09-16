@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import SiteTabBar from "@/components/SiteTabBar";
-import Avatar from "@/components/Avatar";
-import { AVATARS, TITLES, titleById, LEVEL_REWARDS } from "@/data/gamification";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import SiteTabBar from "../../src/components/SiteTabBar";
+import Avatar from "../../src/components/Avatar";
+import { AVATARS, TITLES, titleById, LEVEL_REWARDS } from "../../src/data/gamification";
 
 type XP = { total: number; level: number; into: number; needed: number; nextLevelAt: number };
 type Quest = { id: string; period: string; title: string; desc: string; xp: number; target?: number; metric?: string };

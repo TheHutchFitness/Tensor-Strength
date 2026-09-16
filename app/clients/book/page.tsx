@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
 
 // Coach's Google Calendar "Appointment schedule" booking pages (public booking links).
 // To change these later, just update the two IDs below.

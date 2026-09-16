@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import AccountReferrals from "@/components/portal/AccountReferrals";
-import SiteTabBar from "@/components/SiteTabBar";
-import CheckoutButton from "@/components/CheckoutButton";
-import Avatar from "@/components/Avatar";
-import { titleById } from "@/data/gamification";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import AccountReferrals from "../../src/components/portal/AccountReferrals";
+import SiteTabBar from "../../src/components/SiteTabBar";
+import CheckoutButton from "../../src/components/CheckoutButton";
+import Avatar from "../../src/components/Avatar";
+import { titleById } from "../../src/data/gamification";
 
 type Me = {
   username?: string;

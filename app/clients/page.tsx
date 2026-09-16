@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
-import Tour from "@/components/portal/Tour";
-import Footer from "@/components/Footer";
-import MacroCalculator from "@/components/tools/MacroCalculator";
-import OneRepMaxCalculator from "@/components/tools/OneRepMaxCalculator";
-import WilksDotsCalculator from "@/components/tools/WilksDotsCalculator";
-import PRTracker from "@/components/tools/PRTracker";
-import ClientCoaching from "@/components/portal/ClientCoaching";
-import PortalHero from "@/components/portal/PortalHero";
-import OnboardingChecklist from "@/components/portal/OnboardingChecklist";
-import PRSubmit from "@/components/PRSubmit";
-import { clientResources } from "@/data/client-resources";
-import CheckoutButton from "@/components/CheckoutButton";
+import PortalHeader from "../../src/components/portal/PortalHeader";
+import Tour from "../../src/components/portal/Tour";
+import Footer from "../../src/components/Footer";
+import MacroCalculator from "../../src/components/tools/MacroCalculator";
+import OneRepMaxCalculator from "../../src/components/tools/OneRepMaxCalculator";
+import WilksDotsCalculator from "../../src/components/tools/WilksDotsCalculator";
+import PRTracker from "../../src/components/tools/PRTracker";
+import ClientCoaching from "../../src/components/portal/ClientCoaching";
+import PortalHero from "../../src/components/portal/PortalHero";
+import OnboardingChecklist from "../../src/components/portal/OnboardingChecklist";
+import PRSubmit from "../../src/components/PRSubmit";
+import { clientResources } from "../../src/data/client-resources";
+import CheckoutButton from "../../src/components/CheckoutButton";
 
 type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string; clientProfile?: { goal?: string } | null } | null;
 

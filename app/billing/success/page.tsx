@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+import Navbar from "../../../src/components/Navbar";
+import Footer from "../../../src/components/Footer";
 
 export default function BillingSuccessPage() {
   const [state, setState] = useState<"checking" | "paid" | "pending" | "error">(
