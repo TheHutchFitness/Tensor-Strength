@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cloudSet } from "@/lib/cloud";
+import { cloudSet } from "../../lib/cloud";
 
 type Sex = "male" | "female";
 type Goal = "cut" | "maintain" | "bulk";

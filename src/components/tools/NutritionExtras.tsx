@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useCloudState } from "@/lib/cloud";
+import { useCloudState } from "../../lib/cloud";
 
 type Tab = "foods" | "recipes" | "water" | "cycle" | "adherence";
 const card = "border border-bone/15 bg-ink/20 p-5";

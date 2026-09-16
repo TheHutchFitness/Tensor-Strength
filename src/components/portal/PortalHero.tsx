@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AVATARS, levelFromXp } from "@/data/gamification";
-import { hutchTouchSessions, type HutchTouchSessionId } from "@/data/hutchTouchProgram";
+import { AVATARS, levelFromXp } from "../../data/gamification";
+import { hutchTouchSessions, type HutchTouchSessionId } from "../../data/hutchTouchProgram";
 
 const HUTCH_ORDER: HutchTouchSessionId[] = ["push", "lower-pull", "upper-pull", "legs"];
 

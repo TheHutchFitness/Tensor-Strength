@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import VideoUploader from "@/components/VideoUploader";
+import VideoUploader from "../VideoUploader";
 
 type DemoVideo = {
   id: string;

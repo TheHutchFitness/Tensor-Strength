@@ -1,6 +1,6 @@
 "use client";
 
-import { packages, articles, videos } from "@/data/library";
+import { packages, articles, videos } from "../data/library";
 
 function SubHeading({ index, kicker }: { index: string; kicker: string }) {
   return (

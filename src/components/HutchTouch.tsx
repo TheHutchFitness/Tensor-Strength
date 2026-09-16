@@ -9,7 +9,7 @@ import {
   HUTCH_TOUCH_SQUAT_ROTATION,
   HUTCH_TOUCH_DEADLIFT_ROTATION,
   type HutchTouchSessionId,
-} from "@/data/hutchTouchProgram";
+} from "../data/hutchTouchProgram";
 
 type Mode = "portal" | "public";
 

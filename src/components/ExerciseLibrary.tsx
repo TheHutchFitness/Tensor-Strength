@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { exercises } from "@/data/exercises";
-import { useCloudState } from "@/lib/cloud";
+import { exercises } from "../data/exercises";
+import { useCloudState } from "../lib/cloud";
 
 // All categories present in the data, plus "All" for no filter.
 const categories = ["All", ...Array.from(new Set(exercises.map((e) => e.category)))];

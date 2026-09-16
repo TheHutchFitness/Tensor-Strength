@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Calculator, FileText, MessageSquare, LayoutDashboard, Lock, X } from "lucide-react";
-import CheckoutButton from "@/components/CheckoutButton";
+import CheckoutButton from "./CheckoutButton";
 
 type Me = {
   username?: string;

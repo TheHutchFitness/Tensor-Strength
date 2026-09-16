@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { warmups as baseWarmups, type Warmup } from "@/data/warmups";
-import { hutchTouchSessions } from "@/data/hutchTouchProgram";
+import { warmups as baseWarmups, type Warmup } from "../data/warmups";
+import { hutchTouchSessions } from "../data/hutchTouchProgram";
 
 // Build the Hutch Touch warm-up routines straight from the program data so they
 // always stay in sync with the program itself (single source of truth).

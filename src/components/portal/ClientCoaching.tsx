@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import MessageThread from "@/components/portal/MessageThread";
+import MessageThread from "./MessageThread";
 
 type Trainer = { id: string; name: string; photo: string; trainerType: string };
 type Program = {
