@@ -51,9 +51,6 @@ export async function GET() {
       env: {
         ok: missingRequired.length === 0,
         missing: missingRequired,
-        recommended: {
-          NEXT_PUBLIC_BASE_URL: Boolean(process.env.NEXT_PUBLIC_BASE_URL?.trim()),
-        },
       },
       database: db,
       services: {

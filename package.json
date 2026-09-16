@@ -8,7 +8,7 @@
         "dev:webpack": "next dev --hostname 0.0.0.0 --port 3000",
         "build": "next build",
         "postbuild": "mkdir -p .next/standalone && cp -r public .next/standalone/",
-        "start": "test -f .next/standalone/server.js && HOSTNAME=0.0.0.0 node .next/standalone/server.js || HOSTNAME=0.0.0.0 next start"
+        "start": "node -e \"const fs=require('fs'); const {spawn}=require('child_process'); const standalone=fs.existsSync('.next/standalone/server.js'); const command=standalone?'node':'next'; const args=standalone?['.next/standalone/server.js']:['start']; const child=spawn(command,args,{stdio:'inherit',env:{...process.env,HOSTNAME:'0.0.0.0'}}); child.on('exit',code=>process.exit(code ?? 0));\""
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.1127.0",
