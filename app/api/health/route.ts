@@ -75,5 +75,5 @@ export async function GET(request: Request) {
     },
   };
 
-  return NextResponse.json(body, { status: strict && !ready ? 503 : 200 });
+  return NextResponse.json(body, { status: ready ? 200 : 503 });
 }
