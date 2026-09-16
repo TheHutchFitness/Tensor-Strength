@@ -1102,7 +1102,8 @@ async function handleRoute(request, { params }) {
         data = await upstream.json()
       } catch {}
       if (!upstream.ok) {
-        return handleCORS(NextResponse.json({ error: data?.error || 'Lead service rejected the request' }, { status: 502 }))
+        const status = upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502
+        return handleCORS(NextResponse.json({ error: data?.error || 'Lead service rejected the request' }, { status }))
       }
       return handleCORS(NextResponse.json({ ok: true, data }))
     }
