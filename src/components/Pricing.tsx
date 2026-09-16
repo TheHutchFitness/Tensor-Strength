@@ -1,5 +1,3 @@
-"use client";
-
 import CheckoutButton from "./CheckoutButton";
 
 type Tier = {
