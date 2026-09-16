@@ -44,8 +44,10 @@ async function checkDatabase() {
 export async function GET(request: Request) {
   const strict = new URL(request.url).searchParams.get("strict") === "1";
   const missingRequired = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
-  const db = await checkDatabase();
-  const ready = missingRequired.length === 0 && db.ok;
+  const db = strict
+    ? await checkDatabase()
+    : { ok: null, skipped: true, reason: "skipped-non-strict" };
+  const ready = missingRequired.length === 0 && (strict ? db.ok : true);
 
   const body = {
     ok: ready,
