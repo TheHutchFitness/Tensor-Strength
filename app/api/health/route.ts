@@ -47,10 +47,11 @@ export async function GET(request: Request) {
   const db = strict
     ? await checkDatabase()
     : { ok: null, skipped: true, reason: "skipped-non-strict" };
+  const ok = missingRequired.length === 0 && db.ok === true;
   const ready = missingRequired.length === 0 && (strict ? db.ok : true);
 
   const body = {
-    ok: ready,
+    ok,
     live: true,
     ready,
     checks: {
