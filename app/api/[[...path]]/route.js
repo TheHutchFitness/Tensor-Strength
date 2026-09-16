@@ -528,9 +528,18 @@ const COOKIE_NAME = 'ts_token'
 // No insecure fallback: a missing JWT_SECRET must fail closed (tokens become
 // unforgeable/invalid) rather than fall back to a publicly-known default.
 const secretKey = new TextEncoder().encode(process.env.JWT_SECRET || '')
+function hasJwtSecret() {
+  return typeof process.env.JWT_SECRET === 'string' && process.env.JWT_SECRET.trim().length > 0
+}
+function authConfigErrorResponse() {
+  return handleCORS(NextResponse.json(
+    { error: 'Authentication is temporarily unavailable. Please try again later.' },
+    { status: 503 }
+  ))
+}
 
 async function signToken(payload) {
-  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured')
+  if (!hasJwtSecret()) throw new Error('JWT_SECRET is not configured')
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -1030,6 +1039,7 @@ async function handleRoute(request, { params }) {
 
     // ---------------- AUTH ----------------
     if (route === '/auth/register' && method === 'POST') {
+      if (!hasJwtSecret()) return authConfigErrorResponse()
       const rl = rateLimit(request, 'register', 20, 60_000)
       if (!rl.ok) return tooMany(rl.retryAfter)
       const body = await request.json()
@@ -1071,6 +1081,7 @@ async function handleRoute(request, { params }) {
     }
 
     if (route === '/auth/login' && method === 'POST') {
+      if (!hasJwtSecret()) return authConfigErrorResponse()
       const rl = rateLimit(request, 'login', 20, 60_000)
       if (!rl.ok) return tooMany(rl.retryAfter)
       const body = await request.json()
@@ -1093,6 +1104,7 @@ async function handleRoute(request, { params }) {
     // Emergent-managed Google sign-in: exchange the one-time session_id for the
     // Google identity, then find-or-create the local user and issue our ts_token.
     if (route === '/auth/emergent' && method === 'POST') {
+      if (!hasJwtSecret()) return authConfigErrorResponse()
       const rl = rateLimit(request, 'emergent', 40, 60_000)
       if (!rl.ok) return tooMany(rl.retryAfter)
       const body = await request.json().catch(() => ({}))
