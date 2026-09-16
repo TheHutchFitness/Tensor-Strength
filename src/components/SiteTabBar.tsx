@@ -13,6 +13,7 @@ import {
   Trophy,
   UserRound,
 } from "lucide-react";
+import { fetchCurrentUser } from "../lib/currentUser";
 
 type Tab = {
   href: string;
@@ -53,9 +54,8 @@ export default function SiteTabBar() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => alive && setSignedIn(!!d?.user))
+    fetchCurrentUser()
+      .then((user) => alive && setSignedIn(!!user))
       .catch(() => alive && setSignedIn(false));
     return () => {
       alive = false;

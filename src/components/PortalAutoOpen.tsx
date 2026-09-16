@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { fetchCurrentUser } from "../lib/currentUser";
 
 // On website startup, a member who already has paid portal access is taken
 // straight to the Client Portal. We only do this ONCE per browser session
@@ -13,10 +14,8 @@ export default function PortalAutoOpen() {
     } catch {
       // sessionStorage unavailable — fall through and just check access.
     }
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const u = d?.user;
+    fetchCurrentUser()
+      .then((u) => {
         if (u && u.portalAccess) {
           try {
             sessionStorage.setItem("ts_portal_autoopen", "1");

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Calculator, FileText, MessageSquare, LayoutDashboard, Lock, X } from "lucide-react";
 import CheckoutButton from "./CheckoutButton";
+import { fetchCurrentUser } from "../lib/currentUser";
 
 type Me = {
   username?: string;
@@ -29,9 +30,8 @@ export default function MemberHub() {
   const [cancelMsg, setCancelMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setMe(d?.user || null))
+    fetchCurrentUser()
+      .then((user) => setMe(user))
       .catch(() => {})
       .finally(() => setLoaded(true));
     try {

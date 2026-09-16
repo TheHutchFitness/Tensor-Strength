@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { clearCurrentUserCache, fetchCurrentUser } from "../lib/currentUser";
 
 const links = [
   { href: "/meet-the-team", label: "Meet the Team" },
@@ -45,14 +46,14 @@ export default function Navbar() {
   const [me, setMe] = useState<Me>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setMe(d?.user ?? null))
+    fetchCurrentUser()
+      .then((user) => setMe(user))
       .catch(() => setMe(null));
   }, []);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    clearCurrentUserCache();
     window.location.href = "/login";
   }
 

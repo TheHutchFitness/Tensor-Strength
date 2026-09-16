@@ -350,6 +350,8 @@ async function toggleReaction(db, collection, targetId, emoji, userId) {
 let client
 let db
 let connectPromise
+let indexesPromise
+let statsCache = { value: null, expiresAt: 0 }
 
 function trimTrailingSlash(value) {
   return String(value || '').trim().replace(/\/+$/, '')
@@ -422,6 +424,104 @@ async function connectToMongo() {
     })
   }
   return connectPromise
+}
+
+async function ensureIndexes(db) {
+  if (indexesPromise) return indexesPromise
+  indexesPromise = (async () => {
+    const defs = [
+      {
+        collection: 'users',
+        indexes: [
+          { key: { id: 1 }, name: 'id_1' },
+          { key: { username: 1 }, name: 'username_1' },
+          { key: { email: 1 }, name: 'email_1' },
+          { key: { role: 1 }, name: 'role_1' },
+          { key: { assignedTrainerId: 1 }, name: 'assignedTrainerId_1' },
+          { key: { slug: 1 }, name: 'slug_1' },
+          { key: { stripeSubscriptionId: 1 }, name: 'stripeSubscriptionId_1' },
+          { key: { stripeCustomerId: 1 }, name: 'stripeCustomerId_1' },
+          { key: { referralCode: 1 }, name: 'referralCode_1' },
+          { key: { createdAt: -1 }, name: 'createdAt_desc' },
+        ],
+      },
+      {
+        collection: 'tracker',
+        indexes: [
+          { key: { userId: 1 }, name: 'userId_1' },
+        ],
+      },
+      {
+        collection: 'checkins',
+        indexes: [
+          { key: { userId: 1, createdAt: -1 }, name: 'userId_createdAt_desc' },
+          { key: { id: 1 }, name: 'id_1' },
+        ],
+      },
+      {
+        collection: 'body_metrics',
+        indexes: [
+          { key: { userId: 1, date: 1 }, name: 'userId_date_1' },
+          { key: { id: 1 }, name: 'id_1' },
+        ],
+      },
+      {
+        collection: 'progress_photos',
+        indexes: [
+          { key: { userId: 1, date: 1, createdAt: 1 }, name: 'userId_date_createdAt_1' },
+          { key: { id: 1 }, name: 'id_1' },
+        ],
+      },
+      {
+        collection: 'forum_notifications',
+        indexes: [
+          { key: { userId: 1, read: 1, createdAt: -1 }, name: 'userId_read_createdAt_desc' },
+        ],
+      },
+      {
+        collection: 'forum_posts',
+        indexes: [
+          { key: { id: 1 }, name: 'id_1' },
+          { key: { createdAt: -1 }, name: 'createdAt_desc' },
+        ],
+      },
+      {
+        collection: 'forum_replies',
+        indexes: [
+          { key: { id: 1 }, name: 'id_1' },
+          { key: { postId: 1, createdAt: 1 }, name: 'postId_createdAt_1' },
+        ],
+      },
+      {
+        collection: 'uploads',
+        indexes: [
+          { key: { key: 1 }, name: 'key_1' },
+          { key: { ownerId: 1 }, name: 'ownerId_1' },
+        ],
+      },
+      {
+        collection: 'site_content',
+        indexes: [
+          { key: { key: 1 }, name: 'key_1' },
+        ],
+      },
+      {
+        collection: 'demo_analytics',
+        indexes: [
+          { key: { tool: 1 }, name: 'tool_1' },
+        ],
+      },
+    ]
+
+    for (const { collection, indexes } of defs) {
+      try {
+        await db.collection(collection).createIndexes(indexes)
+      } catch (e) {
+        console.error(`Index bootstrap failed for ${collection}:`, e?.message || e)
+      }
+    }
+  })()
+  return indexesPromise
 }
 
 const COOKIE_NAME = 'ts_token'
@@ -849,6 +949,7 @@ async function handleRoute(request, { params }) {
   try {
     const db = await connectToMongo()
     await ensureAdmin(db)
+    await ensureIndexes(db)
 
     if ((route === '/' || route === '/root') && method === 'GET') {
       return handleCORS(NextResponse.json({ message: 'Tensor Strength API' }))
@@ -1854,34 +1955,35 @@ async function handleRoute(request, { params }) {
     // ---- Public professionals (trainers who completed a profile) ----
     // ---- Public site stats (live counts, no auth) ----
     if (route === '/stats' && method === 'GET') {
+      if (statsCache.value && statsCache.expiresAt > Date.now()) {
+        return handleCORS(NextResponse.json(statsCache.value))
+      }
       const users = db.collection('users')
       // Athletes coached = a base of 15 (coached before the site tracked it)
       // plus everyone who has paid for remote or in-person coaching here.
       const ATHLETES_BASE = 15
-      const paidCoached = await users.countDocuments({
-        accessType: { $in: ['remote_coaching', 'in_person'] },
-      })
-      // Total accounts on the website (exclude the seeded admin + demo client
-      // so the number reflects real signups only).
-      const totalAccounts = await users.countDocuments({
-        role: { $ne: 'admin' },
-        isDemo: { $ne: true },
-      })
-      // Workouts logged across all members (real, grows live).
-      let workoutsLogged = 0
-      try {
-        const docs = await db.collection('tracker')
-          .find({}, { projection: { workouts: 1 } })
-          .toArray()
-        for (const t of docs) {
-          if (Array.isArray(t.workouts)) workoutsLogged += t.workouts.length
-        }
-      } catch { workoutsLogged = 0 }
-      return handleCORS(NextResponse.json({
+      const [paidCoached, totalAccounts, workoutAgg] = await Promise.all([
+        users.countDocuments({
+          accessType: { $in: ['remote_coaching', 'in_person'] },
+        }),
+        // Total accounts on the website (exclude the seeded admin + demo client
+        // so the number reflects real signups only).
+        users.countDocuments({
+          role: { $ne: 'admin' },
+          isDemo: { $ne: true },
+        }),
+        db.collection('tracker').aggregate([
+          { $project: { workoutCount: { $size: { $ifNull: ['$workouts', []] } } } },
+          { $group: { _id: null, workoutsLogged: { $sum: '$workoutCount' } } },
+        ]).toArray().catch(() => []),
+      ])
+      const payload = {
         athletesCoached: ATHLETES_BASE + paidCoached,
         totalAccounts,
-        workoutsLogged,
-      }))
+        workoutsLogged: workoutAgg[0]?.workoutsLogged || 0,
+      }
+      statsCache = { value: payload, expiresAt: Date.now() + 60_000 }
+      return handleCORS(NextResponse.json(payload))
     }
 
     // ---- Coaching applications ----
