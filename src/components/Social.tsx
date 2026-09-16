@@ -1,5 +1,7 @@
 import { SOCIAL_CTA_URL } from "../lib/public-links";
 
+const isExternalCta = /^https?:\/\//.test(SOCIAL_CTA_URL);
+
 const features = [
   {
     icon: "◈",
@@ -62,16 +64,16 @@ export default function Social() {
             <div className="mt-10 flex flex-col sm:flex-row gap-4">
               <a
                 href={SOCIAL_CTA_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={isExternalCta ? "_blank" : undefined}
+                rel={isExternalCta ? "noopener noreferrer" : undefined}
                 className="bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors text-center"
               >
                 Get the App →
               </a>
               <a
                 href={SOCIAL_CTA_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={isExternalCta ? "_blank" : undefined}
+                rel={isExternalCta ? "noopener noreferrer" : undefined}
                 className="border-2 border-bone px-8 py-4 font-display uppercase tracking-wider hover:bg-bone hover:text-ink transition-colors text-center"
               >
                 Sign In

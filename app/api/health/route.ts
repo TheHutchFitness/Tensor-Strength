@@ -60,7 +60,8 @@ export async function GET() {
         storage: hasAllEnv(OPTIONAL_SERVICE_ENV_VARS.storage),
         cron: hasAllEnv(OPTIONAL_SERVICE_ENV_VARS.cron),
         leadCapture: {
-          configured: true,
+          configured: Boolean(process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim()),
+          available: true,
           usingDefault: !process.env.LEAD_API_URL?.trim() && !process.env.NEXT_PUBLIC_LEAD_API_URL?.trim(),
           source: process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim() ? "env" : "default",
         },
