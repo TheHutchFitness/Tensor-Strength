@@ -367,6 +367,50 @@ function getAppBaseUrl(request) {
 }
 
 const LEAD_API_URL = process.env.LEAD_API_URL || process.env.NEXT_PUBLIC_LEAD_API_URL || 'https://alluring-encouragement-production.up.railway.app/public/lead_v3'
+const LEAD_CAPTURE_FIELDS = {
+  age: 32,
+  bodyweight: 120,
+  email: 320,
+  equipment: 2000,
+  goal: 160,
+  history: 2000,
+  lift: 120,
+  name: 120,
+  note: 1000,
+  result: 120,
+  source: 160,
+  timeline: 120,
+}
+
+function sanitizeLeadCapturePayload(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Invalid payload', status: 400 }
+  }
+  const raw = JSON.stringify(body)
+  if (!raw || raw.length > 16_000) {
+    return { error: 'Payload too large', status: 413 }
+  }
+  const out = {}
+  for (const [key, value] of Object.entries(body)) {
+    if (!Object.prototype.hasOwnProperty.call(LEAD_CAPTURE_FIELDS, key)) {
+      return { error: `Unexpected field: ${key}`, status: 400 }
+    }
+    if (value == null) continue
+    const text = String(value).trim()
+    if (text.length > LEAD_CAPTURE_FIELDS[key]) {
+      return { error: `${key} is too long`, status: 400 }
+    }
+    out[key] = text
+  }
+  if (!out.source) return { error: 'Missing source', status: 400 }
+  if (Object.prototype.hasOwnProperty.call(out, 'email')) {
+    const email = out.email
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { error: 'Invalid email', status: 400 }
+    }
+  }
+  return { payload: out }
+}
 
 async function connectToMongo() {
   if (db) return db
@@ -1047,13 +1091,14 @@ async function handleRoute(request, { params }) {
 
     if (route === '/lead-capture' && method === 'POST') {
       const body = await request.json().catch(() => null)
-      if (!body || typeof body !== 'object' || Array.isArray(body)) {
-        return handleCORS(NextResponse.json({ error: 'Invalid payload' }, { status: 400 }))
+      const sanitized = sanitizeLeadCapturePayload(body)
+      if (sanitized.error) {
+        return handleCORS(NextResponse.json({ error: sanitized.error }, { status: sanitized.status }))
       }
       const upstream = await fetch(LEAD_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(sanitized.payload),
         cache: 'no-store',
       }).catch(() => null)
       if (!upstream) {

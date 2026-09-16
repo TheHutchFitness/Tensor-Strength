@@ -1,4 +1,4 @@
-import { COMMUNITY_URL } from "../lib/public-links";
+import { SOCIAL_CTA_URL } from "../lib/public-links";
 
 const features = [
   {
@@ -61,7 +61,7 @@ export default function Social() {
 
             <div className="mt-10 flex flex-col sm:flex-row gap-4">
               <a
-                href={COMMUNITY_URL}
+                href={SOCIAL_CTA_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors text-center"
@@ -69,7 +69,7 @@ export default function Social() {
                 Get the App →
               </a>
               <a
-                href={COMMUNITY_URL}
+                href={SOCIAL_CTA_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="border-2 border-bone px-8 py-4 font-display uppercase tracking-wider hover:bg-bone hover:text-ink transition-colors text-center"
