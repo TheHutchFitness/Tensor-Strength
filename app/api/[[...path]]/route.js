@@ -351,6 +351,60 @@ let client
 let db
 let connectPromise
 
+function trimTrailingSlash(value) {
+  return String(value || '').trim().replace(/\/+$/, '')
+}
+
+function getAppBaseUrl() {
+  return trimTrailingSlash(process.env.NEXT_PUBLIC_BASE_URL)
+}
+
+const LEAD_API_URL = process.env.LEAD_API_URL || process.env.NEXT_PUBLIC_LEAD_API_URL || 'https://alluring-encouragement-production.up.railway.app/public/lead_v3'
+const LEAD_CAPTURE_FIELDS = {
+  age: 32,
+  bodyweight: 120,
+  email: 320,
+  equipment: 2000,
+  goal: 160,
+  history: 2000,
+  lift: 120,
+  name: 120,
+  note: 1000,
+  result: 120,
+  source: 160,
+  timeline: 120,
+}
+
+function sanitizeLeadCapturePayload(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Invalid payload', status: 400 }
+  }
+  const raw = JSON.stringify(body)
+  if (!raw || raw.length > 16_000) {
+    return { error: 'Payload too large', status: 413 }
+  }
+  const out = {}
+  for (const [key, value] of Object.entries(body)) {
+    if (!Object.prototype.hasOwnProperty.call(LEAD_CAPTURE_FIELDS, key)) {
+      return { error: `Unexpected field: ${key}`, status: 400 }
+    }
+    if (value == null) continue
+    const text = String(value).trim()
+    if (text.length > LEAD_CAPTURE_FIELDS[key]) {
+      return { error: `${key} is too long`, status: 400 }
+    }
+    out[key] = text
+  }
+  if (!out.source) return { error: 'Missing source', status: 400 }
+  if (Object.prototype.hasOwnProperty.call(out, 'email')) {
+    const email = out.email
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { error: 'Invalid email', status: 400 }
+    }
+  }
+  return { payload: out }
+}
+
 async function connectToMongo() {
   if (db) return db
   if (!connectPromise) {
@@ -1026,6 +1080,32 @@ async function handleRoute(request, { params }) {
         )
       }
       return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    if (route === '/lead-capture' && method === 'POST') {
+      const body = await request.json().catch(() => null)
+      const sanitized = sanitizeLeadCapturePayload(body)
+      if (sanitized.error) {
+        return handleCORS(NextResponse.json({ error: sanitized.error }, { status: sanitized.status }))
+      }
+      const upstream = await fetch(LEAD_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sanitized.payload),
+        cache: 'no-store',
+      }).catch(() => null)
+      if (!upstream) {
+        return handleCORS(NextResponse.json({ error: 'Lead service unavailable' }, { status: 502 }))
+      }
+      let data = null
+      try {
+        data = await upstream.json()
+      } catch {}
+      if (!upstream.ok) {
+        const status = upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502
+        return handleCORS(NextResponse.json({ error: data?.error || 'Lead service rejected the request' }, { status }))
+      }
+      return handleCORS(NextResponse.json({ ok: true, data }))
     }
     if (route === '/admin/demo-analytics' && method === 'GET') {
       const user = await getCurrentUser(request, db)
@@ -2961,7 +3041,10 @@ async function handleRoute(request, { params }) {
       if (!pkg) {
         return handleCORS(NextResponse.json({ error: 'Invalid package' }, { status: 400 }))
       }
-      const base = process.env.NEXT_PUBLIC_BASE_URL
+      const base = getAppBaseUrl()
+      if (!base) {
+        return handleCORS(NextResponse.json({ error: 'NEXT_PUBLIC_BASE_URL is not configured' }, { status: 503 }))
+      }
       const txId = uuidv4()
       const successUrl = `${base}/billing/success?session_id={CHECKOUT_SESSION_ID}`
       const cancelUrl = `${base}/billing/cancel`
@@ -3871,7 +3954,11 @@ async function handleRoute(request, { params }) {
           { status: 400 }
         ))
       }
-      const returnUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/clients`
+      const base = getAppBaseUrl()
+      if (!base) {
+        return handleCORS(NextResponse.json({ error: 'NEXT_PUBLIC_BASE_URL is not configured' }, { status: 503 }))
+      }
+      const returnUrl = `${base}/clients`
       async function createPortalSession() {
         const p = new URLSearchParams()
         p.set('customer', user.stripeCustomerId)

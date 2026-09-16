@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LEAD_CAPTURE_URL } from "../lib/public-links";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
@@ -21,7 +22,7 @@ export default function EmailCapture() {
 
     try {
       const res = await fetch(
-        "https://alluring-encouragement-production.up.railway.app/public/lead_v3",
+        LEAD_CAPTURE_URL,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
