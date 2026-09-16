@@ -1,19 +1,25 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Navbar from "../../src/components/Navbar";
 import Footer from "../../src/components/Footer";
-import TrainerProfileForm from "../../src/components/portal/TrainerProfileForm";
 import { exercises as EXERCISE_LIBRARY } from "../../src/data/exercises";
-import TrainerPrograms from "../../src/components/portal/TrainerPrograms";
-import TrainerFiles from "../../src/components/portal/TrainerFiles";
-import TrainerMeals from "../../src/components/portal/TrainerMeals";
-import TrainerMessages from "../../src/components/portal/TrainerMessages";
-import CoachTools from "../../src/components/portal/CoachTools";
-import TrainerVideos from "../../src/components/portal/TrainerVideos";
-import CoachCheckinReply from "../../src/components/portal/CoachCheckinReply";
-import ClientProgress from "../../src/components/portal/ClientProgress";
-import CoachInsights from "../../src/components/portal/CoachInsights";
+
+const TrainerProfileForm = dynamic(() => import("../../src/components/portal/TrainerProfileForm"));
+const TrainerPrograms = dynamic(() => import("../../src/components/portal/TrainerPrograms"));
+const TrainerFiles = dynamic(() => import("../../src/components/portal/TrainerFiles"));
+const TrainerMeals = dynamic(() => import("../../src/components/portal/TrainerMeals"));
+const TrainerMessages = dynamic(() => import("../../src/components/portal/TrainerMessages"), {
+  loading: () => <p className="font-display uppercase tracking-wider text-bone/50 text-sm">Loading messages…</p>,
+});
+const CoachTools = dynamic(() => import("../../src/components/portal/CoachTools"));
+const TrainerVideos = dynamic(() => import("../../src/components/portal/TrainerVideos"));
+const CoachCheckinReply = dynamic(() => import("../../src/components/portal/CoachCheckinReply"));
+const ClientProgress = dynamic(() => import("../../src/components/portal/ClientProgress"));
+const CoachInsights = dynamic(() => import("../../src/components/portal/CoachInsights"), {
+  loading: () => <p className="font-display uppercase tracking-wider text-bone/50 text-sm">Loading insights…</p>,
+});
 
 type Client = {
   id: string;
