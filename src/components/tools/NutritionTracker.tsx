@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useCloudState, cloudSet } from "@/lib/cloud";
+import { useCloudState, cloudSet } from "../../lib/cloud";
 
 type Food = { name: string; cuisine: string; cal: number; p: number; c: number; f: number; diets: string[]; perItem?: boolean; serving?: string };
 type Entry = { id: string; name: string; label: string; cal: number; p: number; c: number; f: number };

@@ -1,4 +1,4 @@
-import { prBoard } from "@/data/prBoard";
+import { prBoard } from "../data/prBoard";
 
 export default function PRBoard() {
   return (

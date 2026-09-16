@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { hutchTouchSessions } from "@/data/hutchTouchProgram";
+import { hutchTouchSessions } from "../data/hutchTouchProgram";
 
 type Demo = { name: string; desc: string; rows: string[] };
 

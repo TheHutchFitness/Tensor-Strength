@@ -1,6 +1,6 @@
 "use client";
 
-import CheckoutButton from "@/components/CheckoutButton";
+import CheckoutButton from "./CheckoutButton";
 
 type Tier = {
   name: string;

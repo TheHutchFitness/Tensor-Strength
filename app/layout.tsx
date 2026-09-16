@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import AnnouncementBanner from "@/components/AnnouncementBanner";
-import InstallPrompt from "@/components/portal/InstallPrompt";
+import AnnouncementBanner from "../src/components/AnnouncementBanner";
+import InstallPrompt from "../src/components/portal/InstallPrompt";
 
 export const metadata: Metadata = {
   title: "Tensor Strength — Strength & Performance Coaching",

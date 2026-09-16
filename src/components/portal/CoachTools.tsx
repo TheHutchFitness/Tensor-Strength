@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useCloudState } from "@/lib/cloud";
+import { useCloudState } from "../../lib/cloud";
 
 type Client = { id: string; username: string; email: string };
 type ToolTab = "progress" | "activity" | "needs" | "volume" | "onerm" | "plate" | "macros" | "goals" | "intake" | "assign" | "templates" | "timer" | "reference" | "broadcast" | "notes";

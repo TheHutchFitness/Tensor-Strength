@@ -1,4 +1,4 @@
-import { avatarById } from "@/data/gamification";
+import { avatarById } from "../data/gamification";
 
 // Renders an unlockable avatar as a gradient disc with its emoji. Optionally
 // dimmed + a lock overlay when the avatar is still locked.

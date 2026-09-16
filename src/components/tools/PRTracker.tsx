@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { estimateRank, type Sex } from "./rankEstimator";
-import { useCloudState } from "@/lib/cloud";
+import { useCloudState } from "../../lib/cloud";
 
 type PR = {
   id: string;

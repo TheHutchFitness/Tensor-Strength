@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { cloudSet, emitCloudSaved } from "@/lib/cloud";
+import { cloudSet, emitCloudSaved } from "../../lib/cloud";
 import {
   exercises as ALL_EXERCISES,
   splits as SPLITS,
@@ -17,8 +17,8 @@ import {
   HUTCH_TOUCH_SQUAT_ROTATION,
   HUTCH_TOUCH_DEADLIFT_ROTATION,
   type HutchTouchSessionId,
-} from "@/data/hutchTouchProgram";
-import { memberPrograms } from "@/data/memberPrograms";
+} from "../../data/hutchTouchProgram";
+import { memberPrograms } from "../../data/memberPrograms";
 
 type Set = { id: string; weight: string; reps: string; rpe: string };
 type SessionExercise = {

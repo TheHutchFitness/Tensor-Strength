@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { weeklyPrograms, type WeeklyProgram } from "@/data/weeklyPrograms";
+import { weeklyPrograms, type WeeklyProgram } from "../data/weeklyPrograms";
 
 type Mode = "portal" | "public";
 
