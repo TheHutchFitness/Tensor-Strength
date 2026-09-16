@@ -355,15 +355,8 @@ function trimTrailingSlash(value) {
   return String(value || '').trim().replace(/\/+$/, '')
 }
 
-function getAppBaseUrl(request) {
-  const configured = trimTrailingSlash(process.env.NEXT_PUBLIC_BASE_URL)
-  if (configured) return configured
-  const forwardedHost = (request.headers.get('x-forwarded-host') || request.headers.get('host') || '').trim()
-  if (forwardedHost) {
-    const proto = (request.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
-    return `${proto}://${forwardedHost}`
-  }
-  return trimTrailingSlash(request.nextUrl.origin)
+function getAppBaseUrl() {
+  return trimTrailingSlash(process.env.NEXT_PUBLIC_BASE_URL)
 }
 
 const LEAD_API_URL = process.env.LEAD_API_URL || process.env.NEXT_PUBLIC_LEAD_API_URL || 'https://alluring-encouragement-production.up.railway.app/public/lead_v3'
@@ -3047,7 +3040,10 @@ async function handleRoute(request, { params }) {
       if (!pkg) {
         return handleCORS(NextResponse.json({ error: 'Invalid package' }, { status: 400 }))
       }
-      const base = getAppBaseUrl(request)
+      const base = getAppBaseUrl()
+      if (!base) {
+        return handleCORS(NextResponse.json({ error: 'NEXT_PUBLIC_BASE_URL is not configured' }, { status: 503 }))
+      }
       const txId = uuidv4()
       const successUrl = `${base}/billing/success?session_id={CHECKOUT_SESSION_ID}`
       const cancelUrl = `${base}/billing/cancel`
@@ -3957,7 +3953,11 @@ async function handleRoute(request, { params }) {
           { status: 400 }
         ))
       }
-      const returnUrl = `${getAppBaseUrl(request)}/clients`
+      const base = getAppBaseUrl()
+      if (!base) {
+        return handleCORS(NextResponse.json({ error: 'NEXT_PUBLIC_BASE_URL is not configured' }, { status: 503 }))
+      }
+      const returnUrl = `${base}/clients`
       async function createPortalSession() {
         const p = new URLSearchParams()
         p.set('customer', user.stripeCustomerId)

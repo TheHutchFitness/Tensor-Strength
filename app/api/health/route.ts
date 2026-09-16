@@ -1,7 +1,7 @@
 import { MongoClient } from "mongodb";
 import { NextResponse } from "next/server";
 
-const REQUIRED_ENV_VARS = ["MONGO_URL", "DB_NAME", "JWT_SECRET"];
+const REQUIRED_ENV_VARS = ["MONGO_URL", "DB_NAME", "JWT_SECRET", "NEXT_PUBLIC_BASE_URL"];
 const OPTIONAL_SERVICE_ENV_VARS = {
   stripe: ["STRIPE_SECRET_KEY", "STRIPE_API_KEY"],
   stripeWebhooks: ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRETS"],
