@@ -1,5 +1,3 @@
-"use client";
-
 import { professionals } from "../data/professionals";
 
 // Home page: a streamlined founder spotlight. The full coach roster now lives

@@ -1,19 +1,23 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import PortalHeader from "../../src/components/portal/PortalHeader";
 import Tour from "../../src/components/portal/Tour";
 import Footer from "../../src/components/Footer";
-import MacroCalculator from "../../src/components/tools/MacroCalculator";
-import OneRepMaxCalculator from "../../src/components/tools/OneRepMaxCalculator";
-import WilksDotsCalculator from "../../src/components/tools/WilksDotsCalculator";
-import PRTracker from "../../src/components/tools/PRTracker";
-import ClientCoaching from "../../src/components/portal/ClientCoaching";
-import PortalHero from "../../src/components/portal/PortalHero";
-import OnboardingChecklist from "../../src/components/portal/OnboardingChecklist";
-import PRSubmit from "../../src/components/PRSubmit";
 import { clientResources } from "../../src/data/client-resources";
 import CheckoutButton from "../../src/components/CheckoutButton";
+
+const PortalHero = dynamic(() => import("../../src/components/portal/PortalHero"));
+const OnboardingChecklist = dynamic(() => import("../../src/components/portal/OnboardingChecklist"));
+const PRSubmit = dynamic(() => import("../../src/components/PRSubmit"));
+const ClientCoaching = dynamic(() => import("../../src/components/portal/ClientCoaching"), {
+  loading: () => <p className="mt-6 font-display uppercase tracking-wider text-bone/50 text-sm">Loading your coaching…</p>,
+});
+const MacroCalculator = dynamic(() => import("../../src/components/tools/MacroCalculator"));
+const OneRepMaxCalculator = dynamic(() => import("../../src/components/tools/OneRepMaxCalculator"));
+const WilksDotsCalculator = dynamic(() => import("../../src/components/tools/WilksDotsCalculator"));
+const PRTracker = dynamic(() => import("../../src/components/tools/PRTracker"));
 
 type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string; clientProfile?: { goal?: string } | null } | null;
 

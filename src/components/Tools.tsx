@@ -1,10 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import OneRepMaxCalculator from "./tools/OneRepMaxCalculator";
-import WilksDotsCalculator from "./tools/WilksDotsCalculator";
-import PRTracker from "./tools/PRTracker";
-import MacroCalculator from "./tools/MacroCalculator";
+
+const OneRepMaxCalculator = dynamic(() => import("./tools/OneRepMaxCalculator"));
+const WilksDotsCalculator = dynamic(() => import("./tools/WilksDotsCalculator"));
+const PRTracker = dynamic(() => import("./tools/PRTracker"));
+const MacroCalculator = dynamic(() => import("./tools/MacroCalculator"));
 
 // Public free tools. The Workout Log has been moved to the Client Portal
 // (/clients) and the Tensor Strength app — it's for active clients only.
