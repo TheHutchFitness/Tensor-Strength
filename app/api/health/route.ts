@@ -1,7 +1,7 @@
 import { MongoClient } from "mongodb";
 import { NextResponse } from "next/server";
 
-const REQUIRED_ENV_VARS = ["MONGO_URL", "DB_NAME", "JWT_SECRET", "NEXT_PUBLIC_BASE_URL"];
+const REQUIRED_ENV_VARS = ["MONGO_URL", "DB_NAME", "JWT_SECRET"];
 const OPTIONAL_SERVICE_ENV_VARS = {
   stripe: ["STRIPE_SECRET_KEY", "STRIPE_API_KEY"],
   stripeWebhooks: ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRETS"],
@@ -9,6 +9,8 @@ const OPTIONAL_SERVICE_ENV_VARS = {
   storage: ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"],
   cron: ["CRON_SECRET"],
 };
+const DEFAULT_LEAD_API_URL =
+  "https://alluring-encouragement-production.up.railway.app/public/lead_v3";
 
 function hasAnyEnv(keys: string[]) {
   return keys.some((key) => Boolean(process.env[key]?.trim()));
@@ -51,6 +53,9 @@ export async function GET() {
       env: {
         ok: missingRequired.length === 0,
         missing: missingRequired,
+        recommended: {
+          NEXT_PUBLIC_BASE_URL: Boolean(process.env.NEXT_PUBLIC_BASE_URL?.trim()),
+        },
       },
       database: db,
       services: {
@@ -59,11 +64,11 @@ export async function GET() {
         email: hasAllEnv(OPTIONAL_SERVICE_ENV_VARS.email),
         storage: hasAllEnv(OPTIONAL_SERVICE_ENV_VARS.storage),
         cron: hasAllEnv(OPTIONAL_SERVICE_ENV_VARS.cron),
-        leadCapture: Boolean(
-          process.env.LEAD_API_URL?.trim() ||
-            process.env.NEXT_PUBLIC_LEAD_API_URL?.trim() ||
-            "https://alluring-encouragement-production.up.railway.app/public/lead_v3"
-        ),
+        leadCapture: {
+          configured: Boolean(process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim()),
+          usingDefault: !process.env.LEAD_API_URL?.trim() && !process.env.NEXT_PUBLIC_LEAD_API_URL?.trim(),
+          endpoint: process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim() || DEFAULT_LEAD_API_URL,
+        },
       },
     },
   };

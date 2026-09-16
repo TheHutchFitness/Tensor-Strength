@@ -1042,31 +1042,31 @@ async function handleRoute(request, { params }) {
           { upsert: true }
         )
       }
-
-      if (route === '/lead-capture' && method === 'POST') {
-        const body = await request.json().catch(() => null)
-        if (!body || typeof body !== 'object' || Array.isArray(body)) {
-          return handleCORS(NextResponse.json({ error: 'Invalid payload' }, { status: 400 }))
-        }
-        const upstream = await fetch(LEAD_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          cache: 'no-store',
-        }).catch(() => null)
-        if (!upstream) {
-          return handleCORS(NextResponse.json({ error: 'Lead service unavailable' }, { status: 502 }))
-        }
-        let data = null
-        try {
-          data = await upstream.json()
-        } catch {}
-        if (!upstream.ok) {
-          return handleCORS(NextResponse.json({ error: data?.error || 'Lead service rejected the request' }, { status: 502 }))
-        }
-        return handleCORS(NextResponse.json({ ok: true, data }))
-      }
       return handleCORS(NextResponse.json({ ok: true }))
+    }
+
+    if (route === '/lead-capture' && method === 'POST') {
+      const body = await request.json().catch(() => null)
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return handleCORS(NextResponse.json({ error: 'Invalid payload' }, { status: 400 }))
+      }
+      const upstream = await fetch(LEAD_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      }).catch(() => null)
+      if (!upstream) {
+        return handleCORS(NextResponse.json({ error: 'Lead service unavailable' }, { status: 502 }))
+      }
+      let data = null
+      try {
+        data = await upstream.json()
+      } catch {}
+      if (!upstream.ok) {
+        return handleCORS(NextResponse.json({ error: data?.error || 'Lead service rejected the request' }, { status: 502 }))
+      }
+      return handleCORS(NextResponse.json({ ok: true, data }))
     }
     if (route === '/admin/demo-analytics' && method === 'GET') {
       const user = await getCurrentUser(request, db)
