@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { clearCurrentUserCache, fetchCurrentUser } from "../lib/currentUser";
+import type { CurrentUser } from "../lib/currentUser";
 
 const links = [
   { href: "/meet-the-team", label: "Meet the Team" },
@@ -39,7 +40,7 @@ const menus = [
   },
 ];
 
-type Me = { username: string; role: string; portalAccess: boolean; isTrainer?: boolean } | null;
+type Me = CurrentUser;
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
