@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import SiteTabBar from "@/components/SiteTabBar";
-import { memberPrograms } from "@/data/memberPrograms";
+import Navbar from "../../../src/components/Navbar";
+import Footer from "../../../src/components/Footer";
+import SiteTabBar from "../../../src/components/SiteTabBar";
+import { memberPrograms } from "../../../src/data/memberPrograms";
 
 export default function MyProgramsPage() {
   const [ok, setOk] = useState(false);

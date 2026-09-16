@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
 
 const FIELDS: [string, string, string][] = [
   ["goal", "Primary goal", "e.g. Build muscle, get stronger, lose fat"],

@@ -1,9 +1,9 @@
 "use client";
 
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import Tools from "@/components/Tools";
-import SiteTabBar from "@/components/SiteTabBar";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import Tools from "../../src/components/Tools";
+import SiteTabBar from "../../src/components/SiteTabBar";
 
 export default function FreeToolsPage() {
   return (

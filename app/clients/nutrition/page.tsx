@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
-import NutritionTracker from "@/components/tools/NutritionTracker";
-import NutritionExtras from "@/components/tools/NutritionExtras";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
+import NutritionTracker from "../../../src/components/tools/NutritionTracker";
+import NutritionExtras from "../../../src/components/tools/NutritionExtras";
 
 export default function NutritionPage() {
   const [loading, setLoading] = useState(true);

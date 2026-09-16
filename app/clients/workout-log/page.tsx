@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
-import WorkoutLog from "@/components/tools/WorkoutLog";
-import ExerciseLibrary from "@/components/ExerciseLibrary";
-import WarmupLibrary from "@/components/WarmupLibrary";
-import TrainerPrograms from "@/components/portal/TrainerPrograms";
-import ClientExtras from "@/components/tools/ClientExtras";
-import HutchTouch from "@/components/HutchTouch";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
+import WorkoutLog from "../../../src/components/tools/WorkoutLog";
+import ExerciseLibrary from "../../../src/components/ExerciseLibrary";
+import WarmupLibrary from "../../../src/components/WarmupLibrary";
+import TrainerPrograms from "../../../src/components/portal/TrainerPrograms";
+import ClientExtras from "../../../src/components/tools/ClientExtras";
+import HutchTouch from "../../../src/components/HutchTouch";
 
 type Tab = "tracker" | "exercises" | "warmups" | "extras" | "hutch" | "build";
 

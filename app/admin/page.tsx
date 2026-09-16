@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { DEFAULT_CLIPS } from "@/components/CoachingShowcase";
-import { professionals } from "@/data/professionals";
-import AdminTools from "@/components/portal/AdminTools";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import { DEFAULT_CLIPS } from "../../src/components/CoachingShowcase";
+import { professionals } from "../../src/data/professionals";
+import AdminTools from "../../src/components/portal/AdminTools";
 
 type User = {
   id: string;

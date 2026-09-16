@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
-import { hutchTouchSessions, type HutchTouchSessionId } from "@/data/hutchTouchProgram";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
+import { hutchTouchSessions, type HutchTouchSessionId } from "../../../src/data/hutchTouchProgram";
 
 const HUTCH_ORDER: HutchTouchSessionId[] = ["push", "lower-pull", "upper-pull", "legs"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

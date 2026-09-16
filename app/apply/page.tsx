@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import ContactForm from "@/components/ContactForm";
-import Footer from "@/components/Footer";
+import ContactForm from "../../src/components/ContactForm";
+import Footer from "../../src/components/Footer";
 
 export const metadata: Metadata = {
   title: "Apply for Coaching — Tensor Strength",

@@ -1,8 +1,8 @@
 "use client";
 
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import MacroCalculator from "@/components/tools/MacroCalculator";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import MacroCalculator from "../../src/components/tools/MacroCalculator";
 
 export default function MacrosPage() {
   return (

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { professionals, type Professional } from "@/data/professionals";
+import Navbar from "../../../src/components/Navbar";
+import Footer from "../../../src/components/Footer";
+import { professionals, type Professional } from "../../../src/data/professionals";
 
 export default function ProfessionalPage() {
   const params = useParams();

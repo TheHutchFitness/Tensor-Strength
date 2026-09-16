@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GOAL_OPTIONS } from "@/data/gamification";
+import { GOAL_OPTIONS } from "../../src/data/gamification";
 
 type Mode = "login" | "register";
 

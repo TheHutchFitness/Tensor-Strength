@@ -1,10 +1,10 @@
 "use client";
 
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import WeeklyPrograms from "@/components/WeeklyPrograms";
-import HutchTouch from "@/components/HutchTouch";
-import SiteTabBar from "@/components/SiteTabBar";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import WeeklyPrograms from "../../src/components/WeeklyPrograms";
+import HutchTouch from "../../src/components/HutchTouch";
+import SiteTabBar from "../../src/components/SiteTabBar";
 
 export default function ProgramsPage() {
   return (

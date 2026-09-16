@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { professionals, type Professional } from "@/data/professionals";
-import SiteTabBar from "@/components/SiteTabBar";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
+import { professionals, type Professional } from "../../src/data/professionals";
+import SiteTabBar from "../../src/components/SiteTabBar";
 
 type DbPro = {
   slug: string;

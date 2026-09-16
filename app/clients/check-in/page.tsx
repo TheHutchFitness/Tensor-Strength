@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
-import VideoUploader from "@/components/VideoUploader";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
+import VideoUploader from "../../../src/components/VideoUploader";
 
 type Status = "idle" | "submitting" | "success" | "error";
 

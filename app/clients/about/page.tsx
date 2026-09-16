@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PortalHeader from "@/components/portal/PortalHeader";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
 
 const EMPTY = {
   squat: "",
