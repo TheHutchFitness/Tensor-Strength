@@ -366,6 +366,8 @@ function getAppBaseUrl(request) {
   return trimTrailingSlash(request.nextUrl.origin)
 }
 
+const LEAD_API_URL = process.env.LEAD_API_URL || process.env.NEXT_PUBLIC_LEAD_API_URL || 'https://alluring-encouragement-production.up.railway.app/public/lead_v3'
+
 async function connectToMongo() {
   if (db) return db
   if (!connectPromise) {
@@ -584,8 +586,6 @@ async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email
     if (pkg.mode === 'payment') {
       params.set('payment_intent_data[receipt_email]', email)
     }
-
-    const LEAD_API_URL = process.env.LEAD_API_URL || process.env.NEXT_PUBLIC_LEAD_API_URL || 'https://alluring-encouragement-production.up.railway.app/public/lead_v3'
   }
   params.set('line_items[0][quantity]', '1')
   params.set('line_items[0][price_data][currency]', pkg.currency)

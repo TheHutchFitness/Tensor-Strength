@@ -9,8 +9,6 @@ const OPTIONAL_SERVICE_ENV_VARS = {
   storage: ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"],
   cron: ["CRON_SECRET"],
 };
-const DEFAULT_LEAD_API_URL =
-  "https://alluring-encouragement-production.up.railway.app/public/lead_v3";
 
 function hasAnyEnv(keys: string[]) {
   return keys.some((key) => Boolean(process.env[key]?.trim()));
@@ -67,7 +65,7 @@ export async function GET() {
         leadCapture: {
           configured: Boolean(process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim()),
           usingDefault: !process.env.LEAD_API_URL?.trim() && !process.env.NEXT_PUBLIC_LEAD_API_URL?.trim(),
-          endpoint: process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim() || DEFAULT_LEAD_API_URL,
+          source: process.env.LEAD_API_URL?.trim() || process.env.NEXT_PUBLIC_LEAD_API_URL?.trim() ? "env" : "default",
         },
       },
     },
