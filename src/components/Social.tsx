@@ -1,4 +1,4 @@
-const COMMUNITY_URL = "https://powerup-arena.preview.emergentagent.com/";
+import { COMMUNITY_URL } from "../lib/public-links";
 
 const features = [
   {

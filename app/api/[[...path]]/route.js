@@ -351,6 +351,21 @@ let client
 let db
 let connectPromise
 
+function trimTrailingSlash(value) {
+  return String(value || '').trim().replace(/\/+$/, '')
+}
+
+function getAppBaseUrl(request) {
+  const configured = trimTrailingSlash(process.env.NEXT_PUBLIC_BASE_URL)
+  if (configured) return configured
+  const forwardedHost = (request.headers.get('x-forwarded-host') || request.headers.get('host') || '').trim()
+  if (forwardedHost) {
+    const proto = (request.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
+    return `${proto}://${forwardedHost}`
+  }
+  return trimTrailingSlash(request.nextUrl.origin)
+}
+
 async function connectToMongo() {
   if (db) return db
   if (!connectPromise) {
@@ -569,6 +584,8 @@ async function createStripeSession(pkg, { successUrl, cancelUrl, metadata, email
     if (pkg.mode === 'payment') {
       params.set('payment_intent_data[receipt_email]', email)
     }
+
+    const LEAD_API_URL = process.env.LEAD_API_URL || process.env.NEXT_PUBLIC_LEAD_API_URL || 'https://alluring-encouragement-production.up.railway.app/public/lead_v3'
   }
   params.set('line_items[0][quantity]', '1')
   params.set('line_items[0][price_data][currency]', pkg.currency)
@@ -1024,6 +1041,30 @@ async function handleRoute(request, { params }) {
           { $inc: { opens: 1 }, $set: { updatedAt: new Date() } },
           { upsert: true }
         )
+      }
+
+      if (route === '/lead-capture' && method === 'POST') {
+        const body = await request.json().catch(() => null)
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          return handleCORS(NextResponse.json({ error: 'Invalid payload' }, { status: 400 }))
+        }
+        const upstream = await fetch(LEAD_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          cache: 'no-store',
+        }).catch(() => null)
+        if (!upstream) {
+          return handleCORS(NextResponse.json({ error: 'Lead service unavailable' }, { status: 502 }))
+        }
+        let data = null
+        try {
+          data = await upstream.json()
+        } catch {}
+        if (!upstream.ok) {
+          return handleCORS(NextResponse.json({ error: data?.error || 'Lead service rejected the request' }, { status: 502 }))
+        }
+        return handleCORS(NextResponse.json({ ok: true, data }))
       }
       return handleCORS(NextResponse.json({ ok: true }))
     }
@@ -2961,7 +3002,7 @@ async function handleRoute(request, { params }) {
       if (!pkg) {
         return handleCORS(NextResponse.json({ error: 'Invalid package' }, { status: 400 }))
       }
-      const base = process.env.NEXT_PUBLIC_BASE_URL
+      const base = getAppBaseUrl(request)
       const txId = uuidv4()
       const successUrl = `${base}/billing/success?session_id={CHECKOUT_SESSION_ID}`
       const cancelUrl = `${base}/billing/cancel`
@@ -3871,7 +3912,7 @@ async function handleRoute(request, { params }) {
           { status: 400 }
         ))
       }
-      const returnUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/clients`
+      const returnUrl = `${getAppBaseUrl(request)}/clients`
       async function createPortalSession() {
         const p = new URLSearchParams()
         p.set('customer', user.stripeCustomerId)
