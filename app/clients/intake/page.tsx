@@ -20,29 +20,54 @@ const FIELDS: [string, string, string][] = [
 
 export default function IntakePage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [f, setF] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
-  useEffect(() => {
-    (async () => {
+  async function loadProfile() {
+    setLoading(true);
+    setLoadError("");
+    try {
       const me = await fetch("/api/auth/me");
       if (!me.ok) { window.location.href = "/login?from=/clients/intake"; return; }
       const { user } = await me.json();
       if (!user.portalAccess) { window.location.href = "/clients"; return; }
-      const p = await fetch("/api/client/profile").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const profile = await fetch("/api/client/profile");
+      if (!profile.ok) throw new Error("Could not load profile");
+      const p = await profile.json();
       if (p?.profile) setF(p.profile);
+    } catch {
+      setLoadError("Your intake details could not be loaded. Check your connection and try again.");
+    } finally {
       setLoading(false);
-    })();
+    }
+  }
+
+  useEffect(() => {
+    void loadProfile();
   }, []);
 
   async function save() {
+    if (!f.goal?.trim()) {
+      setSaveError("Add your primary goal before continuing.");
+      return;
+    }
     setSaving(true);
-    const res = await fetch("/api/client/profile", {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, notes: f.notes || "" }),
-    });
-    setSaving(false);
-    if (res.ok) { setSaved(true); setTimeout(() => { window.location.href = "/clients"; }, 1200); }
+    setSaveError("");
+    try {
+      const res = await fetch("/api/client/profile", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, notes: f.notes || "" }),
+      });
+      if (!res.ok) throw new Error("Could not save profile");
+      setSaved(true);
+      setTimeout(() => { window.location.href = "/clients"; }, 1200);
+    } catch {
+      setSaveError("Your intake could not be saved. Your answers are still here—please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const input = "w-full bg-ink/40 border border-bone/20 px-3 py-2.5 text-bone focus:border-electric outline-none text-sm";
@@ -62,6 +87,11 @@ export default function IntakePage() {
 
         {loading ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
+        ) : loadError ? (
+          <div className="mt-8 border border-bone/20 bg-ink/30 p-6">
+            <p className="text-sm text-bone/80">{loadError}</p>
+            <button onClick={() => void loadProfile()} className="mt-4 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">Retry</button>
+          </div>
         ) : saved ? (
           <div className="mt-8 border-2 border-electric bg-electric/10 p-8 text-center">
             <p className="glow font-display uppercase text-xl text-electric">Thanks — you&apos;re all set!</p>
@@ -73,7 +103,7 @@ export default function IntakePage() {
               {FIELDS.map(([key, label, ph]) => (
                 <label key={key} className="block">
                   <span className="font-display uppercase tracking-wider text-xs text-bone/70">{label}</span>
-                  <input value={f[key] || ""} onChange={(e) => setF((s) => ({ ...s, [key]: e.target.value }))} placeholder={ph} className={input + " mt-2"} />
+                  <input value={f[key] || ""} onChange={(e) => setF((s) => ({ ...s, [key]: e.target.value }))} placeholder={ph} required={key === "goal"} aria-required={key === "goal"} className={input + " mt-2"} />
                 </label>
               ))}
             </div>
@@ -87,6 +117,7 @@ export default function IntakePage() {
               </button>
               <a href="/clients" className="font-display uppercase tracking-wider text-xs text-bone/50 hover:text-electric transition-colors">Skip for now</a>
             </div>
+            {saveError && <p role="alert" className="text-sm text-bone/80">{saveError}</p>}
           </div>
         )}
       </div>

@@ -4,40 +4,28 @@ import { useEffect, useState } from "react";
 import { clearCurrentUserCache, fetchCurrentUser } from "../lib/currentUser";
 import type { CurrentUser } from "../lib/currentUser";
 
-const links = [
-  { href: "/meet-the-team", label: "Meet the Team" },
-  { href: "/#pricing", label: "Pricing" },
-  { href: "/#library", label: "Library" },
-  { href: "/programs", label: "Programs" },
-  { href: "/quests", label: "Quests" },
-  { href: "/free-tools", label: "Free Tools" },
-];
-
 // Desktop nav. Items with `items` render a hover dropdown of sub-sections;
 // items without render as a plain top-level link.
 const menus = [
-  { label: "Meet the Team", href: "/meet-the-team" },
-  { label: "Pricing", href: "/#pricing" },
-  { label: "Library", href: "/#library" },
-  { label: "Quests", href: "/quests" },
   {
-    label: "Programs",
-    href: "/programs",
+    label: "Training",
+    href: "/#membership-path",
     items: [
+      { href: "/#pricing", label: "Membership" },
       { href: "/programs", label: "Programs" },
-      { href: "/apply", label: "Custom Program" },
+      { href: "/free-tools", label: "Free Tools" },
     ],
   },
   {
-    label: "Free Tools",
-    href: "/free-tools",
+    label: "Coaching",
+    href: "/apply",
     items: [
-      { href: "/free-tools?t=1rm", label: "1-Rep Max" },
-      { href: "/free-tools?t=wilks", label: "Wilks & DOTS" },
-      { href: "/free-tools?t=pr", label: "PR Tracker" },
-      { href: "/free-tools?t=macros", label: "Macro Calculator" },
+      { href: "/apply", label: "Apply for Coaching" },
+      { href: "/meet-the-team", label: "Meet the Team" },
+      { href: "/landing#fit-effect", label: "Train at The Fit Effect" },
     ],
   },
+  { label: "Community", href: "/forum" },
 ];
 
 type Me = CurrentUser;
@@ -60,7 +48,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-ink/80 backdrop-blur text-bone border-b border-line">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4">
         <a href="/" className="flex items-center gap-3 group">
           <img
             src="/tensor-strength-logo.jpg"
@@ -114,15 +102,7 @@ export default function Navbar() {
               href="/clients"
               className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-bone transition-colors"
             >
-              Client Portal
-            </a>
-          </li>
-          <li>
-            <a
-              href="/forum"
-              className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-bone transition-colors"
-            >
-              Forum
+              Member Portal
             </a>
           </li>
           {(me?.isTrainer || me?.role === "admin") && (
@@ -199,23 +179,40 @@ export default function Navbar() {
       </nav>
 
       {open && (
-        <nav className="md:hidden flex flex-col px-6 pb-4 border-t border-line bg-ink/95">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              onClick={() => setOpen(false)}
-              className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-line"
-            >
-              {l.label}
-            </a>
+        <nav className="md:hidden flex max-h-[calc(100dvh-4rem)] flex-col overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] border-t border-line bg-ink/95">
+          {menus.map((menu) => (
+            <div key={menu.label} className="border-b border-line">
+              {menu.items ? (
+                <>
+                  <p className="pt-4 pb-1 font-display uppercase tracking-[0.18em] text-[10px] text-steel">{menu.label}</p>
+                  {menu.items.map((item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className="block py-2.5 pl-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors"
+                    >
+                      {item.label}
+                    </a>
+                  ))}
+                </>
+              ) : (
+                <a
+                  href={menu.href}
+                  onClick={() => setOpen(false)}
+                  className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors"
+                >
+                  {menu.label}
+                </a>
+              )}
+            </div>
           ))}
           <a
             href="/clients"
             onClick={() => setOpen(false)}
             className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-line"
           >
-            Client Portal →
+            Member Portal →
           </a>
           <a
             href="/forum"

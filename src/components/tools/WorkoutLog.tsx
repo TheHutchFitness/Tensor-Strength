@@ -18,7 +18,9 @@ import {
   HUTCH_TOUCH_DEADLIFT_ROTATION,
   type HutchTouchSessionId,
 } from "../../data/hutchTouchProgram";
+import { bestStrengthEstimate, localWorkoutDate, isCompletedSet } from "../../lib/workoutMetrics";
 import { memberPrograms } from "../../data/memberPrograms";
+import { exercises as exerciseGuides } from "../../data/exercises";
 
 type Set = { id: string; weight: string; reps: string; rpe: string };
 type SessionExercise = {
@@ -39,6 +41,7 @@ type Template = {
   name: string;
   exercises: SessionExercise[];
 };
+type DemoVideo = { id: string; title: string; description?: string; url: string };
 
 const WORKOUT_KEY = "hutch-workouts";
 const CUSTOM_KEY = "hutch-custom-exercises";
@@ -64,17 +67,16 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 
-// Estimated one-rep max (Epley). Returns 0 if inputs aren't usable.
-function est1RM(weight: string, reps: string): number {
-  const w = parseFloat(weight);
-  const r = parseFloat(reps);
-  if (!isFinite(w) || !isFinite(r) || w <= 0 || r <= 0) return 0;
-  if (r === 1) return Math.round(w);
-  return Math.round(w * (1 + r / 30));
+function normaliseExerciseName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
-// Best estimated 1RM across an exercise's sets.
-function bestE1RM(sets: { weight: string; reps: string }[]): number {
-  return sets.reduce((m, s) => Math.max(m, est1RM(s.weight, s.reps)), 0);
+
+function findExerciseGuide(name: string) {
+  const key = normaliseExerciseName(name);
+  return exerciseGuides.find((guide) => {
+    const candidate = normaliseExerciseName(guide.name);
+    return candidate === key || candidate.includes(key) || key.includes(candidate);
+  });
 }
 
 // Ordered variation-progression list for a main compound lift (Hutch Touch).
@@ -102,7 +104,16 @@ function VariationList({
   );
 }
 
-export default function WorkoutLog() {
+export default function WorkoutLog({ userId, accessType = "" }: { userId: string; accessType?: string }) {
+  const [trackerReady, setTrackerReady] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const draftKey = `ts-workout-draft:${userId}`;
+  const draftWorkoutId = useRef(uid());
+  const focusSession = useRef<HTMLDivElement>(null);
+
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [prCelebration, setPrCelebration] = useState<{ name: string; e1rm: number; prev: number }[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -118,11 +129,15 @@ export default function WorkoutLog() {
   const [sessionDate, setSessionDate] = useState("");
   const [sessionNotes, setSessionNotes] = useState("");
   const [savedFlash, setSavedFlash] = useState(false);
+  const [nextSessionAfterSave, setNextSessionAfterSave] = useState<{ title: string; href: string } | null>(null);
+  const [helpOpenId, setHelpOpenId] = useState<string | null>(null);
+  const programLinkHandled = useRef("");
 
   // ---- Integrated rest timer (lives inside the tracker, not a separate tool) ----
   const [restDuration, setRestDuration] = useState(90); // last-used preset, seconds
   const [restLeft, setRestLeft] = useState(0); // seconds remaining
   const [restRunning, setRestRunning] = useState(false);
+  const restDeadline = useRef(0);
 
   function beep() {
     try {
@@ -147,6 +162,7 @@ export default function WorkoutLog() {
   function startRest(secs?: number) {
     const d = secs ?? restDuration;
     setRestDuration(d);
+    restDeadline.current = Date.now() + d * 1000;
     setRestLeft(d);
     setRestRunning(true);
   }
@@ -158,15 +174,16 @@ export default function WorkoutLog() {
   useEffect(() => {
     if (!restRunning) return;
     const id = setInterval(() => {
-      setRestLeft((prev) => {
-        if (prev <= 1) {
+      setRestLeft(() => {
+        const remaining = Math.max(0, Math.ceil((restDeadline.current - Date.now()) / 1000));
+        if (remaining <= 0) {
           clearInterval(id);
           setRestRunning(false);
           beep();
           try { (navigator as any).vibrate?.([200, 80, 200]); } catch {}
           return 0;
         }
-        return prev - 1;
+        return remaining;
       });
     }, 1000);
     return () => clearInterval(id);
@@ -184,18 +201,20 @@ export default function WorkoutLog() {
   const [readinessFor, setReadinessFor] = useState<HutchTouchSessionId | null>(null);
   const [loadedReadiness, setLoadedReadiness] = useState<"green" | "yellow" | "light">("green");
   // Member-only extra programs (loaded straight into the tracker).
-  const [mpOpenId, setMpOpenId] = useState<string | null>(null);
-  const [mpDeload, setMpDeload] = useState(false);
   const [coachPrograms, setCoachPrograms] = useState<any[]>([]);
+  const [helpVideos, setHelpVideos] = useState<DemoVideo[]>([]);
   useEffect(() => {
     fetch("/api/member/programs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.programs && setCoachPrograms(d.programs)).catch(() => {});
+    fetch("/api/member/videos").then((r) => (r.ok ? r.json() : null)).then((d) => setHelpVideos(d?.videos || [])).catch(() => {});
   }, []);
   const allPrograms: any[] = [...memberPrograms, ...coachPrograms];
 
   function loadMemberSession(programId: string, sessionId: string, deload = false) {
+    if (!canReplaceSession()) return false;
+    draftWorkoutId.current = uid();
     const p = allPrograms.find((x: any) => x.id === programId);
     const s = p?.sessions.find((x: any) => x.id === sessionId);
-    if (!p || !s) return;
+    if (!p || !s) return false;
     const work: SessionExercise[] = s.exercises.map((ex: any) => {
       const countMatch = (ex.sets || "").match(/(\d+)/);
       let count = Math.max(1, Math.min(8, countMatch ? parseInt(countMatch[1], 10) : 1));
@@ -218,25 +237,61 @@ export default function WorkoutLog() {
     setLoadedReadiness("green");
     setActiveSplitId(null);
     setCurrentTemplateId(null);
-    setMpOpenId(null);
+    return true;
   }
 
-  function nextMemberSession(p: (typeof memberPrograms)[number]) {
-    const ids = p.sessions.map((s) => s.id);
+  function nextMemberSession(p: any, sourceWorkouts = workouts) {
+    const ids = p.sessions.map((s: any) => s.id);
     let lastId: string | null = null;
-    for (const w of workouts) {
-      const found = p.sessions.find((s) => (w.title || "").startsWith(`${p.name} — ${s.title}`));
+    for (const w of sourceWorkouts) {
+      const found = p.sessions.find((s: any) => (w.title || "").startsWith(`${p.name} — ${s.title}`));
       if (found) { lastId = found.id; break; }
     }
     const nextId = lastId ? ids[(ids.indexOf(lastId) + 1) % ids.length] : ids[0];
-    return p.sessions.find((s) => s.id === nextId) || p.sessions[0];
+    return p.sessions.find((s: any) => s.id === nextId) || p.sessions[0];
   }
 
   // Auto-open a program if arriving from the "My Programs" page (?program=id).
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("program");
-    if (q && memberPrograms.some((p) => p.id === q)) setMpOpenId(q);
-  }, []);
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("program");
+    const targetSession = params.get("session");
+    const linkKey = q && targetSession ? `${q}:${targetSession}` : "";
+    if (trackerReady && linkKey && programLinkHandled.current !== linkKey) {
+      const program = allPrograms.find((p) => p.id === q);
+      if (program?.sessions?.some((session: any) => session.id === targetSession)) {
+        if (loadMemberSession(q!, targetSession!)) {
+          programLinkHandled.current = linkKey;
+          window.history.replaceState({}, "", "/clients/workout-log");
+        }
+      }
+    }
+    const sid = params.get("session");
+    if (trackerReady && !session.length && hutchTouchSessions.some((s) => s.id === sid)) {
+      setReadinessFor(sid as HutchTouchSessionId);
+    }
+  }, [trackerReady, coachPrograms]);
+
+  const coachingClient = accessType === "remote_coaching" || accessType === "in_person";
+
+  function swapCandidates(name: string) {
+    const key = normaliseExerciseName(name);
+    const current = ALL_EXERCISES.find((exercise) => {
+      const candidate = normaliseExerciseName(exercise.name);
+      return candidate === key || candidate.includes(key) || key.includes(candidate);
+    });
+    if (!current) return [];
+    return ALL_EXERCISES.filter((exercise) => exercise.muscle === current.muscle && exercise.id !== current.id).slice(0, 3);
+  }
+
+  function useSwap(exId: string, replacement: Exercise) {
+    setSession((items) => items.map((item) => item.id === exId ? {
+      ...item,
+      name: replacement.name,
+      cue: `${item.cue ? `${item.cue} · ` : ""}Swap selected: ${replacement.description}`,
+    } : item));
+    setHelpOpenId(null);
+  }
 
   // Show the readiness check before actually loading a session.
   function promptReadiness(sid: HutchTouchSessionId) {
@@ -262,6 +317,8 @@ export default function WorkoutLog() {
   }
 
   function loadHutchTouchSession(explicitId?: HutchTouchSessionId, readiness: "green" | "yellow" | "light" = "green") {
+    if (!canReplaceSession()) return;
+    draftWorkoutId.current = uid();
     const sid = explicitId ?? htSession;
     const s = hutchTouchSessions.find((x) => x.id === sid);
     if (!s) return;
@@ -358,77 +415,114 @@ export default function WorkoutLog() {
 
   useEffect(() => {
     try {
-      const w = localStorage.getItem(WORKOUT_KEY);
-      if (w) setWorkouts(JSON.parse(w));
-      const c = localStorage.getItem(CUSTOM_KEY);
-      if (c) setCustomExercises(JSON.parse(c));
-      const t = localStorage.getItem(TEMPLATE_KEY);
-      if (t) setTemplates(JSON.parse(t));
-      const varsRaw = localStorage.getItem(VARIATION_KEY);
-      if (varsRaw) {
-        const v = JSON.parse(varsRaw);
-        if (v && typeof v === "object") setVariations({ bench: v.bench || 0, squat: v.squat || 0, deadlift: v.deadlift || 0 });
-      }
-      // If a trainer program was handed off from the portal, load it in.
-      const pending = localStorage.getItem("ts-pending-program");
-      if (pending) {
-        localStorage.removeItem("ts-pending-program");
-        loadProgramSession(JSON.parse(pending));
+      const raw = localStorage.getItem(draftKey);
+      const draft = raw ? JSON.parse(raw) : null;
+      if (draft && Array.isArray(draft.session) && draft.session.length) {
+        setSession(draft.session);
+        setSessionTitle(draft.title || "");
+        setSessionDate(draft.date || "");
+        setSessionNotes(draft.notes || "");
+        setLoadedHutchId(draft.hutchId || null);
+        setLoadedReadiness(draft.readiness || "green");
+        setCurrentTemplateId(draft.templateId || null);
+        draftWorkoutId.current = draft.workoutId || uid();
+      } else {
+        const pending = sessionStorage.getItem("ts-pending-program");
+        if (pending) {
+          sessionStorage.removeItem("ts-pending-program");
+          const program = JSON.parse(pending);
+          if (program.userId === userId) loadProgramSession(program);
+        }
       }
     } catch {}
+    setDraftReady(true);
     // Cloud sync: the account is the source of truth. Pull the member's saved
     // workouts + templates and mirror them locally.
     (async () => {
       try {
         const res = await fetch("/api/client/tracker");
+        if (!res.ok) throw new Error("Could not load your workout history. Reload before saving changes.");
         if (res.ok) {
           const d = await res.json();
           if (Array.isArray(d.workouts)) {
             setWorkouts(d.workouts);
-            localStorage.setItem(WORKOUT_KEY, JSON.stringify(d.workouts));
+            try { localStorage.setItem(WORKOUT_KEY + ":" + userId, JSON.stringify(d.workouts)); } catch {}
           }
           if (Array.isArray(d.templates)) {
             setTemplates(d.templates);
-            localStorage.setItem(TEMPLATE_KEY, JSON.stringify(d.templates));
+            try { localStorage.setItem(TEMPLATE_KEY + ":" + userId, JSON.stringify(d.templates)); } catch {}
           }
         }
         // Custom exercises sync via the generic per-user store.
         const cs = await fetch(`/api/client/store?key=${encodeURIComponent(CUSTOM_KEY)}`);
+        if (!cs.ok) throw new Error("Unable to load custom exercises");
         if (cs.ok) {
           const cd = await cs.json();
           if (cd.found && Array.isArray(cd.value)) {
             setCustomExercises(cd.value);
-            localStorage.setItem(CUSTOM_KEY, JSON.stringify(cd.value));
+            try { localStorage.setItem(CUSTOM_KEY + ":" + userId, JSON.stringify(cd.value)); } catch {}
           }
         }
         // Hutch Touch variation progress syncs via the same per-user store.
         const vs = await fetch(`/api/client/store?key=${encodeURIComponent(VARIATION_KEY)}`);
+        if (!vs.ok) throw new Error("Unable to load variation progress");
         if (vs.ok) {
           const vd = await vs.json();
           if (vd.found && vd.value && typeof vd.value === "object") {
             const v = vd.value;
             const next = { bench: v.bench || 0, squat: v.squat || 0, deadlift: v.deadlift || 0 };
             setVariations(next);
-            localStorage.setItem(VARIATION_KEY, JSON.stringify(next));
+            try { localStorage.setItem(VARIATION_KEY + ":" + userId, JSON.stringify(next)); } catch {}
           }
         }
-      } catch {}
-      cloudReady.current = true;
+        cloudReady.current = true;
+        setTrackerReady(true);
+      } catch {
+        setSaveError("Could not load your account data. Your draft is kept on this device. Reload to retry.");
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cloudReady = useRef(false);
-  // Persist the whole tracker to the member's account (source of truth).
-  function pushTracker(nextWorkouts: Workout[], nextTemplates: Template[]) {
-    if (!cloudReady.current) return;
-    fetch("/api/client/tracker", {
+  // Report success only after the account confirms the write.
+  async function pushTracker(nextWorkouts: Workout[], nextTemplates: Template[]) {
+    if (!cloudReady.current) throw new Error("Your account data is still loading. Please retry once it loads.");
+    const res = await fetch("/api/client/tracker", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workouts: nextWorkouts, templates: nextTemplates }),
-    })
-      .then((r) => { if (r.ok) emitCloudSaved(); })
-      .catch(() => {});
+    });
+    if (!res.ok) throw new Error("Could not save to your account. Your session is still here; please retry.");
+    emitCloudSaved();
+  }
+
+  async function runSave(action: () => Promise<void>) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError("");
+    try { await action(); }
+    catch (error) { setSaveError(error instanceof Error ? error.message : "Could not save. Please retry."); }
+    finally { savingRef.current = false; setSaving(false); }
+  }
+
+  useEffect(() => {
+    if (!draftReady) return;
+    try {
+      if (!session.length) localStorage.removeItem(draftKey);
+      else localStorage.setItem(draftKey, JSON.stringify({ session, title: sessionTitle, date: sessionDate,
+        notes: sessionNotes, hutchId: loadedHutchId, readiness: loadedReadiness,
+        templateId: currentTemplateId, workoutId: draftWorkoutId.current }));
+    } catch { setSaveError("Device storage is unavailable. Keep this page open until your workout is saved to your account."); }
+  }, [draftReady, draftKey, session, sessionTitle, sessionDate, sessionNotes, loadedHutchId, loadedReadiness, currentTemplateId]);
+
+  useEffect(() => {
+    if (session.length) focusSession.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [session.length > 0]);
+
+  function canReplaceSession() {
+    return !savingRef.current && (!session.length || window.confirm("Replace the current workout draft? Your unsaved entries will be removed."));
   }
 
   const library: Exercise[] = useMemo(
@@ -455,24 +549,26 @@ export default function WorkoutLog() {
     return { last, next };
   }, [workouts]);
 
-  function persistWorkouts(list: Workout[]) {
+  async function persistWorkouts(list: Workout[]) {
+    await pushTracker(list, templates);
     setWorkouts(list);
-    localStorage.setItem(WORKOUT_KEY, JSON.stringify(list));
-    pushTracker(list, templates);
+    try { localStorage.setItem(WORKOUT_KEY + ":" + userId, JSON.stringify(list)); } catch {}
+
   }
   function persistCustom(list: Exercise[]) {
     setCustomExercises(list);
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
+    try { localStorage.setItem(CUSTOM_KEY + ":" + userId, JSON.stringify(list)); } catch {}
     cloudSet(CUSTOM_KEY, list);
   }
-  function persistTemplates(list: Template[]) {
+  async function persistTemplates(list: Template[]) {
+    await pushTracker(workouts, list);
     setTemplates(list);
-    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
-    pushTracker(workouts, list);
+    try { localStorage.setItem(TEMPLATE_KEY + ":" + userId, JSON.stringify(list)); } catch {}
+
   }
   function persistVariations(next: VarState) {
     setVariations(next);
-    localStorage.setItem(VARIATION_KEY, JSON.stringify(next));
+    try { localStorage.setItem(VARIATION_KEY + ":" + userId, JSON.stringify(next)); } catch {}
     cloudSet(VARIATION_KEY, next);
   }
 
@@ -533,6 +629,10 @@ export default function WorkoutLog() {
   };
 
   function openLibraryForSplit(splitId: string) {
+    if (!canReplaceSession()) return;
+    draftWorkoutId.current = uid();
+    setLoadedHutchId(null);
+    setLoadedReadiness("green");
     const preset = PREMADE[splitId];
     if (preset) {
       // Load a ready-made workout for this split straight into the builder.
@@ -546,7 +646,7 @@ export default function WorkoutLog() {
       setSession(loaded);
       setSessionTitle(split?.name ? `${split.name} Day` : "Workout");
       setSessionNotes("");
-      setSessionDate(new Date().toLocaleDateString());
+      setSessionDate(localWorkoutDate());
       setCurrentTemplateId(null);
       setActiveSplitId(splitId);
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -671,16 +771,18 @@ export default function WorkoutLog() {
     ]);
   }
 
-  function saveWorkout() {
+  async function saveWorkout() {
     const clean = session
       .filter((e) => e.name.trim() || e.sets.some((st) => st.weight || st.reps))
-      .map((e) => ({ ...e, sets: e.sets.filter((st) => st.weight || st.reps) }));
-    if (clean.length === 0) return;
+      .map((e) => ({ ...e, sets: e.sets.filter(isCompletedSet) }))
+      .filter((e) => e.sets.length > 0);
+    if (clean.length === 0) throw new Error("Enter completed reps or time before saving. Replace target ranges such as 6–8 with the reps you performed.");
+    if (clean.some((e) => !e.name.trim())) throw new Error("Give each logged exercise a name before saving.");
     // Detect estimated-1RM PRs: a lift the athlete has done before and just beat.
     const priorBest: Record<string, number> = {};
     for (const pw of workouts) {
       for (const ex of pw.exercises) {
-        const e = bestE1RM(ex.sets);
+        const e = bestStrengthEstimate(ex.name, ex.sets);
         const k = ex.name.trim().toLowerCase();
         if (e > (priorBest[k] || 0)) priorBest[k] = e;
       }
@@ -688,19 +790,34 @@ export default function WorkoutLog() {
     const prs: { name: string; e1rm: number; prev: number }[] = [];
     for (const ex of clean) {
       const k = ex.name.trim().toLowerCase();
-      const e = bestE1RM(ex.sets);
+      const e = bestStrengthEstimate(ex.name, ex.sets);
       if (e > 0 && priorBest[k] > 0 && e > priorBest[k]) {
         prs.push({ name: ex.name.trim(), e1rm: e, prev: priorBest[k] });
       }
     }
     const w: Workout = {
-      id: uid(),
-      date: sessionDate || new Date().toLocaleDateString(),
+      id: draftWorkoutId.current,
+      date: sessionDate || localWorkoutDate(),
       title: sessionTitle || (activeSplit?.name ?? "Workout"),
       notes: sessionNotes,
       exercises: clean,
     };
-    persistWorkouts([w, ...workouts]);
+    const nextWorkouts = [w, ...workouts.filter((old) => old.id !== w.id)];
+    const nextTemplates = currentTemplateId ? templates.map((t) => t.id === currentTemplateId
+      ? { ...t, exercises: cloneExercises(clean) } : t) : templates;
+    await pushTracker(nextWorkouts, nextTemplates);
+    setWorkouts(nextWorkouts);
+    setTemplates(nextTemplates);
+    const completedProgram = allPrograms.find((program) => program.sessions?.some((programSession: any) => w.title.startsWith(`${program.name} — ${programSession.title}`)));
+    if (completedProgram) {
+      const following = nextMemberSession(completedProgram, nextWorkouts);
+      if (following) setNextSessionAfterSave({
+        title: following.title,
+        href: `/clients/workout-log?program=${encodeURIComponent(completedProgram.id)}&session=${encodeURIComponent(following.id)}`,
+      });
+    } else {
+      setNextSessionAfterSave(null);
+    }
     // Award XP for logging a workout (server dedupes by workout id).
     fetch("/api/gamification/workout", {
       method: "POST",
@@ -724,18 +841,8 @@ export default function WorkoutLog() {
       }
       setLoadedHutchId(null);
     }
-    // If this session came from a template, update that template's values so
-    // next week starts from the numbers just entered.
-    if (currentTemplateId) {
-      setTemplates((prev) => {
-        const next = prev.map((t) =>
-          t.id === currentTemplateId ? { ...t, exercises: cloneExercises(clean) } : t
-        );
-        localStorage.setItem(TEMPLATE_KEY, JSON.stringify(next));
-        pushTracker([w, ...workouts], next);
-        return next;
-      });
-    }
+    draftWorkoutId.current = uid();
+    stopRest();
     setSession([]);
     setSessionTitle("");
     setSessionNotes("");
@@ -747,8 +854,9 @@ export default function WorkoutLog() {
     setTimeout(() => setSavedFlash(false), 2500);
   }
 
-  function deleteWorkout(id: string) {
-    persistWorkouts(workouts.filter((w) => w.id !== id));
+  async function deleteWorkout(id: string) {
+    if (!window.confirm("Delete this saved workout? This cannot be undone.")) return;
+    await persistWorkouts(workouts.filter((w) => w.id !== id));
   }
 
   // ---- Templates: save the current session (with values) so it can be
@@ -762,18 +870,18 @@ export default function WorkoutLog() {
     }));
   }
 
-  function saveAsTemplate() {
+  async function saveAsTemplate() {
     const clean = session.filter((e) => e.name.trim());
     if (clean.length === 0) return;
     const name = sessionTitle.trim() || activeSplit?.name || "My Template";
     const exercises = cloneExercises(clean);
     if (currentTemplateId) {
-      persistTemplates(
+      await persistTemplates(
         templates.map((t) => (t.id === currentTemplateId ? { ...t, name, exercises } : t))
       );
     } else {
       const id = uid();
-      persistTemplates([{ id, name, exercises }, ...templates]);
+      await persistTemplates([{ id, name, exercises }, ...templates]);
       setCurrentTemplateId(id);
     }
     setTemplateFlash(true);
@@ -782,27 +890,36 @@ export default function WorkoutLog() {
 
   // Load a template into the builder with its saved values prefilled.
   function useTemplate(t: Template) {
+    if (!canReplaceSession()) return;
+    draftWorkoutId.current = uid();
+    setLoadedHutchId(null);
+    setLoadedReadiness("green");
     setSession(cloneExercises(t.exercises));
     setSessionTitle(t.name);
     setSessionNotes("");
-    setSessionDate(new Date().toLocaleDateString());
+    setSessionDate(localWorkoutDate());
     setCurrentTemplateId(t.id);
     setActiveSplitId(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteTemplate(id: string) {
-    persistTemplates(templates.filter((t) => t.id !== id));
+  async function deleteTemplate(id: string) {
+    if (!window.confirm("Delete this template? Saved workouts will stay in your history.")) return;
+    await persistTemplates(templates.filter((t) => t.id !== id));
     if (currentTemplateId === id) setCurrentTemplateId(null);
   }
 
   // Load a previously saved workout into the builder (values included) so it
   // can be reused / turned into a template — handy if they forgot to save one.
   function loadWorkoutAsTemplate(w: Workout) {
+    if (!canReplaceSession()) return;
+    draftWorkoutId.current = uid();
+    setLoadedHutchId(null);
+    setLoadedReadiness("green");
     setSession(cloneExercises(w.exercises));
     setSessionTitle(w.title || "");
     setSessionNotes("");
-    setSessionDate(new Date().toLocaleDateString());
+    setSessionDate(localWorkoutDate());
     setCurrentTemplateId(null);
     setActiveSplitId(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -812,7 +929,23 @@ export default function WorkoutLog() {
     "bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-center focus:border-electric outline-none w-full min-w-0";
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+    <fieldset disabled={saving} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 pb-28">
+      <div aria-live="polite">
+        {!trackerReady && !saveError && <p className="text-bone/60">Loading your saved workouts…</p>}
+        {saving && <p className="text-electric">Saving to your account…</p>}
+        {saveError && <div role="alert" className="border border-rose-400/50 p-4 text-rose-200">{saveError}</div>}
+          {savedFlash && (
+            <div className="mt-3 border border-electric/40 bg-electric/5 p-3">
+              <p className="font-display uppercase tracking-wider text-sm text-electric">✓ Workout saved to your account.</p>
+              {nextSessionAfterSave && <a href={nextSessionAfterSave.href} className="mt-2 inline-block font-display uppercase tracking-wider text-[11px] text-bone hover:text-electric">Next: {nextSessionAfterSave.title} →</a>}
+            </div>
+          )}
+          {templateFlash && (
+            <p className="mt-3 font-display uppercase tracking-wider text-sm text-electric">
+              ✓ Template saved — reuse it any time below.
+            </p>
+          )}
+      </div>
       {prCelebration.length > 0 && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-6" onClick={() => setPrCelebration([])}>
           <div className="relative border-2 border-electric bg-[#0c0630] p-8 max-w-sm w-full text-center shadow-2xl shadow-electric/30" onClick={(e) => e.stopPropagation()}>
@@ -861,7 +994,7 @@ export default function WorkoutLog() {
                   </span>
                 </button>
                 <button
-                  onClick={() => deleteTemplate(t.id)}
+                  onClick={() => runSave(() => deleteTemplate(t.id))} disabled={saving || !trackerReady} aria-label={`Delete template ${t.name}`}
                   title="Delete template"
                   className="text-bone/40 hover:text-electric text-sm shrink-0"
                 >
@@ -875,32 +1008,6 @@ export default function WorkoutLog() {
 
       {/* SPLIT SELECTOR */}
       <div>
-        <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
-          Select Your Split
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {SPLITS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => openLibraryForSplit(s.id)}
-              className={
-                "text-left p-4 transition-colors " +
-                (s.custom
-                  ? "border-2 border-dashed border-bone/30 hover:border-electric bg-transparent"
-                  : "border border-bone/15 hover:border-electric bg-ink/30")
-              }
-            >
-              <p className="font-display uppercase tracking-wider text-bone font-600">{s.name}</p>
-              <p className="text-xs text-bone/50 mt-1">{s.subtitle}</p>
-              {!s.custom && (
-                <p className="text-[10px] uppercase tracking-wider text-electric mt-2">
-                  {library.filter((e) => s.muscles.includes(e.muscle)).length} exercises
-                </p>
-              )}
-            </button>
-          ))}
-        </div>
-
         {/* Load The Hutch Touch program */}
         <div className="mt-5 border-2 border-electric/40 bg-electric/5 p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -941,6 +1048,62 @@ export default function WorkoutLog() {
             </button>
           </div>
         </div>
+
+        <section className="mt-5 border border-bone/20 bg-ink/10 p-4" aria-labelledby="start-workout-title">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p id="start-workout-title" className="glow font-display uppercase tracking-[0.22em] text-electric text-sm">
+              Start a workout
+            </p>
+            <p className="text-xs text-bone/50">Choose a split and your tracker opens immediately.</p>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {SPLITS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => openLibraryForSplit(s.id)}
+                className={
+                  "min-h-[116px] text-left p-4 transition-colors " +
+                  (s.custom
+                    ? "border-2 border-dashed border-bone/30 hover:border-electric bg-transparent"
+                    : "border border-bone/15 hover:border-electric bg-ink/30")
+                }
+              >
+                <p className="font-display uppercase tracking-wider text-bone font-600">{s.name}</p>
+                <p className="text-xs text-bone/50 mt-1">{s.subtitle}</p>
+                {!s.custom && (
+                  <p className="text-[10px] uppercase tracking-wider text-electric mt-2">
+                    Open tracker →
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+          {allPrograms.length > 0 && (
+            <div className="mt-5 border-t border-bone/10 pt-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-display uppercase tracking-[0.18em] text-sm text-bone/80">Your programs</p>
+                <a href="/clients/my-programs" className="font-display uppercase tracking-wider text-[10px] text-electric hover:text-bone">Browse all →</a>
+              </div>
+              <p className="mt-1 text-xs text-bone/50">Each option loads the next session directly into your tracker.</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {allPrograms.map((program) => {
+                  const next = nextMemberSession(program);
+                  return (
+                    <button
+                      key={program.id}
+                      onClick={() => loadMemberSession(program.id, next.id)}
+                      className="min-h-[116px] border border-bone/15 bg-ink/30 p-4 text-left transition-colors hover:border-electric"
+                    >
+                      <p className="font-display uppercase tracking-wider text-bone font-600 line-clamp-2">{program.name}</p>
+                      <p className="mt-1 text-xs text-bone/50 line-clamp-2">Next: {next.title}</p>
+                      <p className="mt-2 text-[10px] uppercase tracking-wider text-electric">Open tracker →</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Repeat last session — one tap to reload your most recent workout */}
         {workouts.length > 0 && (
@@ -992,60 +1155,6 @@ export default function WorkoutLog() {
               </p>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* MEMBER PROGRAMS — extra blocks members can load & try */}
-      <div id="member-programs" className="mt-4 border border-bone/15 bg-ink/20 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="font-display uppercase tracking-wider text-bone text-sm">More member programs</p>
-          <a href="/clients/my-programs" className="font-display uppercase tracking-wider text-[10px] text-electric hover:underline">Browse all →</a>
-        </div>
-        <p className="text-xs text-bone/50 mt-1 mb-3">Extra training blocks to try — tap a program, then load any day straight into the tracker.</p>
-        <div className="grid gap-2">
-          {allPrograms.map((p) => {
-            const next = nextMemberSession(p);
-            const isCoach = !!p.coach;
-            return (
-            <div key={p.id} className="border border-bone/10 bg-ink/30">
-              <button
-                onClick={() => setMpOpenId(mpOpenId === p.id ? null : p.id)}
-                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
-              >
-                <span>
-                  <span className="font-display uppercase tracking-wider text-sm text-bone/90 block">{p.name}{isCoach && <span className="ml-2 text-[9px] text-electric">FROM YOUR COACH</span>}</span>
-                  <span className="text-[11px] text-bone/50 block mt-0.5">{p.length} · <span className="text-electric">Next: {next.title}</span></span>
-                </span>
-                <span className="font-display text-electric text-lg shrink-0">{mpOpenId === p.id ? "−" : "+"}</span>
-              </button>
-              {mpOpenId === p.id && (
-                <div className="px-4 pb-4 border-t border-bone/10 pt-3">
-                  <p className="text-xs text-bone/60 leading-relaxed">{p.blurb}</p>
-                  <p className="text-[11px] text-bone/45 leading-relaxed mt-2 border-l-2 border-electric/40 pl-2.5">{p.howTo}</p>
-                  {p.deloadable && (
-                    <label className="mt-3 flex items-center gap-2 text-xs text-bone/70 cursor-pointer">
-                      <input type="checkbox" checked={mpDeload} onChange={(e) => setMpDeload(e.target.checked)} className="accent-electric" />
-                      Week 4 deload (fewer sets · RPE 6 · keep it light)
-                    </label>
-                  )}
-                  <div className="mt-3 grid gap-2">
-                    {p.sessions.map((s: any) => (
-                      <div key={s.id} className={"flex items-center justify-between gap-3 border px-3 py-2 " + (s.id === next.id ? "border-electric/50 bg-electric/5" : "border-bone/10 bg-ink/40")}>
-                        <span className="text-sm text-bone/85">{s.title} <span className="text-[10px] text-bone/40">· {s.exercises.length} exercises</span>{s.id === next.id && <span className="ml-1 text-[9px] text-electric">NEXT</span>}</span>
-                        <button
-                          onClick={() => loadMemberSession(p.id, s.id, p.deloadable ? mpDeload : false)}
-                          className="bg-electric text-ink px-3 py-1.5 font-display uppercase tracking-wider text-[10px] hover:bg-bone transition-colors whitespace-nowrap"
-                        >
-                          Load{p.deloadable && mpDeload ? " deload" : ""} →
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            );
-          })}
         </div>
       </div>
 
@@ -1130,10 +1239,10 @@ export default function WorkoutLog() {
         const nextAfter = hutchTouchSessions.find((x) => x.id === nextAfterId);
         return (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="relative w-full max-w-md bg-[#0a0420] border-2 border-electric p-6">
+            <div role="dialog" aria-modal="true" aria-label="Workout readiness" className="relative w-full max-w-md max-h-[85dvh] overflow-y-auto bg-[#0a0420] border-2 border-electric p-6">
               <div className="flex items-center justify-between mb-2">
                 <p className="glow font-display uppercase tracking-wider text-electric">Readiness check</p>
-                <button onClick={() => setReadinessFor(null)} className="text-bone/60 hover:text-electric text-xl">✕</button>
+                <button onClick={() => setReadinessFor(null)} aria-label="Close readiness check" className="text-bone/60 hover:text-electric text-xl">✕</button>
               </div>
               <p className="text-sm text-bone/70 mb-5 leading-relaxed">
                 Before <span className="text-bone/90">{sess.title}</span> — how recovered are the muscles you&apos;re
@@ -1197,13 +1306,13 @@ export default function WorkoutLog() {
       })()}
 
       {session.length > 0 && (
-        <div className="border-t border-bone/15 pt-8">
+        <div ref={focusSession} className="border-t border-bone/15 pt-8 scroll-mt-24">
           <div className="flex items-center justify-between mb-4">
             <p className="glow font-display uppercase tracking-[0.3em] text-bone/70 text-sm">
               Active Session
             </p>
             <button
-              onClick={() => setSession([])}
+              onClick={() => { if (canReplaceSession()) { setSession([]); setLoadedHutchId(null); stopRest(); } }}
               className="font-display uppercase tracking-wider text-xs text-bone/40 hover:text-electric"
             >
               Clear
@@ -1212,15 +1321,17 @@ export default function WorkoutLog() {
 
           <div className="grid sm:grid-cols-2 gap-4 mb-6">
             <input
+              aria-label="Session title"
               value={sessionTitle}
               onChange={(e) => setSessionTitle(e.target.value)}
               placeholder={activeSplit?.name ? `${activeSplit.name} — Session` : "Session title"}
               className="bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none"
             />
             <input
+              type="date" aria-label="Workout date" max={localWorkoutDate()}
               value={sessionDate}
               onChange={(e) => setSessionDate(e.target.value)}
-              placeholder={new Date().toLocaleDateString()}
+              placeholder={localWorkoutDate()}
               className="bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none"
             />
           </div>
@@ -1236,7 +1347,7 @@ export default function WorkoutLog() {
                       setSession((s) => s.map((x) => (x.id === ex.id ? { ...x, name: e.target.value } : x)))
                     }
                     placeholder="Exercise name"
-                    className="bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none flex-1"
+                    className="bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none flex-1 min-w-0"
                   />
                   <button onClick={() => removeExercise(ex.id)} className="text-bone/40 hover:text-electric">
                     ✕
@@ -1247,11 +1358,71 @@ export default function WorkoutLog() {
                     {ex.cue}
                   </p>
                 )}
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpenId(helpOpenId === ex.id ? null : ex.id)}
+                    aria-expanded={helpOpenId === ex.id}
+                    className="font-display uppercase tracking-wider text-[11px] text-electric hover:text-bone"
+                  >
+                    {helpOpenId === ex.id ? "Hide exercise help" : "Need help with this exercise?"}
+                  </button>
+                  {helpOpenId === ex.id && (() => {
+                    const guide = findExerciseGuide(ex.name);
+                    const swaps = swapCandidates(ex.name);
+                    const exerciseKey = normaliseExerciseName(ex.name);
+                    const matchingDemo = helpVideos.find((video) => {
+                      const title = normaliseExerciseName(video.title);
+                      return title.includes(exerciseKey) || exerciseKey.includes(title);
+                    });
+                    const message = `Can you help me with ${ex.name}? I need a technique check or exercise swap.`;
+                    const coachHref = (() => {
+                      const params = new URLSearchParams({
+                        message,
+                        context: "workout",
+                        topic: `Technique check: ${ex.name}`,
+                        details: [sessionTitle && `Session: ${sessionTitle}`, ex.cue && `Prescription: ${ex.cue}`].filter(Boolean).join(" · "),
+                      });
+                      return `/clients?${params.toString()}#coaching`;
+                    })();
+                    return (
+                      <div className="mt-2 border border-electric/30 bg-electric/5 p-3 text-xs leading-relaxed">
+                        {guide ? (
+                          <>
+                            <p className="font-display uppercase tracking-wider text-electric text-[10px]">Quick technique cue</p>
+                            <p className="mt-1 text-bone/80">{guide.howTo[0]}</p>
+                            {guide.mistakes[0] && <p className="mt-2 text-bone/60"><span className="text-electric">Watch for:</span> {guide.mistakes[0]}</p>}
+                          </>
+                        ) : (
+                          <p className="text-bone/70">Use a controlled range of motion and stop if an exercise causes sharp pain. Open the full library for movement-specific cues.</p>
+                        )}
+                        {matchingDemo && (
+                          <div className="mt-3 border-t border-electric/20 pt-3">
+                            <p className="font-display uppercase tracking-wider text-electric text-[10px] mb-2">Coach demo: {matchingDemo.title}</p>
+                            <video src={matchingDemo.url} controls className="w-full max-h-56 rounded bg-black" preload="metadata" />
+                          </div>
+                        )}
+                        {swaps.length > 0 && (
+                          <div className="mt-3 border-t border-electric/20 pt-2">
+                            <p className="font-display uppercase tracking-wider text-[10px] text-bone/60">Swap this exercise</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {swaps.map((swap) => <button key={swap.id} type="button" onClick={() => useSwap(ex.id, swap)} className="border border-bone/30 px-2.5 py-1.5 text-[10px] font-display uppercase tracking-wider text-bone/80 hover:border-electric hover:text-electric">{swap.name}</button>)}
+                            </div>
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          <a href={`/clients/workout-log?tab=exercises&search=${encodeURIComponent(ex.name)}`} className="font-display uppercase tracking-wider text-[10px] text-electric hover:text-bone">Open full guide →</a>
+                          <a href={coachingClient ? coachHref : "/forum"} className="font-display uppercase tracking-wider text-[10px] text-electric hover:text-bone">{coachingClient ? "Ask your coach →" : "Ask the community →"}</a>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
 
                 <div className="grid grid-cols-[28px_1fr_1fr_1fr_24px] gap-2 items-center text-[10px] uppercase tracking-wider text-bone/50 mb-1">
                   <span>Set</span>
-                  <span className="text-center">Weight</span>
-                  <span className="text-center">Reps</span>
+                  <span className="text-center">Weight (lb)</span>
+                  <span className="text-center">Reps / time</span>
                   <span className="text-center">RPE</span>
                   <span />
                 </div>
@@ -1259,9 +1430,9 @@ export default function WorkoutLog() {
                   {ex.sets.map((st, si) => (
                     <div key={st.id} className="grid grid-cols-[28px_1fr_1fr_1fr_24px] gap-2 items-center">
                       <span className="font-display text-bone/60 text-sm text-center">{si + 1}</span>
-                      <input value={st.weight} onChange={(e) => updateSet(ex.id, st.id, "weight", e.target.value)} placeholder="—" className={setCell} />
-                      <input value={st.reps} onChange={(e) => updateSet(ex.id, st.id, "reps", e.target.value)} placeholder="—" className={setCell} />
-                      <input value={st.rpe} onChange={(e) => updateSet(ex.id, st.id, "rpe", e.target.value)} placeholder="—" className={setCell} />
+                      <input aria-label={`${ex.name} set ${si + 1} weight in pounds`} inputMode="decimal" value={st.weight} onChange={(e) => updateSet(ex.id, st.id, "weight", e.target.value)} placeholder="—" className={setCell} />
+                      <input aria-label={`${ex.name} set ${si + 1} repetitions or time`} value={st.reps} onChange={(e) => updateSet(ex.id, st.id, "reps", e.target.value)} placeholder="—" className={setCell} />
+                      <input aria-label={`${ex.name} set ${si + 1} RPE`} inputMode="decimal" value={st.rpe} onChange={(e) => updateSet(ex.id, st.id, "rpe", e.target.value)} placeholder="—" className={setCell} />
                       {ex.sets.length > 1 ? (
                         <button onClick={() => removeSet(ex.id, st.id)} className="text-bone/40 hover:text-electric text-sm">✕</button>
                       ) : <span />}
@@ -1298,29 +1469,20 @@ export default function WorkoutLog() {
 
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
-              onClick={saveWorkout}
+              onClick={() => runSave(saveWorkout)} disabled={saving || !trackerReady}
               className="bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors"
             >
               Save Workout
             </button>
             <button
-              onClick={saveAsTemplate}
+              onClick={() => runSave(saveAsTemplate)} disabled={saving || !trackerReady}
               title="Save these exercises as a reusable template — your numbers carry over next time"
               className="border border-electric text-electric px-6 py-3 font-display uppercase tracking-wider hover:bg-electric hover:text-ink transition-colors"
             >
               {currentTemplateId ? "↻ Update Template" : "☆ Save as Template"}
             </button>
           </div>
-          {savedFlash && (
-            <p className="mt-3 font-display uppercase tracking-wider text-sm text-electric">
-              ✓ Workout saved to your account.
-            </p>
-          )}
-          {templateFlash && (
-            <p className="mt-3 font-display uppercase tracking-wider text-sm text-electric">
-              ✓ Template saved — reuse it any time below.
-            </p>
-          )}
+
         </div>
       )}
 
@@ -1346,11 +1508,11 @@ export default function WorkoutLog() {
                     {Math.floor(restLeft / 60)}:{String(restLeft % 60).padStart(2, "0")}
                   </span>
                   <div className="flex items-center gap-2 ml-auto">
-                    <button onClick={() => setRestLeft((n) => n + 15)} className="border border-bone/25 text-bone/70 px-2.5 py-1.5 text-xs font-display uppercase tracking-wider hover:border-electric hover:text-electric">
+                    <button onClick={() => { restDeadline.current += 15000; setRestLeft((n) => n + 15); }} className="border border-bone/25 text-bone/70 px-2.5 py-1.5 text-xs font-display uppercase tracking-wider hover:border-electric hover:text-electric">
                       +15s
                     </button>
                     <button
-                      onClick={() => setRestRunning((r) => !r)}
+                      onClick={() => { if (!restRunning) restDeadline.current = Date.now() + restLeft * 1000; setRestRunning((r) => !r); }}
                       className="border border-bone/25 text-bone/70 px-2.5 py-1.5 text-xs font-display uppercase tracking-wider hover:border-electric hover:text-electric"
                     >
                       {restRunning ? "Pause" : "Resume"}
@@ -1384,7 +1546,7 @@ export default function WorkoutLog() {
         const byLift: Record<string, { date: string; e1rm: number; top: number }[]> = {};
         [...workouts].reverse().forEach((w) => {
           w.exercises.forEach((ex) => {
-            const e = bestE1RM(ex.sets);
+            const e = bestStrengthEstimate(ex.name, ex.sets);
             const top = ex.sets.reduce((m, s) => Math.max(m, parseFloat(s.weight) || 0), 0);
             if (e <= 0) return;
             (byLift[ex.name] ||= []).push({ date: w.date, e1rm: e, top });
@@ -1411,9 +1573,10 @@ export default function WorkoutLog() {
               Progress
             </p>
             <p className="text-bone/50 text-xs mb-4">
-              Estimated 1-rep max per lift over time (Epley). Pick a lift to see your trend.
+              Estimated 1-rep max in pounds (Epley), using completed sets of 1–12 reps. Warm-ups, timed work and rep ranges are excluded.
             </p>
             <select
+              aria-label="Exercise for strength progress"
               value={active}
               onChange={(e) => setChartLift(e.target.value)}
               className="mb-4 w-full max-w-full sm:w-auto min-w-0 bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none font-display uppercase tracking-wider text-sm truncate"
@@ -1426,15 +1589,15 @@ export default function WorkoutLog() {
               <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
                 <span className="font-display uppercase tracking-wider text-bone text-sm">{active}</span>
                 <span className="text-xs text-bone/60">
-                  Current <span className="text-electric font-display">~{latest.e1rm}</span>
+                  Current <span className="text-electric font-display">~{latest.e1rm} lb</span>
                   {series.length > 1 && (
                     <span className={delta >= 0 ? "text-emerald-400 ml-2" : "text-rose-400 ml-2"}>
-                      {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)} since start
+                      {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)} lb since start
                     </span>
                   )}
                 </span>
               </div>
-              <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
+              <svg role="img" aria-label={`${active}: estimated max ${latest.e1rm} pounds, change ${delta} pounds`} viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
                 <polyline points={pts} fill="none" stroke="#3d8cff" strokeWidth="2.5" />
                 {series.map((p, i) => (
                   <g key={i}>
@@ -1479,7 +1642,7 @@ export default function WorkoutLog() {
                       <span className="font-display text-electric text-xl shrink-0">{open ? "−" : "+"}</span>
                     </button>
                     <button
-                      onClick={() => deleteWorkout(w.id)}
+                      onClick={() => runSave(() => deleteWorkout(w.id))} disabled={saving || !trackerReady} aria-label={`Delete ${w.title}`}
                       title="Delete workout"
                       className="px-4 self-stretch text-bone/40 hover:text-electric text-sm border-l border-bone/10"
                     >
@@ -1497,14 +1660,14 @@ export default function WorkoutLog() {
                       </button>
                       <ul className="grid gap-2">
                         {w.exercises.map((ex) => {
-                          const e1 = bestE1RM(ex.sets);
+                          const e1 = bestStrengthEstimate(ex.name, ex.sets);
                           return (
                           <li key={ex.id} className="text-sm">
                             <div className="flex items-center justify-between gap-2">
                               <p className="font-display uppercase tracking-wider text-bone/80 text-xs">{ex.name}</p>
                               {e1 > 0 && (
                                 <span className="font-display uppercase tracking-wider text-[10px] text-electric border border-electric/40 px-1.5 py-0.5 shrink-0">
-                                  ~{e1} 1RM
+                                  ~{e1} lb estimated 1RM
                                 </span>
                               )}
                             </div>
@@ -1653,7 +1816,7 @@ export default function WorkoutLog() {
           </div>
         </div>
       )}
-    </div>
+    </fieldset>
   );
 }
 

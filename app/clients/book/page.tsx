@@ -14,15 +14,22 @@ const openUrl = (id: string) => `https://calendar.google.com/calendar/appointmen
 
 export default function BookPage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [tab, setTab] = useState<"inperson" | "remote">("inperson");
   const [accessType, setAccessType] = useState<string>("");
 
-  useEffect(() => {
+  async function loadBooking() {
+    setLoading(true);
+    setLoadError("");
     // Deep-link to a specific schedule, e.g. /clients/book?type=remote
     const t = new URLSearchParams(window.location.search).get("type");
-    (async () => {
+    try {
       const me = await fetch("/api/auth/me");
-      if (!me.ok) { window.location.href = "/login?from=/clients/book"; return; }
+      if (!me.ok) {
+        const from = `/clients/book${window.location.search}`;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
       const { user } = await me.json();
       if (!user.portalAccess) { window.location.href = "/clients"; return; }
       setAccessType(user.accessType || "");
@@ -30,8 +37,15 @@ export default function BookPage() {
       if (t === "remote" || t === "inperson") setTab(t);
       else if (user.accessType === "remote_coaching") setTab("remote");
       else if (user.accessType === "in_person") setTab("inperson");
+    } catch {
+      setLoadError("Your booking options could not be loaded. Check your connection and try again.");
+    } finally {
       setLoading(false);
-    })();
+    }
+  }
+
+  useEffect(() => {
+    void loadBooking();
   }, []);
 
   const coachingClient = accessType === "remote_coaching" || accessType === "in_person";
@@ -53,6 +67,11 @@ export default function BookPage() {
 
         {loading ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
+        ) : loadError ? (
+          <div className="mt-8 border border-bone/20 bg-ink/30 p-6">
+            <p className="text-sm text-bone/80">{loadError}</p>
+            <button onClick={() => void loadBooking()} className="mt-4 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">Retry</button>
+          </div>
         ) : !coachingClient ? (
           <div className="mt-8 border-2 border-electric/40 bg-electric/5 p-8">
             <p className="font-display uppercase tracking-wider text-electric">1:1 sessions are for coaching clients</p>

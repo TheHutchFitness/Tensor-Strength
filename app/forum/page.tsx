@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import PortalHeader from "../../src/components/portal/PortalHeader";
 import Tour from "../../src/components/portal/Tour";
 import Footer from "../../src/components/Footer";
-import SiteTabBar from "../../src/components/SiteTabBar";
 
 type Media = { url: string; type: "image" | "video" } | null;
 type Reactions = Record<string, string[]>;
+type ForumAuthor = { avatar?: string; flair?: string };
 type Post = {
   id: string;
   userId?: string;
@@ -21,17 +21,18 @@ type Post = {
   likes?: string[];
   bestAnswerId?: string | null;
   reactions?: Reactions;
+  author?: ForumAuthor;
   createdAt: string;
 };
 
 const CATEGORIES = [
-  { id: "general", label: "General Discussions" },
-  { id: "faq", label: "FAQ" },
-  { id: "prs", label: "PRs" },
+  { id: "general", label: "Training & Programming" },
+  { id: "faq", label: "Questions & Help" },
+  { id: "prs", label: "Wins & PRs" },
   { id: "nutrition", label: "Nutrition" },
   { id: "form-checks", label: "Form Checks" },
 ];
-const catLabel = (id?: string) => CATEGORIES.find((c) => c.id === (id || "general"))?.label || "General Discussions";
+const catLabel = (id?: string) => CATEGORIES.find((c) => c.id === (id || "general"))?.label || "Training & Programming";
 type Reply = {
   id: string;
   userId?: string;
@@ -40,6 +41,7 @@ type Reply = {
   mediaUrl: string | null;
   mediaType: string | null;
   reactions?: Reactions;
+  author?: ForumAuthor;
   createdAt: string;
 };
 
@@ -48,7 +50,7 @@ const EMOJIS = ["👍", "🔥", "💪", "👏", "😂", "❤️"];
 type Notification = {
   id: string;
   actorName: string;
-  type: "mention" | "reply" | "best-answer" | "reaction" | "announcement";
+  type: "mention" | "reply" | "thread-update" | "best-answer" | "reaction" | "announcement";
   postId: string | null;
   postTitle: string;
   replyId: string | null;
@@ -293,6 +295,7 @@ export default function ForumPage() {
   const [category, setCategory] = useState("general");
   const [activeCategory, setActiveCategory] = useState("all");
   const [sort, setSort] = useState<"recent" | "popular">("recent");
+  const [feed, setFeed] = useState<"all" | "mine" | "needs-help" | "answered">("all");
   const [media, setMedia] = useState<Media>(null);
   const [posting, setPosting] = useState(false);
 
@@ -310,6 +313,8 @@ export default function ForumPage() {
   const [replyOpen, setReplyOpen] = useState(false);
   const [pullDist, setPullDist] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasCoach, setHasCoach] = useState(false);
+  const [watching, setWatching] = useState<string[]>([]);
   const pullRef = useRef(0);
 
   // Pull-to-refresh on the forum list (mobile). Only active in the list view.
@@ -395,6 +400,14 @@ export default function ForumPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMembers(d?.members || []))
       .catch(() => {});
+    fetch("/api/client/trainer")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setHasCoach(!!d?.trainer))
+      .catch(() => {});
+    fetch("/api/forum/watch")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setWatching(d?.postIds || []))
+      .catch(() => {});
     loadNotifs();
     const t = setInterval(loadNotifs, 30000);
     return () => clearInterval(t);
@@ -467,6 +480,17 @@ export default function ForumPage() {
     }
   }
 
+  async function toggleWatch(postId: string) {
+    const wasWatching = watching.includes(postId);
+    setWatching((items) => wasWatching ? items.filter((id) => id !== postId) : [...items, postId]);
+    const res = await fetch("/api/forum/watch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId }),
+    });
+    if (!res.ok) setWatching((items) => wasWatching ? [...items, postId] : items.filter((id) => id !== postId));
+  }
+
   async function deletePost(id: string) {
     if (!confirm("Delete this post? This can't be undone.")) return;
     const res = await fetch("/api/forum/posts", {
@@ -489,6 +513,9 @@ export default function ForumPage() {
   const filtered = posts.filter((p) => {
     const cat = p.category || "general";
     if (activeCategory !== "all" && cat !== activeCategory) return false;
+    if (feed === "mine" && p.userId !== me?.id) return false;
+    if (feed === "needs-help" && p.replyCount > 0) return false;
+    if (feed === "answered" && !p.bestAnswerId) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -515,6 +542,25 @@ export default function ForumPage() {
     const res = await fetch(`/api/forum/thread?id=${id}`);
     const data = await res.json();
     if (res.ok) setThread(data);
+  }
+
+  useEffect(() => {
+    const postId = new URLSearchParams(window.location.search).get("thread");
+    if (postId) openThread(postId);
+    // The URL is read only once on arrival from the Forum Profile activity list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function isCoach(username?: string) {
+    return !!members.find((member) => member.username.toLowerCase() === (username || "").toLowerCase())?.isCoach;
+  }
+
+  function startPost(next: { category?: string; title?: string; body?: string } = {}) {
+    if (next.category) setCategory(next.category);
+    if (next.title) setTitle(next.title);
+    if (next.body) setBody(next.body);
+    setComposerOpen(true);
+    setTimeout(() => document.getElementById("forum-composer")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
   }
 
   // After a thread loads via a notification, scroll to and briefly highlight
@@ -660,16 +706,20 @@ export default function ForumPage() {
         id="forum"
         steps={[
           { title: "Welcome to the Forum", body: "This is the community. Ask questions, share wins, and get form checks from coaches and other members." },
-          { title: "Pick a category", body: "When you post, choose the best category — General, FAQ, PRs, Nutrition or Form Checks — and attach a photo or video if it helps." },
+          { title: "Find the right thread", body: "Browse by topic, latest posts, top discussions, or questions that still need an answer. Choose the best topic when you post." },
           { title: "Be cool", body: "Keep it supportive and on-topic. Like posts that help you and jump in when you can help someone else." },
         ]}
       />
       <main className="text-bone min-h-screen">
-        <div className="mx-auto max-w-3xl px-6 py-16 md:py-24">
+        <div className="ts-mobile-page mx-auto max-w-3xl px-6 py-10 sm:py-16 md:py-24">
         <div className="flex items-start justify-between gap-4 mb-5">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm">
             Community Forum
           </p>
+          <div className="flex items-center gap-2">
+          <a href="/forum/profile" className="border border-bone/20 hover:border-electric text-bone/70 hover:text-electric h-[34px] min-w-[34px] px-2 flex items-center justify-center rounded-md transition-colors" title="My forum profile">
+            <span aria-hidden>◉</span><span className="sr-only">My forum profile</span>
+          </a>
           <div className="relative">
             <button
               onClick={openNotifs}
@@ -714,6 +764,8 @@ export default function ForumPage() {
                           ? `reacted ${n.emoji || "👍"} to your ${n.targetType === "reply" ? "reply" : "post"}`
                           : n.type === "announcement"
                           ? "posted an announcement for you"
+                          : n.type === "thread-update"
+                          ? "replied in a thread you follow"
                           : "replied to your post"}
                       </p>
                       {n.postTitle && <p className="text-xs text-bone/50 mt-0.5 truncate">on “{n.postTitle}”</p>}
@@ -723,6 +775,7 @@ export default function ForumPage() {
                 )}
               </div>
             )}
+          </div>
           </div>
         </div>
 
@@ -741,16 +794,37 @@ export default function ForumPage() {
                 Ask. Answer. <span className="text-electric">Improve.</span>
               </h1>
               <p className="mt-4 text-bone/70 leading-relaxed">
-                Post a question, drop a form-check video, or help a teammate out. Attach a
-                photo or video on any post or reply.
+                Ask a question, share a win, drop a public form check, or help a teammate out. The best answers rise to the top.
               </p>
               <p className="mt-3 inline-flex items-center gap-2 font-display uppercase tracking-wider text-xs text-bone/60">
                 <span className="h-2 w-2 rounded-full bg-electric animate-pulse" aria-hidden />
                 {members.length.toLocaleString()} {members.length === 1 ? "member" : "members"} in the community
               </p>
 
+              <div className="mt-7 grid sm:grid-cols-3 gap-3">
+                <button onClick={() => startPost({ category: "faq", title: "" })} className="text-left border border-bone/15 bg-ink/20 p-4 hover:border-electric transition-colors">
+                  <p className="font-display uppercase tracking-wider text-bone text-sm">Ask the community</p>
+                  <p className="mt-1 text-xs text-bone/50">Training, technique, recovery, or anything you&apos;re working through.</p>
+                </button>
+                <button onClick={() => startPost({ category: "form-checks", title: "Form check: " })} className="text-left border border-bone/15 bg-ink/20 p-4 hover:border-electric transition-colors">
+                  <p className="font-display uppercase tracking-wider text-bone text-sm">Post a form check</p>
+                  <p className="mt-1 text-xs text-bone/50">Attach a short clip and say what feedback you want.</p>
+                </button>
+                {hasCoach ? (
+                  <a href="/clients?message=I%20need%20private%20help%20with%20my%20training.#coaching" className="border border-electric/35 bg-electric/5 p-4 hover:border-electric transition-colors">
+                    <p className="font-display uppercase tracking-wider text-electric text-sm">Ask your coach privately</p>
+                    <p className="mt-1 text-xs text-bone/60">For personal programming, form review, or adjustments.</p>
+                  </a>
+                ) : (
+                  <button onClick={() => startPost({ category: "prs", title: "Win of the week: " })} className="text-left border border-electric/35 bg-electric/5 p-4 hover:border-electric transition-colors">
+                    <p className="font-display uppercase tracking-wider text-electric text-sm">Share a win</p>
+                    <p className="mt-1 text-xs text-bone/60">PRs, consistency wins, and progress all count.</p>
+                  </button>
+                )}
+              </div>
+
               {/* Category nav */}
-              <div className="mt-8 flex flex-wrap gap-2 border-b border-bone/15 pb-3">
+              <div className="ts-mobile-tabs mt-8 border-b border-bone/15">
                 {[{ id: "all", label: "All" }, ...CATEGORIES].map((c) => (
                   <button
                     key={c.id}
@@ -762,13 +836,13 @@ export default function ForumPage() {
                         : "text-bone/60 hover:text-electric border border-bone/20 hover:border-electric")
                     }
                   >
-                    {c.label}
+                    {c.label}{c.id !== "all" ? ` · ${posts.filter((post) => (post.category || "general") === c.id).length}` : ` · ${posts.length}`}
                   </button>
                 ))}
               </div>
 
               {/* New post — inline on desktop */}
-              <form onSubmit={createPost} className="hidden md:grid mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 gap-3">
+              <form id="forum-composer" onSubmit={createPost} className="hidden md:grid mt-6 sm:mt-8 border border-bone/15 bg-ink/30 p-4 sm:p-6 gap-3">
                 {composerFields}
               </form>
 
@@ -799,7 +873,7 @@ export default function ForumPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search posts…"
+                placeholder="Search questions, topics, or members…"
                 className="mt-10 w-full bg-ink/40 border border-bone/20 px-4 py-3 text-bone focus:border-electric outline-none"
               />
               {leaderboard.length > 0 && (
@@ -814,14 +888,29 @@ export default function ForumPage() {
                   </div>
                 </div>
               )}
-              <div className="mt-4 flex gap-2">
+              <div className="ts-mobile-tabs mt-4">
                 {(["recent", "popular"] as const).map((s) => (
                   <button
                     key={s}
                     onClick={() => setSort(s)}
                     className={"px-3 py-1.5 font-display uppercase tracking-wider text-[11px] transition-colors " + (sort === s ? "bg-electric text-ink" : "text-bone/60 border border-bone/20 hover:text-electric")}
                   >
-                    {s === "recent" ? "Recent" : "Most liked"}
+                    {s === "recent" ? "Latest" : "Top"}
+                  </button>
+                ))}
+                <span className="hidden sm:block w-px bg-bone/15 mx-1" aria-hidden />
+                {([
+                  ["all", "All posts"],
+                  ["needs-help", "Needs answers"],
+                  ["answered", "Answered"],
+                  ["mine", "My posts"],
+                ] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setFeed(id)}
+                    className={"px-3 py-1.5 font-display uppercase tracking-wider text-[11px] transition-colors " + (feed === id ? "bg-electric text-ink" : "text-bone/60 border border-bone/20 hover:text-electric")}
+                  >
+                    {label}
                   </button>
                 ))}
               </div>
@@ -844,8 +933,12 @@ export default function ForumPage() {
                               <p className="font-display uppercase tracking-wider text-bone truncate">{p.title}</p>
                               <p className="text-xs text-bone/50 mt-1">
                                 <span className="text-electric">{catLabel(p.category)}</span>
-                                {" · "}by {p.username} · {new Date(p.createdAt).toLocaleDateString()}
+                                {" · "}<span className="mr-1" aria-hidden>{p.author?.avatar || "💪"}</span>by {p.username}
+                                {isCoach(p.username) && <span className="ml-1 text-electric font-display uppercase tracking-wider text-[9px]">✓ Coach</span>}
+                                {!isCoach(p.username) && p.author?.flair && <span className="ml-1 text-bone/40">· {p.author.flair}</span>}
+                                {" · "}{new Date(p.createdAt).toLocaleDateString()}
                               </p>
+                              {p.body && <p className="mt-2 text-sm text-bone/65 leading-relaxed line-clamp-2">{p.body}</p>}
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
                               {p.bestAnswerId && (
@@ -856,7 +949,7 @@ export default function ForumPage() {
                                   {p.mediaType === "video" ? "▶ video" : "▣ photo"}
                                 </span>
                               )}
-                              <span className="font-display text-electric">{p.replyCount} ▸</span>
+                              <span className="font-display text-electric">{p.replyCount} {p.replyCount === 1 ? "answer" : "answers"} ▸</span>
                             </div>
                           </div>
                         </button>
@@ -906,7 +999,10 @@ export default function ForumPage() {
                     {thread.post.title}
                   </h1>
                   <p className="text-xs text-bone/50 mt-2">
-                    by {thread.post.username} · {new Date(thread.post.createdAt).toLocaleString()}
+                    <span className="text-electric">{catLabel(thread.post.category)}</span>{" · "}<span aria-hidden>{thread.post.author?.avatar || "💪"}</span> by {thread.post.username}
+                    {isCoach(thread.post.username) && <span className="ml-1 text-electric font-display uppercase tracking-wider text-[9px]">✓ Coach</span>}
+                    {!isCoach(thread.post.username) && thread.post.author?.flair && <span className="ml-1 text-bone/40">· {thread.post.author.flair}</span>}
+                    {" · "}{new Date(thread.post.createdAt).toLocaleString()}
                   </p>
                   {thread.post.body && (
                     <p className="mt-4 text-bone/80 leading-relaxed whitespace-pre-wrap">
@@ -914,8 +1010,15 @@ export default function ForumPage() {
                     </p>
                   )}
                   {thread.post.mediaUrl && <MediaView url={thread.post.mediaUrl} type={thread.post.mediaType} />}
-                  <div className="mt-4">
+                  <div className="mt-4 flex items-center gap-4 flex-wrap">
                     <ReactionBar reactions={thread.post.reactions} meId={me?.id} onReact={(e) => react("post", thread.post.id, e)} />
+                    {thread.post.userId === me?.id ? (
+                      <span className="font-display uppercase tracking-wider text-[10px] text-bone/45">Replies notify you</span>
+                    ) : (
+                      <button onClick={() => toggleWatch(thread.post.id)} className={"font-display uppercase tracking-wider text-[10px] transition-colors " + (watching.includes(thread.post.id) ? "text-electric" : "text-bone/50 hover:text-electric")}>
+                        {watching.includes(thread.post.id) ? "✓ Following thread" : "+ Follow thread"}
+                      </button>
+                    )}
                   </div>
 
                   <div className="mt-6 sm:mt-10 border-t border-bone/10 pt-5 sm:pt-6">
@@ -948,7 +1051,9 @@ export default function ForumPage() {
                             >
                               <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <p className="text-xs text-bone/50">
-                                  <span className="text-bone/80 font-display uppercase tracking-wider">{r.username}</span>{" "}
+                                  <span aria-hidden>{r.author?.avatar || "💪"}</span> <span className="text-bone/80 font-display uppercase tracking-wider">{r.username}</span>
+                                  {isCoach(r.username) && <span className="ml-1 text-electric font-display uppercase tracking-wider text-[9px]">✓ Coach</span>}{" "}
+                                  {!isCoach(r.username) && r.author?.flair && <span className="ml-1 text-bone/40">· {r.author.flair}</span>}{" "}
                                   · {new Date(r.createdAt).toLocaleString()}
                                 </p>
                                 {isBest && (
@@ -1021,7 +1126,6 @@ export default function ForumPage() {
         </div>
       </main>
       <Footer />
-      <SiteTabBar />
     </>
   );
 }

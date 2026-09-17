@@ -1,4 +1,5 @@
 "use client";
+import { safeReturnPath } from "../../../../src/lib/workoutMetrics";
 
 import { useEffect, useState } from "react";
 
@@ -27,7 +28,7 @@ export default function EmergentCallbackPage() {
 
       // Clear the fragment, then send the user to where they were headed.
       window.history.replaceState({}, document.title, "/auth/emergent/callback");
-      const dest = sessionStorage.getItem("ts_login_from") || "/clients";
+      const dest = safeReturnPath(sessionStorage.getItem("ts_login_from"));
       sessionStorage.removeItem("ts_login_from");
       window.location.assign(dest);
     }

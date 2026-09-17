@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Navbar from "../../../src/components/Navbar";
+import PortalHeader from "../../../src/components/portal/PortalHeader";
 import Footer from "../../../src/components/Footer";
-import SiteTabBar from "../../../src/components/SiteTabBar";
 import { memberPrograms } from "../../../src/data/memberPrograms";
 
 export default function MyProgramsPage() {
+  const [loadError, setLoadError] = useState(false);
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCoach, setIsCoach] = useState(false);
   const [coachPrograms, setCoachPrograms] = useState<any[]>([]);
+  const [workouts, setWorkouts] = useState<any[]>([]);
+  const [userId, setUserId] = useState("");
+  const [activeProgramId, setActiveProgramId] = useState("");
+  const [openProgramId, setOpenProgramId] = useState("");
   const [mine, setMine] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   // Builder state
@@ -31,11 +35,14 @@ export default function MyProgramsPage() {
       const { user } = await me.json();
       if (!user.portalAccess && !user.isTrainer) { window.location.href = "/clients"; return; }
       const coach = !!user.isTrainer || user.role === "admin";
+      setUserId(user.id || "");
+      try { setActiveProgramId(localStorage.getItem(`ts-active-program:${user.id}`) || ""); } catch {}
       setIsCoach(coach);
       setOk(true); setLoading(false);
       fetch("/api/member/programs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.programs && setCoachPrograms(d.programs)).catch(() => {});
+      fetch("/api/client/tracker").then((r) => (r.ok ? r.json() : null)).then((d) => setWorkouts(d?.workouts || [])).catch(() => {});
       if (coach) loadCoach();
-    })();
+    })().catch(() => { setLoadError(true); setLoading(false); });
   }, []);
 
   function parseSessions(text: string) {
@@ -79,26 +86,84 @@ export default function MyProgramsPage() {
     setTimeout(() => setMsg(""), 3500);
   }
 
-  if (loading || !ok) {
-    return (<><Navbar /><main className="min-h-screen bg-ink pt-28 text-center text-bone/60">Loading your programs…</main><SiteTabBar /></>);
+  function nextSession(program: any) {
+    const ids = (program.sessions || []).map((session: any) => session.id);
+    let lastId = "";
+    for (const workout of workouts) {
+      const found = (program.sessions || []).find((session: any) => (workout.title || "").startsWith(`${program.name} — ${session.title}`));
+      if (found) { lastId = found.id; break; }
+    }
+    const nextId = lastId ? ids[(ids.indexOf(lastId) + 1) % ids.length] : ids[0];
+    return (program.sessions || []).find((session: any) => session.id === nextId) || program.sessions?.[0];
   }
 
-  const Card = ({ p, coach }: { p: any; coach?: boolean }) => (
-    <div className="border border-bone/15 bg-ink/30 p-5 flex flex-col">
-      <p className="font-display uppercase tracking-wider text-lg text-bone">{p.name}{coach && <span className="ml-2 text-[9px] text-electric">COACH</span>}</p>
+  function loggedSessionCount(program: any) {
+    const logged = new Set<string>();
+    for (const workout of workouts) {
+      const found = (program.sessions || []).find((session: any) => (workout.title || "").startsWith(`${program.name} — ${session.title}`));
+      if (found) logged.add(found.id);
+    }
+    return logged.size;
+  }
+
+  function setCurrentPlan(id: string) {
+    setActiveProgramId(id);
+    try { localStorage.setItem(`ts-active-program:${userId}`, id); } catch {}
+  }
+
+  function sessionMinutes(session: any) {
+    const workSets = (session.exercises || []).reduce((total: number, exercise: any) => total + (parseInt(exercise.sets, 10) || 1), 0);
+    return Math.max(20, Math.min(100, Math.round(8 + workSets * 2.5)));
+  }
+
+  if (loadError) return <><PortalHeader /><main className="min-h-screen p-8 text-bone" role="alert">Could not load your programs. <button className="text-electric underline" onClick={() => window.location.reload()}>Try again</button></main></>;
+  if (loading || !ok) {
+    return (<><PortalHeader /><main className="min-h-screen bg-ink pt-28 text-center text-bone/60">Loading your programs…</main></>);
+  }
+
+  const Card = ({ p, coach }: { p: any; coach?: boolean }) => {
+    const next = nextSession(p);
+    const complete = loggedSessionCount(p);
+    const isCurrent = activeProgramId === p.id;
+    const allSessionsDone = complete >= p.sessions.length;
+    const startHref = next ? `/clients/workout-log?program=${encodeURIComponent(p.id)}&session=${encodeURIComponent(next.id)}` : "/clients/workout-log";
+    return (
+    <div className={"border bg-ink/30 p-5 flex flex-col " + (isCurrent ? "border-electric" : "border-bone/15")}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-display uppercase tracking-wider text-lg text-bone">{p.name}{coach && <span className="ml-2 text-[9px] text-electric">COACH</span>}</p>
+          {isCurrent && <p className="mt-1 text-[10px] font-display uppercase tracking-wider text-electric">Current training plan</p>}
+        </div>
+        <span className="shrink-0 text-[10px] uppercase tracking-wider text-bone/50">{complete}/{p.sessions.length} sessions logged</span>
+      </div>
       <p className="text-[11px] uppercase tracking-wider text-electric mt-0.5">{p.length}{p.deloadable ? " · deload option" : ""}</p>
       <p className="text-sm text-bone/65 mt-2 flex-1 leading-relaxed">{p.blurb}</p>
-      <p className="text-[11px] text-bone/40 mt-2">{p.sessions.length} sessions</p>
+      {next && <p className="mt-3 border-l-2 border-electric/50 pl-3 text-xs text-bone/70">Next: <span className="text-bone">{next.title}</span> <span className="text-bone/45">· ~{sessionMinutes(next)} min</span></p>}
       <div className="mt-4 flex gap-2 flex-wrap">
-        <a href={`/clients/workout-log?program=${p.id}#member-programs`} className="border-2 border-electric text-electric px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-electric hover:text-ink transition-colors">Open in tracker →</a>
-        <button onClick={() => markComplete(p.id)} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone transition-colors">Mark complete 🏁</button>
+        <a href={startHref} onClick={() => setCurrentPlan(p.id)} className="bg-electric text-ink px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors">Start next session →</a>
+        <button onClick={() => setCurrentPlan(p.id)} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-electric hover:text-electric transition-colors">{isCurrent ? "Current plan" : "Set as current"}</button>
+        <button onClick={() => setOpenProgramId(openProgramId === p.id ? "" : p.id)} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-electric hover:text-electric transition-colors">{openProgramId === p.id ? "Hide sessions" : "View sessions"}</button>
+        <button onClick={() => markComplete(p.id)} disabled={!allSessionsDone} title={allSessionsDone ? "Claim your Program Finisher reward" : "Log every session once before claiming"} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{allSessionsDone ? "Complete block 🏁" : "Finish sessions first"}</button>
       </div>
+      {openProgramId === p.id && (
+        <div className="mt-4 border-t border-bone/10 pt-3 grid gap-2">
+          {(p.sessions || []).map((session: any, index: number) => {
+            const done = workouts.some((workout) => (workout.title || "").startsWith(`${p.name} — ${session.title}`));
+            const isNext = next?.id === session.id;
+            return <div key={session.id} className={"flex items-center justify-between gap-3 border px-3 py-2 " + (isNext ? "border-electric/50 bg-electric/5" : "border-bone/10 bg-ink/20")}>
+              <span className="min-w-0 text-sm text-bone/85 truncate">{done ? "✓ " : ""}{index + 1}. {session.title} <span className="text-[10px] text-bone/40">· {session.exercises.length} exercises · ~{sessionMinutes(session)} min</span></span>
+              <a href={`/clients/workout-log?program=${encodeURIComponent(p.id)}&session=${encodeURIComponent(session.id)}`} onClick={() => setCurrentPlan(p.id)} className="shrink-0 text-[10px] font-display uppercase tracking-wider text-electric hover:text-bone">{isNext ? "Start →" : "Open →"}</a>
+            </div>;
+          })}
+        </div>
+      )}
     </div>
-  );
+    );
+  };
 
   return (
     <>
-      <Navbar />
+      <PortalHeader />
       <main className="min-h-screen bg-ink text-bone pb-28">
         <section className="mx-auto max-w-5xl px-5 pt-28">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs">Member Library</p>
@@ -153,7 +218,7 @@ export default function MyProgramsPage() {
         </section>
       </main>
       <Footer />
-      <SiteTabBar />
+
     </>
   );
 }

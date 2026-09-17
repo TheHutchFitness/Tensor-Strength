@@ -25,15 +25,18 @@ async function uploadImage(file: File): Promise<string> {
 
 export default function ProgressPage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [tab, setTab] = useState<"photos" | "metrics">("photos");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
 
   async function load() {
-    const [p, m] = await Promise.all([
-      fetch("/api/progress/photos").then((r) => (r.ok ? r.json() : { photos: [] })),
-      fetch("/api/progress/metrics").then((r) => (r.ok ? r.json() : { metrics: [] })),
+    const [photoResponse, metricResponse] = await Promise.all([
+      fetch("/api/progress/photos"),
+      fetch("/api/progress/metrics"),
     ]);
+    if (!photoResponse.ok || !metricResponse.ok) throw new Error("Could not load progress");
+    const [p, m] = await Promise.all([photoResponse.json(), metricResponse.json()]);
     setPhotos(p.photos || []);
     setMetrics(m.metrics || []);
   }
@@ -46,7 +49,10 @@ export default function ProgressPage() {
       if (!user.portalAccess) { window.location.href = "/clients"; return; }
       await load();
       setLoading(false);
-    })();
+    })().catch(() => {
+      setLoadError(true);
+      setLoading(false);
+    });
   }, []);
 
   return (
@@ -78,7 +84,14 @@ export default function ProgressPage() {
           ))}
         </div>
 
-        {loading ? (
+        {loadError ? (
+          <div role="alert" className="border border-rose-400/40 p-5 text-bone/80">
+            We couldn&apos;t load your progress data.
+            <button onClick={() => window.location.reload()} className="ml-3 text-electric underline">
+              Try again
+            </button>
+          </div>
+        ) : loading ? (
           <p className="font-display uppercase tracking-wider text-bone/50">Loading…</p>
         ) : tab === "photos" ? (
           <PhotosTab photos={photos} onChanged={load} />

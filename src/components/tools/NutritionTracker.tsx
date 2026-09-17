@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCloudState, cloudSet } from "../../lib/cloud";
 
-type Food = { name: string; cuisine: string; cal: number; p: number; c: number; f: number; diets: string[]; perItem?: boolean; serving?: string };
+type Food = { name: string; cuisine: string; cal: number; p: number; c: number; f: number; diets: string[]; perItem?: boolean; serving?: string; source?: "custom" | "recipe" };
 type Entry = { id: string; name: string; label: string; cal: number; p: number; c: number; f: number };
 type Meal = "breakfast" | "lunch" | "dinner" | "snacks";
 type DayLog = Record<Meal, Entry[]>;
 type Goal = { calories: number; protein: number; carbs: number; fat: number };
 type Unit = "g" | "oz" | "ml" | "l";
+type CyclePlan = Record<string, { cal?: number; p?: number; c?: number; f?: number }>;
 
 const LOG_KEY = "ts-nutrition-log";
 const GOAL_KEY = "ts-nutrition-goal";
@@ -214,7 +215,12 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 function dateKey(d: Date) {
-  return d.toISOString().slice(0, 10);
+  // Nutrition belongs to the member's local calendar, not UTC. This keeps an
+  // evening meal from being assigned to tomorrow in Canada and similar zones.
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 function emptyDay(): DayLog {
   return { breakfast: [], lunch: [], dinner: [], snacks: [] };
@@ -229,24 +235,31 @@ function gramsOf(amount: number, unit: Unit) {
 }
 
 export default function NutritionTracker() {
-  const [allLogs, setAllLogs] = useCloudState<Record<string, DayLog>>(LOG_KEY, {});
+  const [allLogs, setAllLogs, logsReady] = useCloudState<Record<string, DayLog>>(LOG_KEY, {});
   const [goal, setGoal] = useState<Goal>({ calories: 2200, protein: 170, carbs: 220, fat: 70 });
   const [date, setDate] = useState<Date>(new Date());
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState<Goal>(goal);
   const [diet, setDiet] = useCloudState<string>(DIET_KEY, "balanced");
+  const [customFoods] = useCloudState<{ id: string; name: string; cal: number; p: number; c: number; f: number }[]>("ts-custom-foods", []);
+  const [recipes] = useCloudState<{ id: string; name: string; per: { cal: number; p: number; c: number; f: number } }[]>("ts-recipes", []);
+  const [cyclePlan] = useCloudState<CyclePlan>("ts-macro-cycle", {});
+  const [favorites, setFavorites] = useCloudState<string[]>("ts-nutrition-favorites", []);
   const [addTo, setAddTo] = useState<Meal | null>(null);
   const [amount, setAmount] = useState("100");
   const [unit, setUnit] = useState<Unit>("g");
   const [search, setSearch] = useState("");
   const [cuisine, setCuisine] = useState("all");
   const [manual, setManual] = useState({ name: "", cal: "", p: "", c: "", f: "" });
-  const [supps, setSupps] = useCloudState<Record<string, string[]>>("ts-supp-log", {});
+  const [supps, setSupps, suppsReady] = useCloudState<Record<string, string[]>>("ts-supp-log", {});
   const [customSupps, setCustomSupps] = useCloudState<string[]>("ts-supp-custom", []);
   const [newSupp, setNewSupp] = useState("");
   const [savedMeals, setSavedMeals] = useCloudState<{ id: string; name: string; items: Entry[] }[]>("ts-saved-meals", []);
   const [coachMeals, setCoachMeals] = useState<{ id: string; name: string; items: Entry[] }[]>([]);
   const [coachGoalNote, setCoachGoalNote] = useState("");
+  const [goalsReady, setGoalsReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [editingEntry, setEditingEntry] = useState<{ meal: Meal; id: string; draft: Entry } | null>(null);
 
   useEffect(() => {
     fetch("/api/client/meals")
@@ -290,11 +303,20 @@ export default function NutritionTracker() {
         cloudSet("ts-nutrition-coach-at", g.setAt);
         setCoachGoalNote(`Your coach${g.setByName ? " (" + g.setByName + ")" : ""} set these targets.`);
       } catch {}
-    })();
+    })().finally(() => setGoalsReady(true));
   }, []);
 
   const key = dateKey(date);
   const day = allLogs[key] || emptyDay();
+  const cycleDay = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][date.getDay()];
+  const dayCycle = cyclePlan[cycleDay] || {};
+  const activeGoal: Goal = {
+    calories: Number(dayCycle.cal) || goal.calories,
+    protein: Number(dayCycle.p) || goal.protein,
+    carbs: Number(dayCycle.c) || goal.carbs,
+    fat: Number(dayCycle.f) || goal.fat,
+  };
+  const cycleActive = Object.values(dayCycle).some((value) => Number(value) > 0);
 
   function persist(next: Record<string, DayLog>) {
     setAllLogs(next);
@@ -309,6 +331,14 @@ export default function NutritionTracker() {
     const next = { ...allLogs, [key]: { ...allLogs[key] } };
     next[key][meal] = next[key][meal].filter((f) => f.id !== id);
     persist(next);
+  }
+
+  function updateEntry(meal: Meal, id: string, entry: Entry) {
+    if (!allLogs[key]) return;
+    const next = { ...allLogs, [key]: { ...allLogs[key] } };
+    next[key][meal] = next[key][meal].map((item) => item.id === id ? entry : item);
+    persist(next);
+    setEditingEntry(null);
   }
 
   function addFoodToMeal(meal: Meal, food: Food) {
@@ -352,6 +382,10 @@ export default function NutritionTracker() {
       f: parseFloat(manual.f) || 0,
     });
     setManual({ name: "", cal: "", p: "", c: "", f: "" });
+  }
+
+  function toggleFavorite(name: string) {
+    setFavorites((items) => items.includes(name) ? items.filter((item) => item !== name) : [...items, name]);
   }
 
   function saveGoal() {
@@ -425,27 +459,56 @@ export default function NutritionTracker() {
     return t;
   }, [day]);
 
+  const allFoods = useMemo<Food[]>(() => {
+    const combined: Food[] = [
+      ...FOODS,
+      ...customFoods.map((food) => ({ ...food, cuisine: "custom", diets: [], perItem: true, serving: "1 serving", source: "custom" as const })),
+      ...recipes.map((recipe) => ({ name: recipe.name, cuisine: "recipe", diets: [], perItem: true, serving: "1 serving", source: "recipe" as const, ...recipe.per })),
+    ];
+    return Array.from(new Map(combined.map((food) => [food.name.toLowerCase(), food])).values());
+  }, [customFoods, recipes]);
+
   const foodList = useMemo(() => {
-    return FOODS.filter((f) => {
-      if (diet !== "balanced" && !f.diets.includes(diet)) return false;
-      if (cuisine !== "all" && f.cuisine !== cuisine) return false;
+    return allFoods.filter((f) => {
+      if (diet !== "balanced" && f.diets.length > 0 && !f.diets.includes(diet)) return false;
+      if (cuisine !== "all" && f.cuisine !== cuisine && f.cuisine !== "custom" && f.cuisine !== "recipe") return false;
       if (search.trim() && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [diet, cuisine, search]);
+  }, [allFoods, diet, cuisine, search]);
+
+  const favoriteFoods = useMemo(() => allFoods.filter((food) => favorites.includes(food.name)).slice(0, 10), [allFoods, favorites]);
+  const recentFoods = useMemo(() => {
+    const seen = new Set<string>();
+    const entries: Entry[] = [];
+    Object.keys(allLogs).sort((a, b) => b.localeCompare(a)).forEach((dayKey) => {
+      (Object.values(allLogs[dayKey]) as Entry[][]).flat().forEach((entry) => {
+        const id = entry.name.toLowerCase();
+        if (!seen.has(id) && entries.length < 10) { seen.add(id); entries.push(entry); }
+      });
+    });
+    return entries;
+  }, [allLogs]);
 
   // Sync a daily summary to the server so the client's coach can see it.
   useEffect(() => {
+    if (!logsReady || !goalsReady || !suppsReady) return;
     const t = setTimeout(() => {
+      setSyncStatus("saving");
       fetch("/api/client/nutrition", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: key, totals, goal, supplements: takenToday }),
-      }).catch(() => {});
+        body: JSON.stringify({ date: key, totals, goal: activeGoal, supplements: takenToday }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Sync failed");
+          setSyncStatus("saved");
+        })
+        .catch(() => setSyncStatus("error"));
     }, 900);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, totals.cal, totals.p, totals.c, totals.f, goal.calories, goal.protein, goal.carbs, goal.fat, takenToday.length]);
+  }, [key, totals.cal, totals.p, totals.c, totals.f, activeGoal.calories, activeGoal.protein, activeGoal.carbs, activeGoal.fat, takenToday.length, logsReady, goalsReady, suppsReady]);
 
   function mealTotals(meal: Meal) {
     return day[meal].reduce((s, e) => s + e.cal, 0);
@@ -454,8 +517,36 @@ export default function NutritionTracker() {
     const d = new Date(date); d.setDate(d.getDate() + n); setDate(d); setAddTo(null);
   }
 
+  function copyYesterday() {
+    const previous = new Date(date);
+    previous.setDate(previous.getDate() - 1);
+    const previousDay = allLogs[dateKey(previous)];
+    if (!previousDay || !(Object.values(previousDay) as Entry[][]).some((items) => items.length)) return;
+    const next = { ...allLogs, [key]: { ...emptyDay(), ...(allLogs[key] || {}) } };
+    (Object.keys(next[key]) as Meal[]).forEach((meal) => {
+      next[key][meal] = [...next[key][meal], ...(previousDay[meal] || []).map((entry) => ({ ...entry, id: uid() }))];
+    });
+    persist(next);
+  }
+
+  function latestMeal(meal: Meal) {
+    const dateKeys = Object.keys(allLogs).filter((dayKey) => dayKey < key).sort((a, b) => b.localeCompare(a));
+    for (const dayKey of dateKeys) {
+      const items = allLogs[dayKey]?.[meal] || [];
+      if (items.length) return items;
+    }
+    return null;
+  }
+
+  function repeatLatestMeal(meal: Meal) {
+    const items = latestMeal(meal);
+    if (!items) return;
+    applyMeal(meal, { items });
+  }
+
   const inputCls = "w-full bg-ink/40 border border-bone/20 px-2 py-1.5 text-bone text-sm focus:border-electric outline-none";
   const isToday = dateKey(new Date()) === key;
+  const canCopyYesterday = !!allLogs[dateKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1))];
 
   function Bar({ value, max, label, unit: u }: { value: number; max: number; label: string; unit: string }) {
     const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -503,17 +594,23 @@ export default function NutritionTracker() {
               <p className="font-display uppercase tracking-wider text-bone">{isToday ? "Today" : date.toLocaleDateString(undefined, { weekday: "short" })}</p>
               <p className="text-xs text-bone/50">{date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
             </div>
-            <button onClick={() => shiftDay(1)} className="font-display text-electric hover:text-bone px-2">→</button>
+            <button onClick={() => shiftDay(1)} disabled={isToday} className="font-display text-electric hover:text-bone px-2 disabled:opacity-25">→</button>
           </div>
           <div className="mt-5 text-center">
             <p className="font-display text-4xl text-electric font-700">{round(totals.cal)}</p>
-            <p className="text-[10px] uppercase tracking-wider text-bone/50 mt-1">of {goal.calories} kcal · {Math.max(0, Math.round(goal.calories - totals.cal))} left</p>
+            <p className="text-[10px] uppercase tracking-wider text-bone/50 mt-1">of {activeGoal.calories} kcal · {Math.max(0, Math.round(activeGoal.calories - totals.cal))} left</p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wider">
+              {canCopyYesterday && <button onClick={copyYesterday} className="text-electric hover:text-bone">Copy yesterday</button>}
+              <span className={syncStatus === "error" ? "text-red-400" : syncStatus === "saved" ? "text-electric" : "text-bone/40"}>
+                {syncStatus === "saving" ? "Saving…" : syncStatus === "saved" ? "Saved ✓" : syncStatus === "error" ? "Couldn’t sync — changes stay on this device" : ""}
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="border border-bone/15 bg-ink/20 p-5">
           <div className="flex items-center justify-between mb-4">
-            <p className="font-display uppercase tracking-wider text-bone/60 text-xs">Daily Goals</p>
+            <p className="font-display uppercase tracking-wider text-bone/60 text-xs">Daily Goals{cycleActive ? " · Cycle target" : ""}</p>
             <button onClick={() => { setGoalDraft(goal); setEditingGoal((v) => !v); }} className="font-display uppercase tracking-wider text-xs text-electric hover:text-bone">
               {editingGoal ? "Cancel" : "Edit goals"}
             </button>
@@ -523,6 +620,7 @@ export default function NutritionTracker() {
               ★ {coachGoalNote} You can still edit them.
             </p>
           )}
+          {cycleActive && <p className="mb-3 text-xs text-bone/55">Macro cycling is active for {cycleDay}. These targets override your base targets for this day.</p>}
           {editingGoal ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(["calories", "protein", "carbs", "fat"] as (keyof Goal)[]).map((k) => (
@@ -535,10 +633,10 @@ export default function NutritionTracker() {
             </div>
           ) : (
             <div className="grid gap-3">
-              <Bar value={totals.cal} max={goal.calories} label="Calories" unit="" />
-              <Bar value={totals.p} max={goal.protein} label="Protein" unit="g" />
-              <Bar value={totals.c} max={goal.carbs} label="Carbs" unit="g" />
-              <Bar value={totals.f} max={goal.fat} label="Fat" unit="g" />
+              <Bar value={totals.cal} max={activeGoal.calories} label="Calories" unit="" />
+              <Bar value={totals.p} max={activeGoal.protein} label="Protein" unit="g" />
+              <Bar value={totals.c} max={activeGoal.carbs} label="Carbs" unit="g" />
+              <Bar value={totals.f} max={activeGoal.fat} label="Fat" unit="g" />
             </div>
           )}
         </div>
@@ -569,6 +667,11 @@ export default function NutritionTracker() {
               <p className="font-display uppercase tracking-wider text-bone">{meal.label}</p>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-electric font-display">{round(mealTotals(meal.id))} kcal</span>
+                {latestMeal(meal.id) && (
+                  <button onClick={() => repeatLatestMeal(meal.id)} className="font-display uppercase tracking-wider text-[10px] text-bone/55 hover:text-electric">
+                    Repeat last
+                  </button>
+                )}
                 <button onClick={() => setAddTo(addTo === meal.id ? null : meal.id)} className="font-display uppercase tracking-wider text-xs border border-electric text-electric px-3 py-1.5 hover:bg-electric hover:text-ink transition-colors">
                   {addTo === meal.id ? "Close" : "+ Add Food"}
                 </button>
@@ -579,14 +682,34 @@ export default function NutritionTracker() {
               <ul className="divide-y divide-bone/5">
                 {day[meal.id].map((e) => (
                   <li key={e.id} className="flex items-center justify-between px-5 py-3 gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm text-bone/90 truncate">{e.name}{e.label ? ` · ${e.label}` : ""}</p>
-                      <p className="text-[10px] uppercase tracking-wider text-bone/40 mt-0.5">{e.p}p · {e.c}c · {e.f}f</p>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <span className="font-display text-sm text-bone/80">{e.cal}</span>
-                      <button onClick={() => removeEntry(meal.id, e.id)} className="text-bone/40 hover:text-electric text-sm">✕</button>
-                    </div>
+                    {editingEntry?.id === e.id && editingEntry.meal === meal.id ? (
+                      <div className="w-full grid gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                          <input value={editingEntry.draft.name} onChange={(event) => setEditingEntry({ ...editingEntry, draft: { ...editingEntry.draft, name: event.target.value } })} aria-label="Food name" className={inputCls + " col-span-2"} />
+                          <input value={editingEntry.draft.cal} onChange={(event) => setEditingEntry({ ...editingEntry, draft: { ...editingEntry.draft, cal: Number(event.target.value) || 0 } })} inputMode="decimal" aria-label="Calories" className={inputCls} />
+                          <input value={editingEntry.draft.p} onChange={(event) => setEditingEntry({ ...editingEntry, draft: { ...editingEntry.draft, p: Number(event.target.value) || 0 } })} inputMode="decimal" aria-label="Protein" className={inputCls} />
+                          <input value={editingEntry.draft.c} onChange={(event) => setEditingEntry({ ...editingEntry, draft: { ...editingEntry.draft, c: Number(event.target.value) || 0 } })} inputMode="decimal" aria-label="Carbs" className={inputCls} />
+                          <input value={editingEntry.draft.f} onChange={(event) => setEditingEntry({ ...editingEntry, draft: { ...editingEntry.draft, f: Number(event.target.value) || 0 } })} inputMode="decimal" aria-label="Fat" className={inputCls} />
+                        </div>
+                        <input value={editingEntry.draft.label} onChange={(event) => setEditingEntry({ ...editingEntry, draft: { ...editingEntry.draft, label: event.target.value } })} placeholder="Serving / amount" className={inputCls} />
+                        <div className="flex gap-3">
+                          <button onClick={() => updateEntry(meal.id, e.id, editingEntry.draft)} className="font-display uppercase tracking-wider text-xs text-electric hover:text-bone">Save</button>
+                          <button onClick={() => setEditingEntry(null)} className="font-display uppercase tracking-wider text-xs text-bone/45 hover:text-bone">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="min-w-0">
+                          <p className="text-sm text-bone/90 truncate">{e.name}{e.label ? ` · ${e.label}` : ""}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-bone/40 mt-0.5">{e.p}p · {e.c}c · {e.f}f</p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="font-display text-sm text-bone/80">{e.cal}</span>
+                          <button onClick={() => setEditingEntry({ meal: meal.id, id: e.id, draft: { ...e } })} className="font-display uppercase tracking-wider text-[10px] text-bone/50 hover:text-electric">Edit</button>
+                          <button onClick={() => removeEntry(meal.id, e.id)} className="text-bone/40 hover:text-electric text-sm" aria-label={`Remove ${e.name}`}>✕</button>
+                        </div>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -606,6 +729,32 @@ export default function NutritionTracker() {
                   </select>
                   <span className="text-[10px] uppercase tracking-wider text-bone/40">tap a food to log this amount</span>
                 </div>
+
+                {favoriteFoods.length > 0 && (
+                  <div className="mb-3 border-b border-bone/10 pb-3">
+                    <p className="text-[10px] uppercase tracking-wider text-electric mb-2">Favorites</p>
+                    <div className="flex flex-wrap gap-2">
+                      {favoriteFoods.map((food) => (
+                        <button key={food.name} onClick={() => addFoodToMeal(meal.id, food)} className="text-xs border border-electric/40 text-electric px-2.5 py-1.5 hover:bg-electric hover:text-ink transition-colors">
+                          ★ {food.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {recentFoods.length > 0 && (
+                  <div className="mb-3 border-b border-bone/10 pb-3">
+                    <p className="text-[10px] uppercase tracking-wider text-bone/50 mb-2">Recent foods — one-tap add</p>
+                    <div className="flex flex-wrap gap-2">
+                      {recentFoods.map((entry) => (
+                        <button key={entry.id} onClick={() => addEntry(meal.id, { ...entry, id: uid() })} className="text-xs border border-bone/20 text-bone/70 px-2.5 py-1.5 hover:border-electric hover:text-electric transition-colors">
+                          {entry.name} <span className="text-bone/40">· {entry.cal} cal</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Saved meals */}
                 <div className="mb-3 border-b border-bone/10 pb-3">
@@ -668,9 +817,14 @@ export default function NutritionTracker() {
                     <p className="text-bone/40 text-sm py-4">No foods match this diet / search.</p>
                   ) : (
                     foodList.map((f) => (
-                      <button key={f.name} onClick={() => addFoodToMeal(meal.id, f)} className="text-xs border border-bone/20 text-bone/70 px-2.5 py-1.5 hover:border-electric hover:text-electric transition-colors">
-                        {f.name} <span className="text-bone/40">· {f.cal}{f.perItem ? " cal" : "/100g"}</span>
-                      </button>
+                      <span key={f.name} className="inline-flex border border-bone/20 text-xs text-bone/70">
+                        <button onClick={() => addFoodToMeal(meal.id, f)} className="px-2.5 py-1.5 hover:text-electric transition-colors">
+                          {f.name} <span className="text-bone/40">· {f.cal}{f.perItem ? " cal" : "/100g"}</span>
+                        </button>
+                        <button type="button" onClick={() => toggleFavorite(f.name)} aria-label={`${favorites.includes(f.name) ? "Remove" : "Add"} ${f.name} ${favorites.includes(f.name) ? "from" : "to"} favorites`} className={"border-l border-bone/15 px-2 hover:text-electric " + (favorites.includes(f.name) ? "text-electric" : "text-bone/40")}>
+                          ★
+                        </button>
+                      </span>
                     ))
                   )}
                 </div>

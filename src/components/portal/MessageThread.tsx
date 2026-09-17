@@ -9,17 +9,30 @@ type Message = {
   body: string;
   mediaUrl: string | null;
   mediaType: string | null;
+  read?: boolean;
+  readAt?: string | null;
+  context?: MessageContext | null;
   createdAt: string;
+};
+
+export type MessageContext = {
+  kind?: "workout" | "form_review" | "checkin" | "general";
+  title?: string;
+  details?: string;
 };
 
 export default function MessageThread({
   withUserId,
   meId,
+  initialText = "",
+  initialContext,
   onRead,
   heightClass = "h-[440px]",
 }: {
   withUserId: string;
   meId: string;
+  initialText?: string;
+  initialContext?: MessageContext | null;
   onRead?: () => void;
   heightClass?: string;
 }) {
@@ -34,7 +47,10 @@ export default function MessageThread({
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<any>(null);
   const [recording, setRecording] = useState(false);
+  const appliedInitialText = useRef("");
   const [recSecs, setRecSecs] = useState(0);
+  const [pendingContext, setPendingContext] = useState<MessageContext | null>(initialContext || null);
+  const appliedContext = useRef("");
   const MAX_SECS = 120; // keep voice notes short & snappy
 
   async function load(scroll = false) {
@@ -62,6 +78,21 @@ export default function MessageThread({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages.length]);
 
+  useEffect(() => {
+    if (initialText && appliedInitialText.current !== initialText) {
+      setText((current) => current || initialText);
+      appliedInitialText.current = initialText;
+    }
+  }, [initialText]);
+
+  useEffect(() => {
+    const key = initialContext ? JSON.stringify(initialContext) : "";
+    if (key && appliedContext.current !== key) {
+      setPendingContext(initialContext || null);
+      appliedContext.current = key;
+    }
+  }, [initialContext]);
+
   async function send(mediaUrl?: string, mediaType?: string) {
     if (!text.trim() && !mediaUrl) return;
     setSending(true);
@@ -69,10 +100,11 @@ export default function MessageThread({
     const res = await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toUserId: withUserId, body: text, mediaUrl, mediaType }),
+      body: JSON.stringify({ toUserId: withUserId, body: text, mediaUrl, mediaType, context: pendingContext }),
     });
     if (res.ok) {
       setText("");
+      setPendingContext(null);
       await load(true);
     } else {
       const d = await res.json().catch(() => ({}));
@@ -194,6 +226,12 @@ export default function MessageThread({
                       📎 Download attachment
                     </a>
                   )}
+                  {m.context?.title && (
+                    <div className={"mb-2 border-l-2 px-2 py-1 text-[10px] uppercase tracking-wider " + (mine ? "border-ink/50 text-ink/70" : "border-electric text-electric")}>
+                      <p>{m.context.kind === "form_review" ? "Form review" : m.context.kind === "workout" ? "Workout question" : "Coaching context"} · {m.context.title}</p>
+                      {m.context.details && <p className={"mt-0.5 normal-case tracking-normal " + (mine ? "text-ink/70" : "text-bone/55")}>{m.context.details}</p>}
+                    </div>
+                  )}
                   {m.body && <p className="text-sm whitespace-pre-wrap leading-relaxed">{m.body}</p>}
                   <p className={"text-[10px] mt-1 " + (mine ? "text-ink/60" : "text-bone/40")}>
                     {new Date(m.createdAt).toLocaleString(undefined, {
@@ -202,6 +240,7 @@ export default function MessageThread({
                       hour: "numeric",
                       minute: "2-digit",
                     })}
+                    {mine && <span>{m.read ? " · Seen" : " · Reply pending"}</span>}
                   </p>
                 </div>
               </div>
@@ -211,6 +250,13 @@ export default function MessageThread({
       </div>
 
       {error && <p className="px-4 text-xs text-red-400">{error}</p>}
+
+      {pendingContext?.title && (
+        <div className="mx-3 mt-3 flex items-center justify-between gap-3 border border-electric/30 bg-electric/5 px-3 py-2 text-xs">
+          <span className="text-bone/70">Sending with context: <span className="text-electric">{pendingContext.title}</span></span>
+          <button type="button" onClick={() => setPendingContext(null)} className="text-bone/50 hover:text-electric" aria-label="Remove message context">✕</button>
+        </div>
+      )}
 
       <div className="border-t border-bone/15 p-3 flex items-end gap-2">
         <input

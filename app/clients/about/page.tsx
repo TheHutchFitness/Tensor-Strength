@@ -19,39 +19,59 @@ const EMPTY = {
 
 export default function AboutMePage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [form, setForm] = useState({ ...EMPTY });
 
-  useEffect(() => {
-    (async () => {
+  async function loadProfile() {
+    setLoading(true);
+    setLoadError("");
+    try {
       const me = await fetch("/api/auth/me");
       if (!me.ok) {
         window.location.href = "/login?from=/clients/about";
         return;
       }
-      const prof = await fetch("/api/client/profile").then((r) => (r.ok ? r.json() : { profile: null }));
+      const { user } = await me.json();
+      if (!user.portalAccess && !user.isTrainer) { window.location.href = "/clients"; return; }
+      const profileResponse = await fetch("/api/client/profile");
+      if (!profileResponse.ok) throw new Error("Could not load profile");
+      const prof = await profileResponse.json();
       if (prof.profile) setForm({ ...EMPTY, ...prof.profile });
       setAuthorized(true);
+    } catch {
+      setLoadError("Your profile could not be loaded. Check your connection and try again.");
+    } finally {
       setLoading(false);
-    })();
+    }
+  }
+
+  useEffect(() => {
+    void loadProfile();
   }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
-    const res = await fetch("/api/client/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (res.ok) {
+    setSaveError("");
+    try {
+      const res = await fetch("/api/client/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error("Could not save profile");
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setSaveError("Your profile could not be saved. Your changes are still here—please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -86,9 +106,14 @@ export default function AboutMePage() {
           Connect Google (same email)
         </button>
 
-        {loading || !authorized ? (
+        {loading ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
-        ) : (
+        ) : loadError ? (
+          <div className="mt-8 border border-bone/20 bg-ink/30 p-6">
+            <p className="text-sm text-bone/80">{loadError}</p>
+            <button onClick={() => void loadProfile()} className="mt-4 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">Retry</button>
+          </div>
+        ) : !authorized ? null : (
           <form onSubmit={save} className="mt-10 grid gap-6">
             <div>
               <p className="font-display uppercase tracking-wider text-electric text-sm mb-3">Big 4 lift PRs</p>
@@ -154,6 +179,7 @@ export default function AboutMePage() {
               </button>
               {saved && <span className="font-display uppercase tracking-wider text-sm text-electric">✓ Saved — your coach can see this.</span>}
             </div>
+            {saveError && <p role="alert" className="text-sm text-bone/80">{saveError}</p>}
           </form>
         )}
       </div>

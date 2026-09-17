@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { exercises } from "../data/exercises";
 import { useCloudState } from "../lib/cloud";
 
@@ -15,12 +15,16 @@ const levelStyles: Record<string, string> = {
   Advanced: "text-rose-400 border-rose-400/40",
 };
 
-export default function ExerciseLibrary() {
+export default function ExerciseLibrary({ initialQuery = "" }: { initialQuery?: string }) {
   const [filter, setFilter] = useState<string>("All");
   const [query, setQuery] = useState<string>("");
   const [openName, setOpenName] = useState<string | null>(null);
   const [faves, setFaves] = useCloudState<string[]>(FAVES_KEY, []);
   const [onlyFaves, setOnlyFaves] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialQuery) setQuery(initialQuery);
+  }, [initialQuery]);
 
   const toggleFave = (name: string) => {
     setFaves((prev) => {

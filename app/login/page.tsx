@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { safeReturnPath } from "../../src/lib/workoutMetrics";
 import { GOAL_OPTIONS } from "../../src/data/gamification";
 
 type Mode = "login" | "register";
@@ -22,6 +23,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [goals, setGoals] = useState<string[]>([]);
+  const [registrationOpen, setRegistrationOpen] = useState(true);
+  const [registrationMessage, setRegistrationMessage] = useState("");
   function toggleGoal(g: string) {
     setGoals((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
   }
@@ -46,13 +49,32 @@ export default function LoginPage() {
     if (nm) setUsername(slugifyUsername(nm));
   }, []);
 
+  // The admin can make new sign-ups invite-only without interrupting current
+  // members. Read the public-safe setting so the gate explains that choice
+  // before anyone fills out a form.
+  useEffect(() => {
+    fetch("/api/signup-settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          setRegistrationOpen(data.registrationOpen !== false);
+          setRegistrationMessage(data.message || "");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const inputCls =
     "w-full bg-transparent border-b border-line py-3 text-bone focus:border-electric outline-none transition-colors";
 
   function signInWithGoogle() {
+    if (!registrationOpen && mode === "register") {
+      setError(registrationMessage || "Registration is currently by invitation only.");
+      return;
+    }
     // Remember where the user wanted to go, then hand off to Emergent-managed auth.
     const params = new URLSearchParams(window.location.search);
-    const from = params.get("from");
+    const from = safeReturnPath(params.get("from"));
     if (from) sessionStorage.setItem("ts_login_from", from);
     const callback = `${window.location.origin}/auth/emergent/callback`;
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(callback)}`;
@@ -61,6 +83,10 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (cooldown > 0) return;
+    if (mode === "register" && !registrationOpen) {
+      setError(registrationMessage || "Registration is currently by invitation only.");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -95,7 +121,7 @@ export default function LoginPage() {
         }).catch(() => {});
       }
       const params = new URLSearchParams(window.location.search);
-      const from = params.get("from") || (mode === "register" ? "/quests" : "/");
+      const from = safeReturnPath(params.get("from"), mode === "register" ? "/quests" : "/clients");
       window.location.href = from;
     } catch {
       setError("Network error. Please try again.");
@@ -155,7 +181,7 @@ export default function LoginPage() {
             />
           </label>
 
-          {mode === "register" && (
+          {mode === "register" && registrationOpen && (
             <label className="block">
               <span className="font-display uppercase tracking-wider text-xs text-bone/70">
                 Email
@@ -212,17 +238,20 @@ export default function LoginPage() {
 
           {error && <p className="text-sm text-electric">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-2 w-full bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60"
-          >
-            {loading
-              ? "Please wait…"
-              : mode === "login"
-              ? "Sign In →"
-              : "Create Account →"}
-          </button>
+          {mode === "register" && !registrationOpen ? (
+            <div className="mt-2 border border-electric/40 bg-electric/5 px-4 py-3 text-sm text-bone/75 leading-relaxed">
+              {registrationMessage || "Registration is currently by invitation only. Apply for coaching to start a conversation."}
+              <a href="/apply" className="block mt-2 font-display uppercase tracking-wider text-xs text-electric hover:text-bone">Apply for coaching →</a>
+            </div>
+          ) : (
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 w-full bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60"
+            >
+              {loading ? "Please wait…" : mode === "login" ? "Sign In →" : "Create Account →"}
+            </button>
+          )}
 
           {mode === "login" && (
             <p className="mt-3 text-center text-xs text-bone/50">
@@ -259,16 +288,20 @@ export default function LoginPage() {
 
         <p className="mt-8 text-center text-sm text-bone/60">
           {mode === "login" ? "New here? " : "Already have an account? "}
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "login" ? "register" : "login");
-              setError("");
-            }}
-            className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors font-display uppercase tracking-wider"
-          >
-            {mode === "login" ? "Create an account" : "Sign in"}
-          </button>
+          {mode === "login" && !registrationOpen ? (
+            <a href="/apply" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors font-display uppercase tracking-wider">Apply for coaching</a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "login" ? "register" : "login");
+                setError("");
+              }}
+              className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors font-display uppercase tracking-wider"
+            >
+              {mode === "login" ? "Create an account" : "Sign in"}
+            </button>
+          )}
         </p>
 
         <p className="mt-6 text-center text-sm text-bone/50">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export default function OnboardingChecklist({ intakeDone }: { intakeDone: boolean }) {
+export default function OnboardingChecklist({ intakeDone, userId, accessType }: { intakeDone: boolean; userId: string; accessType?: string }) {
   const [workoutDone, setWorkoutDone] = useState<boolean | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -11,13 +11,12 @@ export default function OnboardingChecklist({ intakeDone }: { intakeDone: boolea
       .then((r) => (r.ok ? r.json() : { workouts: [] }))
       .then((d) => setWorkoutDone((d.workouts || []).length > 0))
       .catch(() => setWorkoutDone(false));
-    try { setDismissed(localStorage.getItem("ts_onboard_done") === "1"); } catch {}
-  }, []);
+    try { setDismissed(localStorage.getItem(`ts_onboard_done:${userId}`) === "1"); } catch {}
+  }, [userId]);
 
   if (workoutDone === null) return null;
   const steps = [
     { done: intakeDone, label: "Complete your intake", href: "/clients/intake", cta: "Start" },
-    { done: false, label: "Book your first session", href: "/clients/book", cta: "Book" },
     { done: workoutDone, label: "Log your first workout", href: "/clients/workout-log", cta: "Log" },
   ];
   const allEssentialDone = intakeDone && workoutDone;
@@ -26,8 +25,8 @@ export default function OnboardingChecklist({ intakeDone }: { intakeDone: boolea
   return (
     <div className="mb-10 border-2 border-bone/20 bg-ink/30 p-5">
       <div className="flex items-center justify-between mb-3">
-        <p className="glow font-display uppercase tracking-[0.2em] text-electric text-sm">Get started — {steps.filter((s) => s.done).length}/3</p>
-        <button onClick={() => { try { localStorage.setItem("ts_onboard_done", "1"); } catch {} setDismissed(true); }} className="text-bone/40 hover:text-electric text-xs" title="Hide">✕</button>
+        <p className="glow font-display uppercase tracking-[0.2em] text-electric text-sm">Get started — {steps.filter((s) => s.done).length}/{steps.length}</p>
+        <button onClick={() => { try { localStorage.setItem(`ts_onboard_done:${userId}`, "1"); } catch {} setDismissed(true); }} className="text-bone/40 hover:text-electric text-xs" title="Hide" aria-label="Dismiss onboarding checklist">✕</button>
       </div>
       <div className="grid gap-2">
         {steps.map((s, i) => (
@@ -42,6 +41,8 @@ export default function OnboardingChecklist({ intakeDone }: { intakeDone: boolea
           </div>
         ))}
       </div>
+      {(accessType === "in_person" || accessType === "remote_coaching") &&
+        <a href="/clients/book" className="mt-3 inline-block text-sm text-electric">{accessType === "remote_coaching" ? "Schedule your coaching call" : "Book a training session"} →</a>}
     </div>
   );
 }

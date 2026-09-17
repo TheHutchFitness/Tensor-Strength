@@ -37,6 +37,23 @@ body {
   max-width: 100%;
 }
 
+/* Keyboard and touch affordances should feel deliberate across the app. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-electric);
+  outline-offset: 3px;
+}
+
+:where(a, button) {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.ts-mobile-tabs {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ts-mobile-tabs::-webkit-scrollbar { display: none; }
+
 /* ---- Global dark form controls ----
    Keeps every input/textarea/select on-brand (dark box, light text) and,
    critically, keeps typed text visible on mobile browsers that would
@@ -205,6 +222,28 @@ select:-webkit-autofill {
   body.has-site-tabbar {
     padding-bottom: calc(4rem + env(safe-area-inset-bottom));
   }
+
+  /* Reusable, scrollable section tabs: no wrapped two-line toolbars or
+     accidentally tiny tap targets on a phone. */
+  .ts-mobile-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+    padding: 0.125rem 0.25rem 0.75rem;
+  }
+  .ts-mobile-tabs > * {
+    flex: 0 0 auto;
+    min-height: 2.75rem;
+    scroll-snap-align: start;
+  }
+
+  .ts-mobile-page {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
 }
 
 /* Slide-up animation for the mobile forum composer sheet */
@@ -218,4 +257,3 @@ select:-webkit-autofill {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-

@@ -46,7 +46,9 @@ function fmt(d?: string | null) {
 
 export default function CheckInPage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [authorized, setAuthorized] = useState(false);
+  const [accessType, setAccessType] = useState("");
   const [username, setUsername] = useState("");
   const [meId, setMeId] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -56,16 +58,20 @@ export default function CheckInPage() {
   const [demos, setDemos] = useState<DemoVideo[]>([]);
 
   async function loadFeeds() {
-    const [h, v] = await Promise.all([
-      fetch("/api/checkins").then((r) => (r.ok ? r.json() : { checkins: [] })),
-      fetch("/api/member/videos").then((r) => (r.ok ? r.json() : { videos: [] })),
+    const [historyResponse, videosResponse] = await Promise.all([
+      fetch("/api/checkins"),
+      fetch("/api/member/videos"),
     ]);
+    if (!historyResponse.ok || !videosResponse.ok) throw new Error("Could not load check-in data");
+    const [h, v] = await Promise.all([historyResponse.json(), videosResponse.json()]);
     setHistory(h.checkins || []);
     setDemos(v.videos || []);
   }
 
-  useEffect(() => {
-    (async () => {
+  async function loadPage() {
+    setLoading(true);
+    setLoadError("");
+    try {
       const me = await fetch("/api/auth/me");
       if (!me.ok) {
         window.location.href = "/login?from=/clients/check-in";
@@ -78,10 +84,18 @@ export default function CheckInPage() {
       }
       setUsername(user.username || "");
       setMeId(user.id || "");
+      setAccessType(user.accessType || "");
       setAuthorized(true);
       await loadFeeds();
+    } catch {
+      setLoadError("Your check-ins could not be loaded. Check your connection and try again.");
+    } finally {
       setLoading(false);
-    })();
+    }
+  }
+
+  useEffect(() => {
+    void loadPage();
   }, []);
 
   async function handleCheckIn(e: React.FormEvent<HTMLFormElement>) {
@@ -115,6 +129,7 @@ export default function CheckInPage() {
 
   const inputCls = "w-full bg-transparent border-b-2 border-bone/40 py-3 text-bone focus:border-electric outline-none";
   const selectCls = "w-full bg-ink/60 border-b-2 border-bone/40 py-3 text-bone focus:border-electric outline-none";
+  const coachingClient = accessType === "remote_coaching" || accessType === "in_person";
 
   return (
     <main className="text-bone min-h-screen">
@@ -127,24 +142,32 @@ export default function CheckInPage() {
           How did the <span className="text-electric">week go?</span>
         </h1>
         <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
-          Submit your check-in and drop a form video so your coach can review your
-          progress and reply — with notes or a video of their own.
+          {coachingClient
+            ? "Submit your check-in and a form video so your coach can review your progress and reply."
+            : "Use a weekly check-in to reflect on your training, recovery and progress. You can attach a form video for your own record."}
         </p>
-        <a
-          href="/clients/book?type=remote"
-          className="inline-flex items-center gap-2 mt-4 border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
-        >
-          💻 Book a video check-in (Google Meet)
-        </a>
+        {coachingClient && (
+          <a
+            href="/clients/book?type=remote"
+            className="inline-flex items-center gap-2 mt-4 border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
+          >
+            💻 Book a video check-in (Google Meet)
+          </a>
+        )}
 
-        {loading || !authorized ? (
+        {loading ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
-        ) : (
+        ) : loadError ? (
+          <div className="mt-8 border border-bone/20 bg-ink/30 p-6">
+            <p className="text-sm text-bone/80">{loadError}</p>
+            <button onClick={() => void loadPage()} className="mt-4 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">Retry</button>
+          </div>
+        ) : !authorized ? null : (
           <>
             {status === "success" ? (
               <div className="mt-8 border-2 border-electric bg-ink/30 backdrop-blur-sm p-8 text-center">
                 <p className="glow font-display uppercase text-xl text-electric">Check-in received.</p>
-                <p className="mt-3 text-bone/80">Thanks for the update — your coach will review it and reply below.</p>
+                <p className="mt-3 text-bone/80">{coachingClient ? "Thanks for the update — your coach can review it and reply below." : "Your weekly reflection has been saved to your history."}</p>
                 <button
                   onClick={() => setStatus("idle")}
                   className="mt-6 font-display uppercase tracking-wider text-xs border border-electric text-electric px-5 py-2.5 hover:bg-electric hover:text-ink transition-colors"
@@ -216,15 +239,15 @@ export default function CheckInPage() {
             {/* Coach demo library */}
             <section className="mt-16 border-t border-bone/10 pt-12">
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
-                Coach&apos;s Video Library
+                Training Video Library
               </p>
               <h2 className="glow font-display uppercase text-3xl font-700 leading-tight">
-                Demos from your <span className="text-electric">coach.</span>
+                Technique <span className="text-electric">demos.</span>
               </h2>
               {demos.length === 0 ? (
                 <div className="mt-6 border-2 border-dashed border-bone/20 bg-ink/20 p-8 text-center">
                   <p className="font-display uppercase tracking-wider text-sm text-bone/50">No demo videos yet</p>
-                  <p className="mt-2 text-xs text-bone/40">Your coach can post technique demos here — check back soon.</p>
+                  <p className="mt-2 text-xs text-bone/40">Technique demos shared with you will appear here.</p>
                 </div>
               ) : (
                 <div className="mt-6 grid sm:grid-cols-2 gap-5">
@@ -259,7 +282,7 @@ export default function CheckInPage() {
               {history.length === 0 ? (
                 <div className="mt-6 border-2 border-dashed border-bone/20 bg-ink/20 p-8 text-center">
                   <p className="font-display uppercase tracking-wider text-sm text-bone/50">No check-ins yet</p>
-                  <p className="mt-2 text-xs text-bone/40">Submit your first one above to start the conversation with your coach.</p>
+                  <p className="mt-2 text-xs text-bone/40">Submit your first one above to start tracking each week.</p>
                 </div>
               ) : (
                 <div className="mt-6 grid gap-5">
@@ -281,21 +304,33 @@ function CheckInCard({ ci, meId, onReplied }: { ci: CheckIn; meId: string; onRep
   const [replyVideo, setReplyVideo] = useState("");
   const [showVid, setShowVid] = useState(false);
   const [sending, setSending] = useState(false);
+  const [replyError, setReplyError] = useState("");
+  const latestReply = ci.replies?.[ci.replies.length - 1];
+  const reviewStatus = latestReply?.authorRole === "coach" || (!latestReply && ci.hasCoachReply)
+    ? "Coach replied"
+    : latestReply?.authorRole === "member"
+      ? "Reply sent · coach review pending"
+      : "Coach review pending";
 
   async function sendReply() {
     if (!replyText.trim() && !replyVideo) return;
     setSending(true);
-    const res = await fetch("/api/checkins/reply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ checkinId: ci.id, text: replyText, videoUrl: replyVideo || null }),
-    });
-    setSending(false);
-    if (res.ok) {
+    setReplyError("");
+    try {
+      const res = await fetch("/api/checkins/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkinId: ci.id, text: replyText, videoUrl: replyVideo || null }),
+      });
+      if (!res.ok) throw new Error("Could not send reply");
       setReplyText("");
       setReplyVideo("");
       setShowVid(false);
       onReplied();
+    } catch {
+      setReplyError("Your reply could not be sent. It is still here—please try again.");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -303,7 +338,10 @@ function CheckInCard({ ci, meId, onReplied }: { ci: CheckIn; meId: string; onRep
     <div className="border border-bone/15 bg-ink/30 p-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="font-display uppercase tracking-wider text-bone">{ci.week || "Check-In"}</p>
-        <span className="text-xs text-bone/40">{fmt(ci.createdAt)}</span>
+        <div className="flex items-center gap-2">
+          <span className={"text-[10px] uppercase tracking-wider " + (reviewStatus === "Coach replied" ? "text-electric" : "text-bone/50")}>{reviewStatus}</span>
+          <span className="text-xs text-bone/40">{fmt(ci.createdAt)}</span>
+        </div>
       </div>
       {ci.readiness && <p className="mt-1 text-xs text-electric">Readiness: {ci.readiness}</p>}
       {ci.wins && (
@@ -377,6 +415,7 @@ function CheckInCard({ ci, meId, onReplied }: { ci: CheckIn; meId: string; onRep
             {sending ? "Sending…" : "Send reply"}
           </button>
         </div>
+        {replyError && <p role="alert" className="mt-2 text-xs text-bone/70">{replyError}</p>}
       </div>
     </div>
   );

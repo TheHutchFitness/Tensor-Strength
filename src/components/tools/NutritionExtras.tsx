@@ -11,8 +11,6 @@ const btn = "font-display uppercase tracking-wider text-sm bg-electric text-ink 
 const ghost = "font-display uppercase tracking-wider text-xs border border-bone/25 text-bone/70 px-4 py-2 hover:border-electric hover:text-electric transition-colors";
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-const read = (k: string, d: any) => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch { return d; } };
-const write = (k: string, v: any) => localStorage.setItem(k, JSON.stringify(v));
 const num = (v: any) => Number(v) || 0;
 
 /* ---------- Custom Foods Library ---------- */
@@ -138,16 +136,16 @@ function Cycle() {
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] uppercase tracking-wider text-bone/40">Saved automatically · use these as your daily targets in the tracker.</p>
+      <p className="text-[11px] uppercase tracking-wider text-bone/40">Saved automatically · these targets now override the base tracker targets for their matching day.</p>
     </div>
   );
 }
 
 /* ---------- Weekly Adherence ---------- */
 function Adherence() {
+  const [logs] = useCloudState<Record<string, any>>("ts-nutrition-log", {});
+  const [goal] = useCloudState<{ calories?: number }>("ts-nutrition-goal", { calories: 2200 });
   const data = useMemo(() => {
-    const logs = read("ts-nutrition-log", {});
-    const goal = read("ts-nutrition-goal", { calories: 2200 });
     const target = num(goal.calories) || 2200;
     // Sum calories per day by walking the day log for any {cal} entries.
     const sumDay = (day: any): number => {
@@ -161,12 +159,16 @@ function Adherence() {
     };
     const out: { date: string; cal: number }[] = [];
     const today = new Date();
-    for (let i = 6; i >= 0; i--) { const d = new Date(today); d.setDate(d.getDate() - i); const key = d.toISOString().slice(0, 10); out.push({ date: key, cal: logs[key] ? sumDay(logs[key]) : 0 }); }
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      out.push({ date: key, cal: logs[key] ? sumDay(logs[key]) : 0 });
+    }
     const logged = out.filter((o) => o.cal > 0);
     const onTarget = logged.filter((o) => Math.abs(o.cal - target) <= target * 0.1).length;
     const avg = logged.length ? Math.round(logged.reduce((s, o) => s + o.cal, 0) / logged.length) : 0;
     return { out, target, loggedDays: logged.length, onTarget, avg };
-  }, []);
+  }, [logs, goal]);
   const max = Math.max(data.target, ...data.out.map((o) => o.cal), 1);
   return (
     <div className="grid gap-4 max-w-xl">

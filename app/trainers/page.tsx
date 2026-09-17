@@ -13,6 +13,9 @@ const TrainerMeals = dynamic(() => import("../../src/components/portal/TrainerMe
 const TrainerMessages = dynamic(() => import("../../src/components/portal/TrainerMessages"), {
   loading: () => <p className="font-display uppercase tracking-wider text-bone/50 text-sm">Loading messages…</p>,
 });
+const TrainerActionQueue = dynamic(() => import("../../src/components/portal/TrainerActionQueue"), {
+  loading: () => <p className="font-display uppercase tracking-wider text-bone/50 text-sm">Loading action queue…</p>,
+});
 const CoachTools = dynamic(() => import("../../src/components/portal/CoachTools"));
 const TrainerVideos = dynamic(() => import("../../src/components/portal/TrainerVideos"));
 const CoachCheckinReply = dynamic(() => import("../../src/components/portal/CoachCheckinReply"));
@@ -54,7 +57,7 @@ type CheckIn = {
   createdAt: string;
 };
 
-type Tab = "clients" | "insights" | "messages" | "programs" | "meals" | "files" | "videos" | "tools" | "profile";
+type Tab = "queue" | "clients" | "insights" | "messages" | "programs" | "meals" | "files" | "videos" | "tools" | "profile";
 
 function fmt(d?: string | null) {
   if (!d) return "—";
@@ -70,7 +73,7 @@ export default function TrainersPage() {
   const [authorized, setAuthorized] = useState(false);
   const [meId, setMeId] = useState("");
   const [profileCompleted, setProfileCompleted] = useState(true);
-  const [tab, setTab] = useState<Tab>("clients");
+  const [tab, setTab] = useState<Tab>("queue");
 
   const [clients, setClients] = useState<Client[]>([]);
   const [selected, setSelected] = useState<Client | null>(null);
@@ -292,6 +295,7 @@ export default function TrainersPage() {
   }
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
+    { id: "queue", label: "Action Queue", badge: unread + unseenCheckins },
     { id: "clients", label: "Clients", badge: unseenCheckins },
     { id: "insights", label: "Insights" },
     { id: "messages", label: "Messages", badge: unread },
@@ -348,6 +352,16 @@ export default function TrainersPage() {
               </div>
 
               {/* CLIENTS TAB */}
+              {tab === "queue" && meId && (
+                <TrainerActionQueue
+                  meId={meId}
+                  onOpenClient={(id) => {
+                    const client = clients.find((item) => item.id === id);
+                    if (client) { setTab("clients"); openClient(client); }
+                  }}
+                />
+              )}
+
               {tab === "clients" && (
                 <div className="grid md:grid-cols-[320px_1fr] gap-8">
                   <div className="border border-bone/15 bg-ink/20">

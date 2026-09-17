@@ -2,21 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Home, Dumbbell, Apple, MessageSquare, ClipboardCheck, Trophy } from "lucide-react";
+import { Home, Dumbbell, Apple, MessageSquare, ClipboardCheck, MoreHorizontal, Trophy, CalendarDays, UserRound, FileText } from "lucide-react";
 
 const TABS = [
   { href: "/clients", label: "Home", Icon: Home, key: "home", match: (p: string) => p === "/clients" },
-  { href: "/clients/workout-log", label: "Workout", Icon: Dumbbell, key: "workout", match: (p: string) => p.startsWith("/clients/workout-log") },
+  { href: "/clients/workout-log", label: "Train", Icon: Dumbbell, key: "workout", match: (p: string) => p.startsWith("/clients/workout-log") },
   { href: "/clients/nutrition", label: "Nutrition", Icon: Apple, key: "nutrition", match: (p: string) => p.startsWith("/clients/nutrition") },
-  { href: "/quests", label: "Quests", Icon: Trophy, key: "quests", match: (p: string) => p.startsWith("/quests") },
   { href: "/forum", label: "Forum", Icon: MessageSquare, key: "forum", match: (p: string) => p.startsWith("/forum") },
   { href: "/clients/check-in", label: "Check-In", Icon: ClipboardCheck, key: "checkin", match: (p: string) => p.startsWith("/clients/check-in") },
+];
+
+const MORE_ITEMS = [
+  { href: "/clients/progress", label: "Progress", Icon: Trophy },
+  { href: "/clients/book", label: "Book a session", Icon: CalendarDays },
+  { href: "/clients/my-programs", label: "My programs", Icon: FileText },
+  { href: "/quests", label: "Quests & rewards", Icon: Trophy },
+  { href: "/clients/about", label: "About me", Icon: UserRound },
+  { href: "/", label: "Main site", Icon: Home },
 ];
 
 export default function PortalTabBar() {
   const pathname = usePathname() || "";
   const [unread, setUnread] = useState(0);
   const [showHint, setShowHint] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Reserve space at the bottom on mobile so content isn't hidden behind the
   // fixed bar. Class is removed on unmount (i.e. when leaving the portal).
@@ -153,8 +162,38 @@ export default function PortalTabBar() {
               </a>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            className={"flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-2 transition-colors " +
+              (moreOpen ? "text-electric" : "text-bone/55 hover:text-bone")}
+            aria-label="More portal destinations"
+            aria-expanded={moreOpen}
+          >
+            <MoreHorizontal className="h-5 w-5" strokeWidth={moreOpen ? 2.4 : 1.8} />
+            <span className="font-display uppercase tracking-wider text-[9px] leading-none">More</span>
+          </button>
         </div>
       </nav>
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0 z-[60] flex items-end bg-black/60" role="dialog" aria-modal="true" aria-label="More portal destinations" onClick={() => setMoreOpen(false)}>
+          <div className="w-full rounded-t-2xl border-t border-electric/50 bg-ink px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-bone/20" />
+            <div className="flex items-center justify-between gap-4">
+              <p className="font-display uppercase tracking-[0.18em] text-sm text-electric">More in your portal</p>
+              <button type="button" onClick={() => setMoreOpen(false)} className="text-bone/60 hover:text-electric" aria-label="Close more destinations">✕</button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {MORE_ITEMS.map(({ href, label, Icon }) => (
+                <a key={href} href={href} onClick={() => setMoreOpen(false)} className="flex min-h-14 items-center gap-3 border border-bone/15 px-3 py-3 text-bone/80 transition-colors hover:border-electric hover:text-electric">
+                  <Icon className="h-4 w-4 text-electric" />
+                  <span className="font-display uppercase text-[11px] tracking-wider">{label}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

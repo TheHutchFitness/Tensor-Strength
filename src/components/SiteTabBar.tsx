@@ -6,11 +6,9 @@ import {
   Home,
   FileText,
   Users,
-  Calculator,
-  Tag,
   LogIn,
   LayoutDashboard,
-  Trophy,
+  MessageSquare,
   UserRound,
 } from "lucide-react";
 import { fetchCurrentUser } from "../lib/currentUser";
@@ -25,24 +23,24 @@ type Tab = {
 // Signed-out visitors: focus on discovering the product + signing in.
 const GUEST_TABS: Tab[] = [
   { href: "/", label: "Home", Icon: Home, match: (p) => p === "/" },
-  { href: "/programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/programs") },
-  { href: "/free-tools", label: "Tools", Icon: Calculator, match: (p) => p.startsWith("/free-tools") },
-  { href: "/meet-the-team", label: "Team", Icon: Users, match: (p) => p.startsWith("/meet-the-team") },
+  { href: "/programs", label: "Training", Icon: FileText, match: (p) => p.startsWith("/programs") || p.startsWith("/free-tools") },
+  { href: "/apply", label: "Coaching", Icon: Users, match: (p) => p.startsWith("/apply") || p.startsWith("/meet-the-team") },
+  { href: "/forum", label: "Community", Icon: MessageSquare, match: (p) => p.startsWith("/forum") },
   { href: "/login", label: "Sign In", Icon: LogIn, match: (p) => p.startsWith("/login") },
 ];
 
 // Signed-in members: fast access to the things they actually use.
 const MEMBER_TABS: Tab[] = [
-  { href: "/clients", label: "Portal", Icon: LayoutDashboard, match: (p) => p.startsWith("/clients") },
-  { href: "/quests", label: "Quests", Icon: Trophy, match: (p) => p.startsWith("/quests") },
-  { href: "/clients/my-programs", label: "Programs", Icon: FileText, match: (p) => p.startsWith("/clients/my-programs") || p.startsWith("/programs") },
-  { href: "/free-tools", label: "Tools", Icon: Calculator, match: (p) => p.startsWith("/free-tools") },
+  { href: "/", label: "Home", Icon: Home, match: (p) => p === "/" },
+  { href: "/clients", label: "Portal", Icon: LayoutDashboard, match: (p) => p.startsWith("/clients") || p.startsWith("/quests") },
+  { href: "/programs", label: "Training", Icon: FileText, match: (p) => p.startsWith("/programs") || p.startsWith("/free-tools") },
+  { href: "/forum", label: "Community", Icon: MessageSquare, match: (p) => p.startsWith("/forum") },
   { href: "/account", label: "Account", Icon: UserRound, match: (p) => p.startsWith("/account") },
 ];
 
 // A mobile-only bottom tab bar. It adapts to whether the visitor is signed in
-// so members get member destinations (Portal, Forum, Account) and visitors get
-// discovery + Sign In — instead of one confusing shared set.
+// so members get their portal and community while visitors get the same core
+// public information architecture they see in the desktop header.
 export default function SiteTabBar() {
   const pathname = usePathname() || "";
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
