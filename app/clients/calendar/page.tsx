@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import PortalHeader from "../../../src/components/portal/PortalHeader";
 import { hutchTouchSessions, type HutchTouchSessionId } from "../../../src/data/hutchTouchProgram";
+import { parseWorkoutDate } from "../../../src/lib/workoutMetrics";
 
 const HUTCH_ORDER: HutchTouchSessionId[] = ["push", "lower-pull", "upper-pull", "legs"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -20,27 +21,39 @@ function startOfWeek(d: Date) {
 
 export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [workouts, setWorkouts] = useState<any[]>([]);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week
 
-  useEffect(() => {
-    (async () => {
+  async function loadCalendar() {
+    setLoading(true);
+    setLoadError("");
+    try {
       const me = await fetch("/api/auth/me");
       if (!me.ok) { window.location.href = "/login?from=/clients/calendar"; return; }
       const { user } = await me.json();
       if (!user.portalAccess) { window.location.href = "/clients"; return; }
-      const d = await fetch("/api/client/tracker").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const tracker = await fetch("/api/client/tracker");
+      if (!tracker.ok) throw new Error("Could not load workout history");
+      const d = await tracker.json();
       setWorkouts(d?.workouts || []);
+    } catch {
+      setLoadError("Your training calendar could not be loaded. Check your connection and try again.");
+    } finally {
       setLoading(false);
-    })();
+    }
+  }
+
+  useEffect(() => {
+    void loadCalendar();
   }, []);
 
   // Bucket workouts by day (YYYY-MM-DD)
   const byDay = useMemo(() => {
     const m: Record<string, { title: string }[]> = {};
     for (const w of workouts) {
-      const t = new Date(w.date);
-      if (isNaN(t.getTime())) continue;
+      const t = parseWorkoutDate(w.date);
+      if (!t) continue;
       const key = ymd(t);
       (m[key] = m[key] || []).push({ title: w.title || "Workout" });
     }
@@ -48,14 +61,17 @@ export default function CalendarPage() {
   }, [workouts]);
 
   // Next-up rotation suggestion
-  const nextTitle = useMemo(() => {
+  const nextSession = useMemo(() => {
     let lastId: HutchTouchSessionId | null = null;
     for (const w of workouts) {
       const found = hutchTouchSessions.find((s) => (w.title || "").startsWith(`The Hutch Touch — ${s.title}`));
       if (found) { lastId = found.id; break; }
     }
     const nextId = lastId ? HUTCH_ORDER[(HUTCH_ORDER.indexOf(lastId) + 1) % HUTCH_ORDER.length] : "push";
-    return hutchTouchSessions.find((s) => s.id === nextId)?.title || "Upper Body Push";
+    return {
+      id: nextId,
+      title: hutchTouchSessions.find((s) => s.id === nextId)?.title || "Upper Body Push",
+    };
   }, [workouts]);
 
   const weekStart = startOfWeek(new Date());
@@ -84,6 +100,11 @@ export default function CalendarPage() {
 
         {loading ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">Loading…</p>
+        ) : loadError ? (
+          <div className="mt-8 border border-bone/20 bg-ink/30 p-6">
+            <p className="text-sm text-bone/80">{loadError}</p>
+            <button onClick={() => void loadCalendar()} className="mt-4 bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors">Retry</button>
+          </div>
         ) : (
           <>
             <div className="mt-8 flex items-center justify-between">
@@ -115,7 +136,7 @@ export default function CalendarPage() {
                           {done.length > 2 && <p className="text-[10px] text-bone/50">+{done.length - 2} more</p>}
                         </div>
                       ) : isToday ? (
-                        <p className="text-[10px] text-electric leading-tight">Next: {nextTitle}</p>
+                        <p className="text-[10px] text-electric leading-tight">Next: {nextSession.title}</p>
                       ) : (
                         <span className="text-[10px] text-bone/30">—</span>
                       )}
@@ -128,9 +149,9 @@ export default function CalendarPage() {
             <div className="mt-8 border-2 border-electric/40 bg-electric/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-bone/50">Next up</p>
-                <p className="font-display uppercase tracking-wider text-bone mt-1">{nextTitle}</p>
+                <p className="font-display uppercase tracking-wider text-bone mt-1">{nextSession.title}</p>
               </div>
-              <a href="/clients/workout-log" className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap">Open tracker →</a>
+              <a href={`/clients/workout-log?session=${encodeURIComponent(nextSession.id)}`} className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap">Open next workout →</a>
             </div>
           </>
         )}

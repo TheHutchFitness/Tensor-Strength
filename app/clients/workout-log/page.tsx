@@ -12,29 +12,38 @@ import HutchTouch from "../../../src/components/HutchTouch";
 type Tab = "tracker" | "exercises" | "warmups" | "extras" | "hutch" | "build";
 
 export default function WorkoutLogPage() {
+  const [userId, setUserId] = useState("");
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [isTrainer, setIsTrainer] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [accessType, setAccessType] = useState("");
+  const [exerciseSearch, setExerciseSearch] = useState("");
   const [tab, setTab] = useState<Tab>("tracker");
 
   useEffect(() => {
     (async () => {
       const me = await fetch("/api/auth/me");
       if (!me.ok) {
-        window.location.href = "/login?from=/clients/workout-log";
+        window.location.href = `/login?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
         return;
       }
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "exercises") setTab("exercises");
+      setExerciseSearch(params.get("search") || "");
       const { user } = await me.json();
       if (!user.portalAccess && !user.isTrainer) {
         window.location.href = "/clients";
         return;
       }
-      setIsTrainer(!!user.isTrainer);
+      setUserId(user.id);
+      setAccessType(user.accessType || "");
+      setIsTrainer(!!user.isTrainer || user.role === "admin");
       setIsAdmin(user.role === "admin");
       setAuthorized(true);
       setLoading(false);
-    })();
+    })().catch(() => { setLoadError(true); setLoading(false); });
   }, []);
 
   const tabs: { id: Tab; label: string }[] = [
@@ -50,7 +59,7 @@ export default function WorkoutLogPage() {
     <main className="text-bone min-h-screen">
       <PortalHeader />
 
-      <div className="mx-auto max-w-6xl px-6 py-10 md:py-14">
+      <div className="ts-mobile-page mx-auto max-w-6xl px-6 py-8 sm:py-10 md:py-14">
         <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-4">
           Client Tools
         </p>
@@ -62,19 +71,20 @@ export default function WorkoutLogPage() {
           one place. Everything you log syncs to your account, so it&apos;s there on any device.
         </p>
 
-        {loading || !authorized ? (
+        {loadError ? (<div role="alert" className="mt-8 border border-rose-400/40 p-5">Could not load your account.
+          <button onClick={() => window.location.reload()} className="ml-3 text-electric underline">Try again</button></div>) : loading || !authorized ? (
           <p className="mt-12 font-display uppercase tracking-wider text-bone/50">
             Loading…
           </p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2 mt-8 mb-6 border-b border-bone/15 pb-2">
+            <div className="ts-mobile-tabs mt-7 sm:mt-8 mb-5 sm:mb-6 border-b border-bone/15">
               {tabs.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
                   className={
-                    "px-5 py-3 font-display uppercase tracking-wider text-sm transition-colors " +
+                    "px-4 sm:px-5 py-3 font-display uppercase tracking-wider text-xs sm:text-sm transition-colors " +
                     (tab === t.id
                       ? "bg-electric text-ink"
                       : "text-bone/60 hover:text-electric border border-transparent hover:border-bone/20")
@@ -103,9 +113,9 @@ export default function WorkoutLogPage() {
             ) : tab === "hutch" ? (
               <HutchTouch mode="portal" isAdmin={isAdmin} />
             ) : (
-              <div className="bg-ink/20 border border-bone/10 p-6 md:p-10">
-                {tab === "tracker" && <WorkoutLog />}
-                {tab === "exercises" && <ExerciseLibrary />}
+              <div className="bg-ink/20 border border-bone/10 p-3 sm:p-6 md:p-10">
+                {tab === "tracker" && <WorkoutLog userId={userId} accessType={accessType} />}
+                {tab === "exercises" && <ExerciseLibrary initialQuery={exerciseSearch} />}
                 {tab === "warmups" && <WarmupLibrary />}
                 {tab === "extras" && <ClientExtras />}
               </div>

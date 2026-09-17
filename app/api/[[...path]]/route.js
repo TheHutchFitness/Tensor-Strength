@@ -301,6 +301,22 @@ async function pushNotification(db, { recipientId, actorId, actorName, type, pos
   }).catch(() => {})
 }
 
+function forumAuthor(user) {
+  const profile = user?.forumProfile || {}
+  return {
+    avatar: typeof profile.avatar === 'string' && profile.avatar ? profile.avatar : '💪',
+    flair: user?.isTrainer || user?.role === 'admin' ? 'Coach' : (typeof profile.flair === 'string' ? profile.flair : ''),
+  }
+}
+
+async function withForumAuthors(db, records) {
+  const userIds = [...new Set(records.map((record) => record.userId).filter(Boolean))]
+  if (!userIds.length) return records
+  const users = await db.collection('users').find({ id: { $in: userIds } }, { projection: { id: 1, forumProfile: 1, isTrainer: 1, role: 1 } }).toArray()
+  const byId = new Map(users.map((user) => [user.id, user]))
+  return records.map((record) => ({ ...record, author: forumAuthor(byId.get(record.userId)) }))
+}
+
 // Scan free text for @mentions of known usernames (which may contain spaces) and
 // notify each mentioned member. Matching is case-insensitive and exact on the
 // stored username. Returns nothing; best-effort.
@@ -506,6 +522,12 @@ async function ensureIndexes(db) {
         ],
       },
       {
+        collection: 'admin_audit_log',
+        indexes: [
+          { key: { createdAt: -1 }, name: 'createdAt_desc' },
+        ],
+      },
+      {
         collection: 'demo_analytics',
         indexes: [
           { key: { tool: 1 }, name: 'tool_1' },
@@ -569,6 +591,25 @@ function publicUser(u) {
     ...rest
   } = u
   return rest
+}
+
+// Keep an operator-facing record of consequential controls without ever
+// retaining credentials or other sensitive request bodies.
+async function writeAdminAudit(db, admin, action, target, detail = {}) {
+  try {
+    await db.collection('admin_audit_log').insertOne({
+      id: uuidv4(),
+      adminId: admin.id,
+      adminName: admin.username || 'Admin',
+      action: String(action || '').slice(0, 120),
+      target: String(target || '').slice(0, 160),
+      detail,
+      createdAt: new Date(),
+    })
+  } catch (e) {
+    // An audit failure must not make a legitimate admin action impossible.
+    console.error('Admin audit write failed:', e?.message || e)
+  }
 }
 
 function slugify(s) {
@@ -652,7 +693,7 @@ async function getCurrentUser(request, db) {
   const payload = await verifyToken(token)
   if (!payload?.id) return null
   const u = await db.collection('users').findOne({ id: payload.id })
-  return u || null
+  return u && !u.disabledAt ? u : null
 }
 
 function setAuthCookie(response, token) {
@@ -1042,6 +1083,13 @@ async function handleRoute(request, { params }) {
       if (!hasJwtSecret()) return authConfigErrorResponse()
       const rl = rateLimit(request, 'register', 20, 60_000)
       if (!rl.ok) return tooMany(rl.retryAfter)
+      const signupSettings = await db.collection('site_content').findOne({ key: 'signup_settings' })
+      if (signupSettings?.registrationOpen === false) {
+        return handleCORS(NextResponse.json(
+          { error: signupSettings.message || 'Registration is currently by invitation only.' },
+          { status: 403 }
+        ))
+      }
       const body = await request.json()
       const username = (body.username || '').trim().toLowerCase()
       const email = (body.email || '').trim().toLowerCase()
@@ -1096,6 +1144,9 @@ async function handleRoute(request, { params }) {
           { status: 401 }
         ))
       }
+      if (user.disabledAt) {
+        return handleCORS(NextResponse.json({ error: 'This account is currently unavailable. Please contact Tensor Strength.' }, { status: 403 }))
+      }
       const token = await signToken({ id: user.id, role: user.role })
       const res = NextResponse.json({ user: publicUser(user) })
       return handleCORS(setAuthCookie(res, token))
@@ -1133,7 +1184,14 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Google did not return an email.' }, { status: 502 }))
       }
       let user = await db.collection('users').findOne({ email })
+      const signupSettings = await db.collection('site_content').findOne({ key: 'signup_settings' })
       if (!user) {
+        if (signupSettings?.registrationOpen === false) {
+          return handleCORS(NextResponse.json(
+            { error: signupSettings.message || 'Registration is currently by invitation only.' },
+            { status: 403 }
+          ))
+        }
         // Derive a unique, valid username from the Google name / email.
         let base = slugify(name || email.split('@')[0]).replace(/-/g, '')
         if (base.length < 3) base = 'user' + base
@@ -1157,6 +1215,9 @@ async function handleRoute(request, { params }) {
         }
         await db.collection('users').insertOne(user)
       } else {
+        if (user.disabledAt) {
+          return handleCORS(NextResponse.json({ error: 'This account is currently unavailable. Please contact Tensor Strength.' }, { status: 403 }))
+        }
         // An account already exists for this Google-verified email. If it was a
         // local (password) account that we never verified, the password could
         // have been set by an attacker who pre-registered the victim's email
@@ -1525,6 +1586,11 @@ async function handleRoute(request, { params }) {
           )
         }
       }
+      // Suspending preserves a member's records while immediately invalidating
+      // their current and future sessions (getCurrentUser fails closed above).
+      if (typeof body.suspended === 'boolean') {
+        update.disabledAt = body.suspended ? new Date() : null
+      }
       // Assign (or clear) the trainer this member is coached by.
       if ('assignedTrainerId' in body) {
         const tid = body.assignedTrainerId || null
@@ -1545,6 +1611,13 @@ async function handleRoute(request, { params }) {
       }
       await db.collection('users').updateOne({ id: body.id }, { $set: update })
       const updated = await db.collection('users').findOne({ id: body.id })
+      const changes = []
+      if (typeof body.portalAccess === 'boolean') changes.push(body.portalAccess ? 'granted portal access' : 'revoked portal access')
+      if (typeof body.isTrainer === 'boolean') changes.push(body.isTrainer ? 'made trainer' : 'removed trainer role')
+      if (typeof body.suspended === 'boolean') changes.push(body.suspended ? 'suspended account' : 'restored account')
+      if ('assignedTrainerId' in body) changes.push(body.assignedTrainerId ? 'assigned trainer' : 'cleared trainer')
+      if (typeof body.newPassword === 'string' && body.newPassword.length) changes.push('reset password')
+      if (changes.length) await writeAdminAudit(db, admin, changes.join(', '), updated?.username || body.id)
       return handleCORS(NextResponse.json({ user: publicUser(updated) }))
     }
 
@@ -1563,6 +1636,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Cannot delete an admin account.' }, { status: 400 }))
       }
       await db.collection('users').deleteOne({ id: body.id })
+      await writeAdminAudit(db, admin, 'deleted account record', target?.username || body.id)
       return handleCORS(NextResponse.json({ ok: true }))
     }
 
@@ -2052,6 +2126,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Invalid request' }, { status: 400 }))
       }
       await db.collection('applications').updateOne({ id }, { $set: { status } })
+      await writeAdminAudit(db, admin, `marked coaching application ${status}`, id)
       return handleCORS(NextResponse.json({ ok: true }))
     }
 
@@ -2428,6 +2503,79 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ clients: out }))
     }
 
+    // ---- Coach action queue: messages, form reviews, check-ins and lapses ----
+    // This is deliberately an in-app queue. It does not promise an email/push
+    // notification or a response-time SLA that the coach has not configured.
+    if (route === '/trainer/action-queue' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
+      const clients = await db.collection('users').find({ assignedTrainerId: user.id }).limit(500).toArray()
+      const now = Date.now()
+      const DAY = 86400000
+      const actions = []
+      for (const client of clients) {
+        const [unreadMessages, checkins, tracker] = await Promise.all([
+          db.collection('messages').find({ trainerId: user.id, clientId: client.id, senderId: { $ne: user.id }, read: false }).sort({ createdAt: -1 }).limit(25).toArray(),
+          db.collection('checkins').find({ userId: client.id }).sort({ createdAt: -1 }).limit(30).toArray(),
+          db.collection('tracker').findOne({ userId: client.id }),
+        ])
+        for (const message of unreadMessages) {
+          actions.push({
+            id: `message:${message.id}`,
+            type: 'message',
+            priority: message.context?.kind === 'form_review' ? 1 : 2,
+            clientId: client.id,
+            username: client.username,
+            createdAt: message.createdAt,
+            title: message.context?.kind === 'form_review' ? 'Form review message' : 'New client message',
+            detail: message.context?.title || message.body || (message.mediaType ? 'Attachment' : 'New message'),
+            context: message.context || null,
+          })
+        }
+        for (const checkin of checkins) {
+          const replies = Array.isArray(checkin.replies) ? checkin.replies : []
+          const hasCoachReply = replies.some((reply) => reply.authorRole === 'coach') || checkin.hasCoachReply
+          const memberReply = replies.length > 0 && replies[replies.length - 1]?.authorRole === 'member'
+          if (!hasCoachReply || memberReply || checkin.seenByTrainer === false) {
+            actions.push({
+              id: `checkin:${checkin.id}`,
+              type: checkin.video && !hasCoachReply ? 'form_review' : 'checkin',
+              priority: checkin.video && !hasCoachReply ? 0 : 1,
+              clientId: client.id,
+              username: client.username,
+              createdAt: checkin.createdAt,
+              title: checkin.video && !hasCoachReply ? 'Form review waiting' : 'Check-in needs a reply',
+              detail: checkin.week || checkin.struggles || checkin.wins || 'Client check-in',
+              checkinId: checkin.id,
+              hasVideo: !!checkin.video,
+            })
+          }
+        }
+        const workouts = Array.isArray(tracker?.workouts) ? tracker.workouts : []
+        const lastWorkoutAt = workouts.reduce((latest, workout) => {
+          const ts = new Date(workout.date || 0).getTime()
+          return Number.isFinite(ts) && ts > latest ? ts : latest
+        }, 0)
+        const daysSinceWorkout = lastWorkoutAt ? Math.floor((now - lastWorkoutAt) / DAY) : null
+        if (daysSinceWorkout === null || daysSinceWorkout >= 7) {
+          actions.push({
+            id: `nudge:${client.id}`,
+            type: 'nudge',
+            priority: 3,
+            clientId: client.id,
+            username: client.username,
+            createdAt: lastWorkoutAt ? new Date(lastWorkoutAt) : null,
+            title: 'Training follow-up',
+            detail: daysSinceWorkout === null ? 'No workout logged yet' : `No workout logged in ${daysSinceWorkout} days`,
+          })
+        }
+      }
+      actions.sort((a, b) => a.priority - b.priority || new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      return handleCORS(NextResponse.json({ actions: actions.slice(0, 150) }))
+    }
+
     // ---- Coach Insights: adherence scorecard, needs-attention flags, RPE/readiness ----
     if (route === '/trainer/insights' && method === 'GET') {
       const user = await getCurrentUser(request, db)
@@ -2575,9 +2723,11 @@ async function handleRoute(request, { params }) {
         const count = users.filter((u) => { const t = new Date(u.createdAt || 0).getTime(); return t >= start && t < end }).length
         weeks.push({ label: `${i === 0 ? 'This wk' : i + 'w ago'}`, count })
       }
-      const [forumPosts, checkins] = await Promise.all([
+      const [forumPosts, checkins, pendingApplications, unseenCheckins] = await Promise.all([
         db.collection('forum_posts').countDocuments({}),
         db.collection('checkins').countDocuments({}),
+        db.collection('applications').countDocuments({ status: 'new' }),
+        db.collection('checkins').countDocuments({ seenByTrainer: { $ne: true } }),
       ])
       return handleCORS(NextResponse.json({
         totalMembers: members.length,
@@ -2586,8 +2736,57 @@ async function handleRoute(request, { params }) {
         newLast30: users.filter((u) => new Date(u.createdAt || 0).getTime() >= d30).length,
         activeSubscribers: users.filter((u) => u.stripeSubscriptionId).length,
         forumPosts, checkins,
+        pendingApplications,
+        unseenCheckins,
+        unassignedCoachingClients: members.filter((u) =>
+          u.portalAccess && !u.isTrainer && ['remote_coaching', 'in_person'].includes(u.accessType) && !u.assignedTrainerId
+        ).length,
         signupsByWeek: weeks,
       }))
+    }
+
+    // ---- Member registration controls ----
+    if (route === '/signup-settings' && method === 'GET') {
+      const doc = await db.collection('site_content').findOne({ key: 'signup_settings' })
+      return handleCORS(NextResponse.json({
+        registrationOpen: doc?.registrationOpen !== false,
+        message: typeof doc?.message === 'string' ? doc.message : '',
+      }))
+    }
+    if (route === '/admin/signup-settings' && method === 'GET') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const doc = await db.collection('site_content').findOne({ key: 'signup_settings' })
+      return handleCORS(NextResponse.json({
+        registrationOpen: doc?.registrationOpen !== false,
+        message: typeof doc?.message === 'string' ? doc.message : '',
+        updatedAt: doc?.updatedAt || null,
+      }))
+    }
+    if (route === '/admin/signup-settings' && method === 'PUT') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json().catch(() => ({}))
+      const registrationOpen = body.registrationOpen !== false
+      const message = String(body.message || '').trim().slice(0, 240)
+      await db.collection('site_content').updateOne(
+        { key: 'signup_settings' },
+        { $set: { key: 'signup_settings', registrationOpen, message, updatedAt: new Date() } },
+        { upsert: true }
+      )
+      await writeAdminAudit(db, admin, registrationOpen ? 'opened member registration' : 'closed member registration', 'site signup')
+      return handleCORS(NextResponse.json({ ok: true, registrationOpen, message }))
+    }
+
+    if (route === '/admin/audit' && method === 'GET') {
+      const admin = await getCurrentUser(request, db)
+      if (!admin || admin.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const events = await db.collection('admin_audit_log')
+        .find({}, { projection: { _id: 0 } })
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .toArray()
+      return handleCORS(NextResponse.json({ events }))
     }
 
     // ---- Admin: revenue / subscription breakdown ----
@@ -2626,6 +2825,7 @@ async function handleRoute(request, { params }) {
         { $set: { key: 'announcement', message, enabled, updatedAt: new Date() } },
         { upsert: true }
       )
+      await writeAdminAudit(db, user, enabled ? 'updated site announcement' : 'hid site announcement', 'site announcement')
       return handleCORS(NextResponse.json({ ok: true, enabled, message }))
     }
 
@@ -2655,6 +2855,7 @@ async function handleRoute(request, { params }) {
         { $set: { key: 'trial_settings', enabled, days, updatedAt: new Date() } },
         { upsert: true }
       )
+      await writeAdminAudit(db, user, enabled ? `enabled ${days}-day free trial` : 'disabled free trial', 'remote coaching trial')
       return handleCORS(NextResponse.json({ ok: true, enabled, days }))
     }
     // Lightweight info for the client portal: is a free week available to THIS user?
@@ -2688,6 +2889,7 @@ async function handleRoute(request, { params }) {
         { id: { $in: clientIds } },
         { $set: { assignedTrainerId: trainerId || null } }
       )
+      await writeAdminAudit(db, user, 'bulk assigned trainer', `${res.modifiedCount} member${res.modifiedCount === 1 ? '' : 's'}`)
       return handleCORS(NextResponse.json({ ok: true, updated: res.modifiedCount }))
     }
 
@@ -2738,7 +2940,17 @@ async function handleRoute(request, { params }) {
         body: text,
         mediaUrl: body.mediaUrl || null,
         mediaType: body.mediaType || null,
+        context: (() => {
+          const raw = body.context && typeof body.context === 'object' ? body.context : null
+          if (!raw) return null
+          const kinds = ['workout', 'form_review', 'checkin', 'general']
+          const kind = kinds.includes(raw.kind) ? raw.kind : 'general'
+          const title = typeof raw.title === 'string' ? raw.title.trim().slice(0, 160) : ''
+          const details = typeof raw.details === 'string' ? raw.details.trim().slice(0, 500) : ''
+          return title ? { kind, title, ...(details ? { details } : {}) } : null
+        })(),
         read: false,
+        readAt: null,
         createdAt: new Date(),
       }
       await db.collection('messages').insertOne(msg)
@@ -2768,7 +2980,7 @@ async function handleRoute(request, { params }) {
       // Mark messages addressed TO the current user as read.
       await db.collection('messages').updateMany(
         { trainerId, clientId, senderId: { $ne: user.id }, read: false },
-        { $set: { read: true } }
+        { $set: { read: true, readAt: new Date() } }
       )
       // Reflect that read state in the response we just fetched (avoid stale flags).
       return handleCORS(NextResponse.json({
@@ -4281,7 +4493,8 @@ async function handleRoute(request, { params }) {
       const category = request.nextUrl.searchParams.get('category')
       const query = category && category !== 'all' ? { category } : {}
       const posts = await db.collection('forum_posts').find(query).sort({ createdAt: -1 }).limit(200).toArray()
-      return handleCORS(NextResponse.json({ posts: posts.map(({ _id, ...p }) => p) }))
+      const clean = posts.map(({ _id, ...p }) => p)
+      return handleCORS(NextResponse.json({ posts: await withForumAuthors(db, clean) }))
     }
 
     if (route === '/forum/posts' && method === 'POST') {
@@ -4328,6 +4541,79 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ post: clean }))
     }
 
+    // Members can follow a thread without turning a public discussion into a
+    // direct-message channel. Followers receive an in-app update on new replies.
+    if (route === '/forum/watch' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const watches = await db.collection('forum_watches').find({ userId: user.id }).limit(500).toArray()
+      return handleCORS(NextResponse.json({ postIds: watches.map((watch) => watch.postId) }))
+    }
+
+    if (route === '/forum/watch' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const postId = typeof body.postId === 'string' ? body.postId : ''
+      const post = await db.collection('forum_posts').findOne({ id: postId })
+      if (!post) return handleCORS(NextResponse.json({ error: 'Post not found' }, { status: 404 }))
+      const existing = await db.collection('forum_watches').findOne({ userId: user.id, postId })
+      if (existing) {
+        await db.collection('forum_watches').deleteOne({ userId: user.id, postId })
+        return handleCORS(NextResponse.json({ watching: false }))
+      }
+      await db.collection('forum_watches').insertOne({ id: uuidv4(), userId: user.id, postId, createdAt: new Date() })
+      return handleCORS(NextResponse.json({ watching: true }))
+    }
+
+    // Forum profile is deliberately separate from account/billing settings. It
+    // controls only the member's community identity and activity summary.
+    if (route === '/forum/profile' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const [posts, replies, bestAnswers] = await Promise.all([
+        db.collection('forum_posts').find({ userId: user.id }).sort({ createdAt: -1 }).limit(100).toArray(),
+        db.collection('forum_replies').find({ userId: user.id }).sort({ createdAt: -1 }).limit(100).toArray(),
+        db.collection('forum_posts').countDocuments({ bestAnswerId: { $in: (await db.collection('forum_replies').find({ userId: user.id }, { projection: { id: 1 } }).toArray()).map((reply) => reply.id) } }),
+      ])
+      const postKarma = posts.reduce((sum, post) => sum + (Array.isArray(post.likes) ? post.likes.length : 0), 0)
+      const reactionKarma = [...posts, ...replies].reduce((sum, item) => sum + Object.values(item.reactions || {}).reduce((n, users) => n + (Array.isArray(users) ? users.length : 0), 0), 0)
+      const replyPostIds = [...new Set(replies.map((reply) => reply.postId).filter(Boolean))]
+      const replyPosts = replyPostIds.length
+        ? await db.collection('forum_posts').find({ id: { $in: replyPostIds } }, { projection: { id: 1, title: 1 } }).toArray()
+        : []
+      const titleById = new Map(replyPosts.map((post) => [post.id, post.title]))
+      const profile = {
+        avatar: forumAuthor(user).avatar,
+        flair: forumAuthor(user).flair,
+        bio: typeof user.forumProfile?.bio === 'string' ? user.forumProfile.bio : '',
+      }
+      return handleCORS(NextResponse.json({
+        profile,
+        handle: user.username,
+        memberSince: user.createdAt || null,
+        stats: { posts: posts.length, replies: replies.length, bestAnswers, karma: postKarma + reactionKarma + bestAnswers * 5 },
+        recentPosts: posts.slice(0, 8).map(({ _id, id, title, category, replyCount, createdAt, bestAnswerId }) => ({ id, title, category, replyCount, createdAt, bestAnswerId: !!bestAnswerId })),
+        recentReplies: replies.slice(0, 8).map(({ _id, id, postId, body, createdAt }) => ({ id, postId, postTitle: titleById.get(postId) || 'Forum thread', body: String(body || '').slice(0, 180), createdAt })),
+      }))
+    }
+
+    if (route === '/forum/profile' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const body = await request.json()
+      const AVATARS = ['💪', '🏋️', '⚡', '🦾', '🔥', '🧠', '🐺', '🛡️']
+      const FLAIRS = ['', 'Strength Athlete', 'Powerlifter', 'General Fitness', 'New to Training', 'Nutrition Focus', 'Form Check Regular']
+      const requestedFlair = typeof body.flair === 'string' ? body.flair : ''
+      const profile = {
+        avatar: AVATARS.includes(body.avatar) ? body.avatar : forumAuthor(user).avatar,
+        flair: user.isTrainer || user.role === 'admin' ? 'Coach' : (FLAIRS.includes(requestedFlair) ? requestedFlair : ''),
+        bio: typeof body.bio === 'string' ? body.bio.trim().slice(0, 280) : '',
+      }
+      await db.collection('users').updateOne({ id: user.id }, { $set: { forumProfile: profile } })
+      return handleCORS(NextResponse.json({ ok: true, profile }))
+    }
+
     if (route === '/forum/thread' && method === 'GET') {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
@@ -4336,7 +4622,9 @@ async function handleRoute(request, { params }) {
       if (!post) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
       const replies = await db.collection('forum_replies').find({ postId: id }).sort({ createdAt: 1 }).toArray()
       const { _id, ...cleanPost } = post
-      return handleCORS(NextResponse.json({ post: cleanPost, replies: replies.map(({ _id, ...r }) => r) }))
+      const cleanReplies = replies.map(({ _id, ...r }) => r)
+      const [enrichedPost] = await withForumAuthors(db, [cleanPost])
+      return handleCORS(NextResponse.json({ post: enrichedPost, replies: await withForumAuthors(db, cleanReplies) }))
     }
 
     if (route === '/forum/replies' && method === 'POST') {
@@ -4372,6 +4660,23 @@ async function handleRoute(request, { params }) {
         replyId: reply.id,
         snippet: reply.body,
       })
+      // Followers other than the author and the person who just replied receive
+      // a clear thread-update notification. The post owner already receives the
+      // standard reply notification above, so they are excluded to avoid doubles.
+      const watchers = await db.collection('forum_watches').find({ postId: post.id }).limit(500).toArray()
+      for (const watcher of watchers) {
+        if (watcher.userId === post.userId || watcher.userId === user.id) continue
+        await pushNotification(db, {
+          recipientId: watcher.userId,
+          actorId: user.id,
+          actorName: user.username,
+          type: 'thread-update',
+          postId: post.id,
+          postTitle: post.title,
+          replyId: reply.id,
+          snippet: reply.body,
+        })
+      }
       await notifyMentions(db, { text: reply.body, actor: user, postId: post.id, postTitle: post.title, replyId: reply.id })
       const { _id, ...clean } = reply
       return handleCORS(NextResponse.json({ reply: clean }))
@@ -4502,6 +4807,7 @@ async function handleRoute(request, { params }) {
       const replies = await db.collection('forum_replies').find({ postId: body.id }).toArray()
       await db.collection('forum_posts').deleteOne({ id: body.id })
       await db.collection('forum_replies').deleteMany({ postId: body.id })
+      await db.collection('forum_watches').deleteMany({ postId: body.id })
       if (post.mediaUrl) await deleteUpload(db, post.mediaUrl)
       for (const r of replies) {
         if (r.mediaUrl) await deleteUpload(db, r.mediaUrl)

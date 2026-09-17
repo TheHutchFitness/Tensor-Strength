@@ -19,13 +19,13 @@ export default function Footer() {
             Navigate
           </p>
           {[
-            { href: "/#about", label: "About" },
-            { href: "/#professionals", label: "Professionals" },
-            { href: "/#library", label: "Library" },
-            { href: "/#programs", label: "Weekly Programs" },
-            { href: "/#tools", label: "Free Tools" },
-            { href: "/#pricing", label: "Pricing" },
-            { href: "/#contact", label: "Apply" },
+            { href: "/#membership-path", label: "Membership" },
+            { href: "/apply", label: "Coaching" },
+            { href: "/meet-the-team", label: "Meet the Team" },
+            { href: "/programs", label: "Programs" },
+            { href: "/free-tools", label: "Training Tools" },
+            { href: "/forum", label: "Community" },
+            { href: "/landing#fit-effect", label: "The Fit Effect" },
           ].map((l) => (
             <a key={l.href} href={l.href} className="hover:text-electric transition-colors">
               {l.label}
@@ -60,7 +60,7 @@ export default function Footer() {
             </a>
           ))}
           <a href="/clients" className="mt-2 text-bone/50 hover:text-electric transition-colors text-xs">
-            Client Portal →
+            Member Portal →
           </a>
         </div>
       </div>

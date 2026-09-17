@@ -1,8 +1,11 @@
 import Navbar from "../src/components/Navbar";
 import Announcement from "../src/components/Announcement";
+import Hero from "../src/components/Hero";
 import Content from "../src/components/Content";
 import Pricing from "../src/components/Pricing";
 import MarketingExtras from "../src/components/MarketingExtras";
+import HomePaths from "../src/components/HomePaths";
+import AchievableResults from "../src/components/AchievableResults";
 import Footer from "../src/components/Footer";
 import SiteTabBar from "../src/components/SiteTabBar";
 import MemberHub from "../src/components/MemberHub";
@@ -21,8 +24,11 @@ export default function Home() {
       <main>
         <MemberHub />
         <UnpaidOnly>
-          <Content />
+          <Hero />
+          <HomePaths />
+          <AchievableResults />
           <Pricing />
+          <Content />
           <MarketingExtras />
         </UnpaidOnly>
       </main>

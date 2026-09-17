@@ -22,7 +22,8 @@ export function middleware(request) {
     }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    url.searchParams.set('from', pathname)
+    // Preserve an intended deep link such as the next scheduled workout.
+    url.searchParams.set('from', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(url)
   }
 

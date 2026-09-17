@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type ATab = "analytics" | "revenue" | "announcement" | "trial" | "assign" | "export";
+type ATab = "analytics" | "revenue" | "announcement" | "access" | "trial" | "assign" | "export" | "audit";
 const card = "border border-bone/15 bg-ink/20 p-5";
 const label = "block text-[11px] uppercase tracking-wider text-bone/50 mb-1 font-display";
 const input = "w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none";
@@ -18,6 +18,11 @@ function Analytics() {
     ["New (30d)", d.newLast30], ["Subscribers", d.activeSubscribers], ["Forum posts", d.forumPosts], ["Check-ins", d.checkins],
   ];
   const max = Math.max(1, ...(d.signupsByWeek || []).map((w: any) => w.count));
+  const attention = [
+    { label: "New coaching applications", value: d.pendingApplications || 0, href: "#applications" },
+    { label: "Unseen client check-ins", value: d.unseenCheckins || 0, href: "/trainers" },
+    { label: "Coaching clients without a trainer", value: d.unassignedCoachingClients || 0, href: "#member-access" },
+  ].filter((item) => item.value > 0);
   return (
     <div className="grid gap-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -27,6 +32,19 @@ function Analytics() {
             <p className="text-[10px] uppercase tracking-wider text-bone/50">{k as string}</p>
           </div>
         ))}
+      </div>
+      <div className={card}>
+        <p className="font-display uppercase tracking-wider text-bone/60 text-xs mb-3">Needs attention</p>
+        {attention.length ? (
+          <div className="grid gap-2">
+            {attention.map((item) => (
+              <a key={item.label} href={item.href} className="flex items-center justify-between gap-4 border border-electric/25 bg-electric/5 px-4 py-3 text-sm text-bone hover:border-electric transition-colors">
+                <span>{item.label}</span>
+                <span className="font-display text-xl text-electric">{item.value} →</span>
+              </a>
+            ))}
+          </div>
+        ) : <p className="text-sm text-bone/60">Nothing is waiting for review right now.</p>}
       </div>
       <div className={card}>
         <p className="font-display uppercase tracking-wider text-bone/60 text-xs mb-4">Signups · last 8 weeks</p>
@@ -40,6 +58,65 @@ function Analytics() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AccessControls() {
+  const [registrationOpen, setRegistrationOpen] = useState(true);
+  const [message, setMessage] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [flash, setFlash] = useState("");
+  useEffect(() => {
+    fetch("/api/admin/signup-settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) { setRegistrationOpen(d.registrationOpen !== false); setMessage(d.message || ""); } setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+  async function save() {
+    setSaving(true);
+    const res = await fetch("/api/admin/signup-settings", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrationOpen, message }),
+    });
+    setSaving(false);
+    setFlash(res.ok ? "✓ Saved" : "Could not save");
+    if (res.ok) setTimeout(() => setFlash(""), 2500);
+  }
+  if (!loaded) return <p className="text-bone/50 font-display uppercase tracking-wider text-sm">Loading…</p>;
+  return (
+    <div className="grid gap-4 max-w-xl">
+      <p className="text-bone/60 text-sm leading-relaxed">
+        Control whether new members can create an account. Existing members can always sign in; closing registration makes the platform invite-only without disturbing active clients.
+      </p>
+      <label className="flex items-center gap-3 border border-bone/15 bg-ink/30 px-4 py-3 text-sm text-bone/80">
+        <input type="checkbox" checked={registrationOpen} onChange={(e) => setRegistrationOpen(e.target.checked)} />
+        <span><span className="font-display uppercase tracking-wider text-bone">Open member registration</span><span className="block text-xs text-bone/50 mt-1">{registrationOpen ? "Anyone can create an account." : "New sign-ups are paused; use this to keep the roster selective."}</span></span>
+      </label>
+      <div>
+        <label className={label}>Closed-registration message</label>
+        <input className={input} value={message} maxLength={240} onChange={(e) => setMessage(e.target.value)} placeholder="Registration is currently by invitation only. Apply for coaching to get started." />
+        <p className="mt-1 text-xs text-bone/40">Shown if someone attempts to register while sign-ups are closed.</p>
+      </div>
+      <div className="flex items-center gap-4"><button className={btn} onClick={save} disabled={saving}>{saving ? "Saving…" : "Save access settings"}</button>{flash && <span className="text-electric font-display uppercase tracking-wider text-xs">{flash}</span>}</div>
+    </div>
+  );
+}
+
+function AuditLog() {
+  const [events, setEvents] = useState<any[] | null>(null);
+  useEffect(() => { fetch("/api/admin/audit").then((r) => (r.ok ? r.json() : null)).then((d) => setEvents(d?.events || [])).catch(() => setEvents([])); }, []);
+  if (!events) return <p className="text-bone/50 font-display uppercase tracking-wider text-sm">Loading…</p>;
+  return (
+    <div className={card + " overflow-x-auto"}>
+      <p className="text-bone/60 text-sm mb-4">The last 100 account and access-control actions. Passwords and sensitive request data are never recorded.</p>
+      {events.length === 0 ? <p className="text-bone/50 text-sm">No admin actions recorded yet.</p> : (
+        <table className="w-full text-sm min-w-[620px]">
+          <thead><tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15"><th className="text-left py-2 pr-4">When</th><th className="text-left py-2 pr-4">Admin</th><th className="text-left py-2 pr-4">Action</th><th className="text-left py-2">Account / area</th></tr></thead>
+          <tbody>{events.map((event) => <tr key={event.id} className="border-b border-bone/10"><td className="py-3 pr-4 text-bone/50 text-xs">{event.createdAt ? new Date(event.createdAt).toLocaleString() : "—"}</td><td className="py-3 pr-4 text-bone/70">{event.adminName}</td><td className="py-3 pr-4 font-display uppercase tracking-wider text-xs text-electric">{event.action}</td><td className="py-3 text-bone">{event.target}</td></tr>)}</tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -150,8 +227,8 @@ function ExportCsv() {
     setBusy(true);
     const res = await fetch("/api/admin/users");
     const d = res.ok ? await res.json() : { users: [] };
-    const rows = [["username", "email", "role", "isTrainer", "portalAccess", "createdAt"]];
-    (d.users || []).forEach((u: any) => rows.push([u.username, u.email, u.role, u.isTrainer ? "yes" : "no", u.portalAccess ? "yes" : "no", u.createdAt || ""]));
+    const rows = [["username", "email", "role", "isTrainer", "portalAccess", "accountStatus", "createdAt"]];
+    (d.users || []).forEach((u: any) => rows.push([u.username, u.email, u.role, u.isTrainer ? "yes" : "no", u.portalAccess ? "yes" : "no", u.disabledAt ? "suspended" : "active", u.createdAt || ""]));
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
@@ -162,7 +239,7 @@ function ExportCsv() {
   }
   return (
     <div className="grid gap-4 max-w-md">
-      <p className="text-bone/60 text-sm">Download every member as a CSV (name, email, role, trainer flag, portal access, signup date).</p>
+      <p className="text-bone/60 text-sm">Download every member as a CSV (name, email, role, trainer flag, portal access, account status, signup date).</p>
       <button className={btn} onClick={run} disabled={busy}>{busy ? "Preparing…" : "Download members CSV"}</button>
     </div>
   );
@@ -231,15 +308,17 @@ export default function AdminTools() {
     { id: "analytics", label: "Analytics" },
     { id: "revenue", label: "Revenue & Coupons" },
     { id: "announcement", label: "Announcement" },
+    { id: "access", label: "Member Access" },
     { id: "trial", label: "Free Trial" },
     { id: "assign", label: "Bulk Assign" },
     { id: "export", label: "Export CSV" },
+    { id: "audit", label: "Audit Log" },
   ];
   return (
     <div>
       <div className="mb-6 border-l-2 border-electric/50 pl-4">
         <p className="font-display uppercase tracking-wider text-electric text-sm">Admin tools</p>
-        <p className="text-bone/60 text-sm mt-1">Analytics, revenue, site announcement, free trial, bulk assignment and exports.</p>
+        <p className="text-bone/60 text-sm mt-1">See what needs attention, control site-wide access, manage offers, and keep a traceable record of operational changes.</p>
       </div>
       <div className="flex flex-wrap gap-2 mb-6">
         {tabs.map((x) => (
@@ -249,9 +328,11 @@ export default function AdminTools() {
       {t === "analytics" && <Analytics />}
       {t === "revenue" && <Revenue />}
       {t === "announcement" && <Announcement />}
+      {t === "access" && <AccessControls />}
       {t === "trial" && <TrialSettings />}
       {t === "assign" && <BulkAssign />}
       {t === "export" && <ExportCsv />}
+      {t === "audit" && <AuditLog />}
     </div>
   );
 }

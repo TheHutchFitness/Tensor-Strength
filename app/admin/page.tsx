@@ -18,6 +18,7 @@ type User = {
   picture?: string;
   accessType?: string;
   subscriptionStatus?: string;
+  disabledAt?: string | null;
   createdAt: string;
 };
 
@@ -39,6 +40,8 @@ export default function AdminPage() {
   const [invitedId, setInvitedId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: "", percentOff: "100", duration: "once", durationInMonths: "3" });
   const [creating, setCreating] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberFilter, setMemberFilter] = useState<"all" | "active" | "suspended" | "portal" | "needs-trainer">("all");
 
   // Coaching video captions + order (editable)
   const [clipLabels, setClipLabels] = useState<Record<string, string>>({});
@@ -269,6 +272,20 @@ export default function AdminPage() {
     setBusyId(null);
   }
 
+  async function toggleSuspended(u: User) {
+    const action = u.disabledAt ? "restore" : "suspend";
+    if (!confirm(`${action === "suspend" ? "Suspend" : "Restore"} ${u.username}'s account? ${action === "suspend" ? "They will be signed out and cannot log back in until restored. This does not cancel any active billing." : "They can sign in again immediately."}`)) return;
+    setBusyId(u.id);
+    const res = await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, suspended: !u.disabledAt }),
+    });
+    if (!res.ok) alert("Could not update this account.");
+    await loadUsers();
+    setBusyId(null);
+  }
+
   async function assignTrainer(u: User, trainerId: string) {
     setBusyId(u.id);
     await fetch("/api/admin/users", {
@@ -297,12 +314,22 @@ export default function AdminPage() {
   const trainers = members.filter((u) => u.isTrainer);
   const trainerName = (id?: string | null) =>
     trainers.find((t) => t.id === id)?.username || "";
+  const visibleMembers = members.filter((u) => {
+    const needle = memberSearch.trim().toLowerCase();
+    const matchesSearch = !needle || `${u.username} ${u.email}`.toLowerCase().includes(needle);
+    if (!matchesSearch) return false;
+    if (memberFilter === "active") return !u.disabledAt;
+    if (memberFilter === "suspended") return !!u.disabledAt;
+    if (memberFilter === "portal") return u.portalAccess;
+    if (memberFilter === "needs-trainer") return u.portalAccess && !u.isTrainer && ["remote_coaching", "in_person"].includes(u.accessType || "") && !u.assignedTrainerId;
+    return true;
+  });
 
   return (
     <>
       <Navbar />
       <main className="text-bone min-h-screen">
-        <div className="mx-auto max-w-5xl px-6 py-16 md:py-24">
+        <div className="ts-mobile-page mx-auto max-w-5xl px-6 py-10 sm:py-16 md:py-24">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-5">
             Admin
           </p>
@@ -443,7 +470,88 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="mt-10 border border-bone/15 bg-ink/20 overflow-x-auto">
+              <div id="member-access" className="mt-10">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-display uppercase tracking-wider text-bone text-lg">Member controls</p>
+                    <p className="text-sm text-bone/50">Search, filter, assign support, or safely suspend access without deleting a member&apos;s records.</p>
+                  </div>
+                  <span className="font-display uppercase tracking-wider text-xs text-electric">{visibleMembers.length} shown</span>
+                </div>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder="Search name or email"
+                    className="w-full sm:max-w-sm bg-ink/40 border border-bone/20 px-3 py-2 text-bone text-sm focus:border-electric outline-none"
+                  />
+                  <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value as typeof memberFilter)} className="bg-ink/60 border border-bone/20 px-3 py-2 text-bone text-sm focus:border-electric outline-none">
+                    <option value="all">All members</option>
+                    <option value="active">Active accounts</option>
+                    <option value="suspended">Suspended accounts</option>
+                    <option value="portal">Portal access</option>
+                    <option value="needs-trainer">Coaching clients needing a trainer</option>
+                  </select>
+                </div>
+              <div className="grid gap-3 md:hidden">
+                {visibleMembers.length === 0 ? (
+                  <p className="border border-bone/15 bg-ink/20 p-5 text-center text-bone/50">No members match this view.</p>
+                ) : visibleMembers.map((u) => (
+                  <article key={u.id} className="border border-bone/15 bg-ink/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          {u.picture ? <img src={u.picture} alt="" className="h-8 w-8 rounded-full object-cover" /> : null}
+                          <p className="truncate font-display uppercase tracking-wider text-bone">{u.username}</p>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-bone/50">{u.email}</p>
+                      </div>
+                      <span className={"shrink-0 px-2 py-1 text-[9px] font-display uppercase tracking-wider " + (u.portalAccess ? "bg-electric text-ink" : "border border-bone/30 text-bone/60")}>
+                        {u.portalAccess ? "Portal" : "Pending"}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <p className="text-bone/50">Access <span className="block mt-0.5 text-bone/80">{u.portalAccess ? (u.accessType && ACCESS_LABELS[u.accessType]) || "Granted" : "—"}</span></p>
+                      <p className="text-bone/50">Subscription <span className="block mt-0.5 text-bone/80">{u.subscriptionStatus || "—"}</span></p>
+                    </div>
+
+                    {!u.isTrainer && (
+                      <label className="mt-3 block text-[10px] font-display uppercase tracking-wider text-bone/50">
+                        Assigned trainer
+                        <select
+                          value={u.assignedTrainerId || ""}
+                          onChange={(e) => assignTrainer(u, e.target.value)}
+                          disabled={busyId === u.id || trainers.length === 0}
+                          className="mt-1.5 w-full bg-ink/60 border border-bone/20 px-3 py-2 text-bone text-xs focus:border-electric outline-none disabled:opacity-50"
+                        >
+                          <option value="">{trainers.length === 0 ? "No trainers yet" : "Unassigned"}</option>
+                          {trainers.map((t) => <option key={t.id} value={t.id}>{t.username}</option>)}
+                        </select>
+                      </label>
+                    )}
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <button onClick={() => togglePortal(u)} disabled={busyId === u.id} className="min-h-[44px] border border-electric text-electric px-3 py-2 font-display uppercase tracking-wider text-xs hover:bg-electric hover:text-ink disabled:opacity-50">
+                        {u.portalAccess ? "Revoke" : "Grant"}
+                      </button>
+                      <button onClick={() => toggleTrainer(u)} disabled={busyId === u.id} className="min-h-[44px] border border-bone/30 text-bone/70 px-3 py-2 font-display uppercase tracking-wider text-xs hover:border-electric hover:text-electric disabled:opacity-50">
+                        {u.isTrainer ? "Trainer ✓" : "Make Trainer"}
+                      </button>
+                      <button onClick={() => resetPassword(u)} disabled={busyId === u.id} className="min-h-[44px] border border-bone/20 text-bone/60 px-3 py-2 font-display uppercase tracking-wider text-xs hover:border-electric hover:text-electric disabled:opacity-50">
+                        Reset password
+                      </button>
+                      <button onClick={() => toggleSuspended(u)} disabled={busyId === u.id} className={"min-h-[44px] border px-3 py-2 font-display uppercase tracking-wider text-xs disabled:opacity-50 " + (u.disabledAt ? "border-electric text-electric hover:bg-electric hover:text-ink" : "border-red-400/40 text-red-300 hover:border-red-300") }>
+                        {u.disabledAt ? "Restore" : "Suspend"}
+                      </button>
+                      <button onClick={() => removeUser(u)} disabled={busyId === u.id} className="col-span-2 min-h-[44px] border border-bone/20 text-bone/60 px-3 py-2 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone disabled:opacity-50">
+                        Delete member
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="hidden md:block border border-bone/15 bg-ink/20 overflow-x-auto">
                 <table className="w-full text-sm min-w-[880px]">
                   <thead>
                     <tr className="text-bone/50 text-[10px] uppercase tracking-wider border-b border-bone/15">
@@ -458,14 +566,14 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {members.length === 0 && (
+                    {visibleMembers.length === 0 && (
                       <tr>
                         <td colSpan={8} className="p-8 text-center text-bone/50">
-                          No members yet. Share the site so people can register.
+                          No members match this view.
                         </td>
                       </tr>
                     )}
-                    {members.map((u) => (
+                    {visibleMembers.map((u) => (
                       <tr key={u.id} className="border-t border-bone/10">
                         <td className="p-4 text-bone/90 font-display uppercase tracking-wider">
                           <span className="inline-flex items-center gap-2">
@@ -473,6 +581,7 @@ export default function AdminPage() {
                               <img src={u.picture} alt="" className="h-6 w-6 rounded-full object-cover" />
                             ) : null}
                             {u.username}
+                            {u.disabledAt ? <span className="border border-red-400/50 px-1.5 py-0.5 text-[9px] text-red-300">SUSPENDED</span> : null}
                           </span>
                         </td>
                         <td className="p-4 text-bone/70">{u.email}</td>
@@ -560,6 +669,18 @@ export default function AdminPage() {
                             Reset PW
                           </button>
                           <button
+                            onClick={() => toggleSuspended(u)}
+                            disabled={busyId === u.id}
+                            className={
+                              "ml-2 font-display uppercase tracking-wider text-xs border px-4 py-2 transition-colors disabled:opacity-50 " +
+                              (u.disabledAt
+                                ? "border-electric text-electric hover:bg-electric hover:text-ink"
+                                : "border-red-400/40 text-red-300 hover:border-red-300 hover:text-red-200")
+                            }
+                          >
+                            {u.disabledAt ? "Restore" : "Suspend"}
+                          </button>
+                          <button
                             onClick={() => removeUser(u)}
                             disabled={busyId === u.id}
                             className="ml-2 font-display uppercase tracking-wider text-xs border border-bone/20 text-bone/60 px-4 py-2 hover:border-bone hover:text-bone transition-colors disabled:opacity-50"
@@ -571,6 +692,7 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
               </div>
 
               {/* Promo Codes */}

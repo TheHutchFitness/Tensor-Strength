@@ -21,6 +21,28 @@
 .hero-actions .button-ghost { background:transparent; border-color:rgba(230,232,236,.2); color:rgba(230,232,236,.82); }
 .hero-actions .button-ghost:hover { border-color:var(--electric); color:#fff; }
 
+/* A deliberately quiet partner signal: visible to local prospects without
+   competing with Tensor's primary coaching decision. */
+.partner-note { display:inline-flex; align-items:center; gap:9px; margin-top:18px; color:var(--steel); text-decoration:none; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; transition:color .2s ease; }
+.partner-note span { color:var(--electric); font-size:9px; letter-spacing:.16em; }
+.partner-note b { color:var(--electric); font-size:13px; }
+.partner-note:hover { color:#fff; }
+.availability a { color:#c6d2e3; text-decoration-color:rgba(61,140,255,.7); text-underline-offset:3px; }
+.availability a:hover { color:#fff; }
+
+/* Member access stays visible in the landing header at every breakpoint. */
+.button-login { background:transparent; border-color:rgba(230,232,236,.36); color:var(--white); }
+.button-login:hover { background:var(--electric); border-color:var(--electric); color:#04030d; }
+@media(max-width:900px){
+  .nav-actions { gap:10px; }
+  .nav-actions .button-secondary { display:none; }
+  .nav-shell.open .nav-actions { bottom:20px; }
+}
+@media(max-width:560px){
+  .nav-shell .brand span { display:none; }
+  .nav-actions .button-login { display:inline-flex; min-height:38px; padding:0 12px; font-size:10px; }
+}
+
 /* --- Unified button motion --- */
 .button { transition:transform .16s ease, box-shadow .28s ease, background .2s ease, border-color .2s ease; will-change:transform; }
 .button:hover { transform:translateY(-2px); }
@@ -54,3 +76,10 @@
 
 /* --- A11y focus polish --- */
 a:focus-visible, .button:focus-visible { outline:2px solid var(--electric); outline-offset:3px; border-radius:2px; }
+@media(max-width:560px){
+  .partner-note{align-items:flex-start;line-height:1.5}
+  .nav-shell.open{max-height:100dvh;overflow-y:auto;padding-bottom:18px}
+  /* The rewards teaser is authored inline; collapse its three offer cards
+     instead of forcing them into unreadable narrow columns on a phone. */
+  .quests-tease > div[style*="grid-template-columns"]{grid-template-columns:1fr !important;gap:10px !important}
+}

@@ -6,19 +6,24 @@ import PortalTabBar from "./PortalTabBar";
 import OfflineBadge from "./OfflineBadge";
 import SyncIndicator from "./SyncIndicator";
 
-const NAV = [
-  { href: "/clients/workout-log", label: "Workout" },
+const PRIMARY_NAV = [
+  { href: "/clients", label: "Home" },
+  { href: "/clients/workout-log", label: "Train" },
   { href: "/clients/nutrition", label: "Nutrition" },
   { href: "/clients/progress", label: "Progress" },
-  { href: "/clients/book", label: "Book" },
   { href: "/clients/check-in", label: "Check-In" },
-  { href: "/quests", label: "Quests" },
-  { href: "/forum", label: "Forum" },
-  { href: "/clients/about", label: "About Me" },
+  { href: "/forum", label: "Community" },
+];
+
+const MORE_NAV = [
+  { href: "/clients/book", label: "Book a session" },
+  { href: "/clients/my-programs", label: "My programs" },
+  { href: "/quests", label: "Quests & rewards" },
+  { href: "/clients/about", label: "About me" },
 ];
 
 export default function PortalHeader({ simple = false }: { simple?: boolean }) {
-  const items = simple ? [{ href: "/clients", label: "Client Portal" }] : NAV;
+  const items = simple ? [{ href: "/clients", label: "Portal home" }, { href: "/forum", label: "Community" }] : PRIMARY_NAV;
   const [me, setMe] = useState<{ username?: string; picture?: string } | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -51,6 +56,22 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
               {n.label}
             </a>
           ))}
+          {!simple && (
+            <details className="relative group">
+              <summary className="list-none cursor-pointer whitespace-nowrap px-3 py-2 font-display uppercase text-xs tracking-wider text-bone/70 hover:text-electric transition-colors">
+                More <span className="ml-1 text-[10px]">⌄</span>
+              </summary>
+              <div className="absolute right-0 top-full pt-3 hidden group-open:block">
+                <div className="min-w-[190px] border border-line bg-ink/95 shadow-2xl">
+                  {MORE_NAV.map((n) => (
+                    <a key={n.href} href={n.href} className="block border-b border-line px-4 py-3 font-display uppercase text-[11px] tracking-wider text-bone/70 transition-colors hover:bg-white/[0.03] hover:text-electric last:border-b-0">
+                      {n.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </details>
+          )}
         </nav>
 
         {/* Desktop right actions */}
@@ -86,7 +107,7 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
 
       {/* Mobile dropdown menu */}
       {open && (
-        <nav className="md:hidden flex flex-col px-6 pb-4 border-t border-bone/10 bg-ink/95">
+        <nav className="md:hidden flex max-h-[calc(100dvh-4rem)] flex-col overflow-y-auto px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] border-t border-bone/10 bg-ink/95">
           {items.map((n) => (
             <a
               key={n.href}
@@ -97,6 +118,21 @@ export default function PortalHeader({ simple = false }: { simple?: boolean }) {
               {n.label}
             </a>
           ))}
+          {!simple && (
+            <>
+              <p className="pt-4 pb-1 font-display uppercase tracking-[0.18em] text-[10px] text-steel">More in your portal</p>
+              {MORE_NAV.map((n) => (
+                <a
+                  key={n.href}
+                  href={n.href}
+                  onClick={() => setOpen(false)}
+                  className="block border-b border-bone/5 py-3 pl-3 font-display uppercase tracking-wider text-sm text-bone/80 transition-colors hover:text-electric"
+                >
+                  {n.label}
+                </a>
+              ))}
+            </>
+          )}
           <a
             href="/"
             onClick={() => setOpen(false)}

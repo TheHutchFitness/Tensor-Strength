@@ -19,18 +19,32 @@ const OneRepMaxCalculator = dynamic(() => import("../../src/components/tools/One
 const WilksDotsCalculator = dynamic(() => import("../../src/components/tools/WilksDotsCalculator"));
 const PRTracker = dynamic(() => import("../../src/components/tools/PRTracker"));
 
-type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; stripeCustomerId?: string; clientProfile?: { goal?: string } | null } | null;
+type Me = { id: string; username: string; email: string; role: string; portalAccess: boolean; accessType?: string; assignedTrainerId?: string; stripeCustomerId?: string; clientProfile?: { goal?: string } | null } | null;
 
 const resources: never[] = [];
 
 export default function ClientPortalPage() {
   const [me, setMe] = useState<Me>(null);
   const [subInfo, setSubInfo] = useState<any>(null);
+  const [messageIntent, setMessageIntent] = useState("");
+  const [messageContext, setMessageContext] = useState<{ kind?: "workout" | "form_review" | "checkin" | "general"; title?: string; details?: string } | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tool, setTool] = useState<"macros" | "1rm" | "wilks" | "pr">("macros");
   const [trial, setTrial] = useState<{ enabled: boolean; days: number; eligible: boolean } | null>(null);
 
   useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    setMessageIntent(search.get("message") || "");
+    const title = search.get("topic") || "";
+    if (title) {
+      const kind = search.get("context");
+      setMessageContext({
+        kind: kind === "workout" || kind === "form_review" || kind === "checkin" ? kind : "general",
+        title,
+        details: search.get("details") || "",
+      });
+    }
     (async () => {
       const res = await fetch("/api/auth/me");
       if (!res.ok) {
@@ -50,7 +64,7 @@ export default function ClientPortalPage() {
           .then((d) => setSubInfo(d))
           .catch(() => {});
       }
-    })();
+    })().catch(() => { setLoadError(true); setLoading(false); });
   }, []);
 
   async function openBilling() {
@@ -80,7 +94,11 @@ export default function ClientPortalPage() {
       />
       <main className="text-bone min-h-screen">
         <div className="mx-auto max-w-4xl px-6 py-20 md:py-28">
-          {loading ? (
+          {loadError ? (
+            <div role="alert" className="border border-rose-400/40 p-6">We couldn&apos;t load your dashboard.
+              <button onClick={() => window.location.reload()} className="ml-3 text-electric underline">Try again</button>
+            </div>
+          ) : loading ? (
             <p className="text-center font-display uppercase tracking-wider text-bone/50">
               Loading…
             </p>
@@ -186,8 +204,8 @@ export default function ClientPortalPage() {
           ) : (
             /* ---------- APPROVED — FULL PORTAL ---------- */
             <div>
-              {me?.id && <div className="mb-10"><PortalHero username={me.username} /></div>}
-              {me?.id && <OnboardingChecklist intakeDone={!!me?.clientProfile?.goal} />}
+              {me?.id && <div className="mb-10"><PortalHero username={me.username} userId={me.id} accessType={me.accessType} hasCoach={!!me.assignedTrainerId} /></div>}
+              {me?.id && <OnboardingChecklist intakeDone={!!me?.clientProfile?.goal} userId={me.id} accessType={me.accessType} />}
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                 Client Portal
               </p>
@@ -197,9 +215,13 @@ export default function ClientPortalPage() {
                 <span className="text-electric">Let&apos;s work.</span>
               </h1>
               <p className="mt-6 text-bone/80 max-w-xl leading-relaxed">
-                Everything you need to train, track, and check in with Hutch —
-                calculators, the full workout log, exercise and warmup libraries,
-                and your weekly check-in. All in one place.
+                {me?.accessType === "remote_coaching"
+                  ? "Your custom training, coach communication, form-review workflow and weekly check-ins — in one place."
+                  : me?.accessType === "in_person"
+                    ? "Your session schedule, training homework, progress and direct coaching support — all in one place."
+                    : me?.accessType === "custom_program"
+                      ? "Your personalized training plan, workout logging, exercise help and progress tracking — all in one place."
+                      : "Choose a training plan, start the next session, use exercise help when you need it, and track the work as you go."}
               </p>
 
               {me?.stripeCustomerId && (
@@ -284,6 +306,22 @@ export default function ClientPortalPage() {
                 </p>
               </a>
 
+              {(me.assignedTrainerId || me.accessType === "in_person" || me.accessType === "remote_coaching" || me.accessType === "custom_program") && (
+              <div className="mt-14 border-t border-bone/10 pt-12">
+                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
+                  Your Coaching
+                </p>
+                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
+                  Straight from your <span className="text-electric">coach.</span>
+                </h2>
+                <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
+                  Your assigned trainer&apos;s programs, files and a direct line to
+                  message them — all in one place.
+                </p>
+                {me?.id && <ClientCoaching meId={me.id} accessType={me.accessType} initialMessage={messageIntent} initialContext={messageContext} />}
+              </div>
+              )}
+
               {/* PR Board submission */}
               <div className="mt-14 border-t border-bone/10 pt-12">
                 <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
@@ -353,19 +391,6 @@ export default function ClientPortalPage() {
               </div>
 
               {/* Client tools */}
-              <div className="mt-14 border-t border-bone/10 pt-12">
-                <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
-                  Your Coaching
-                </p>
-                <h2 className="glow font-display uppercase text-3xl md:text-4xl font-700 leading-tight">
-                  Straight from your <span className="text-electric">coach.</span>
-                </h2>
-                <p className="mt-4 text-bone/70 leading-relaxed max-w-xl">
-                  Your assigned trainer&apos;s programs, files and a direct line to
-                  message them — all in one place.
-                </p>
-                {me?.id && <ClientCoaching meId={me.id} />}
-              </div>
 
               <div id="tools" className="mt-14 border-t border-bone/10 pt-12 scroll-mt-24">
                 <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
@@ -388,7 +413,7 @@ export default function ClientPortalPage() {
                     { href: "/clients/progress", label: "Progress", icon: "📈" },
                     { href: "/clients/calendar", label: "Calendar", icon: "🗓️" },
                     { href: "/clients/check-in", label: "Check-In", icon: "✅" },
-                    { href: "/clients/book", label: "Book", icon: "💻" },
+                    ...((me?.accessType === "remote_coaching" || me?.accessType === "in_person") ? [{ href: "/clients/book", label: "Book", icon: "💻" }] : []),
                     { href: "/quests", label: "Quests", icon: "🏆" },
                   ].map((t) => (
                     <a

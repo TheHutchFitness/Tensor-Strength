@@ -1,5 +1,24 @@
+const previewHost = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_BASE_URL
+      ? new URL(process.env.NEXT_PUBLIC_BASE_URL).host
+      : null;
+  } catch {
+    return null;
+  }
+})();
+
 const nextConfig = {
   output: 'standalone',
+  // Allow Next.js dev resources (/_next/*, HMR) to load through the Emergent
+  // preview proxy. The browser origin is *.emergentagent.com while the proxy
+  // rewrites Host to *.emergentcf.cloud, so both must be allowlisted or the
+  // client JS is blocked (no hydration -> forms/buttons do nothing).
+  allowedDevOrigins: [
+    ...(previewHost ? [previewHost] : []),
+    '**.emergentagent.com',
+    '**.emergentcf.cloud',
+  ],
   images: {
     unoptimized: true,
     remotePatterns: [
