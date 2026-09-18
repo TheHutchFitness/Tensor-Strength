@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"trainerId":{"$numberInt":"1"},"createdAt":{"$numberInt":"-1"}},"name":"trainerId_1_createdAt_-1"}],"uuid":"04ec378159f84a61abda29fccba469ef","collectionName":"programs","type":"collection"}

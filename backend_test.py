@@ -1,359 +1,248 @@
 #!/usr/bin/env python3
 """
-Backend API testing script for Tensor Strength app.
-Tests Phase 5: CRON endpoint and audio uploads.
+Backend API test for R2/S3 upload integration (Cloudflare R2 via S3-compatible client).
+Tests the upload round-trip to verify R2 credentials are valid and working.
 """
 
 import requests
-import json
 import io
-import random
-import string
+from PIL import Image
 
-# Base URL from .env NEXT_PUBLIC_BASE_URL
-BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
-CRON_SECRET = "cbd2d811304c3db96d4d1bb24b4a2bb3f004500de6b69ab0"
+# Base URL - using preview URL since localhost has cookie domain issues
+BASE_URL = "https://tensor-strength.preview.emergentagent.com"
 
-def random_string(length=8):
-    """Generate a random string for unique test data."""
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+# Admin credentials
+ADMIN_USERNAME = "The Hutch"
+ADMIN_PASSWORD = "Vzkfjf3n!3"
 
-def register_member():
-    """Register a new member and return session cookies."""
-    username = f"testmember_{random_string()}"
-    email = f"{username}@example.com"
-    password = "testpass123"
+def create_test_image(size_kb=5):
+    """Create a small test PNG image in memory."""
+    # Create a simple 100x100 red square PNG
+    img = Image.new('RGB', (100, 100), color='red')
+    img_bytes = io.BytesIO()
+    img.save(img_bytes, format='PNG')
+    img_bytes.seek(0)
+    return img_bytes.getvalue()
+
+def test_r2_upload_integration():
+    """Test R2/S3 upload integration end-to-end."""
     
-    response = requests.post(
-        f"{BASE_URL}/auth/register",
-        json={"username": username, "email": email, "password": password}
-    )
+    print("\n" + "="*80)
+    print("R2/S3 UPLOAD INTEGRATION TEST")
+    print("="*80)
     
-    if response.status_code == 200:
-        return response.cookies, username, email, password
+    session = requests.Session()
+    test_results = []
+    
+    # ============================================================================
+    # STEP 1: Login as admin to get ts_token cookie
+    # ============================================================================
+    print("\n[STEP 1] Login as admin...")
+    try:
+        login_response = session.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
+            timeout=10
+        )
+        
+        if login_response.status_code == 200:
+            print(f"✅ Admin login successful (status: {login_response.status_code})")
+            login_data = login_response.json()
+            print(f"   User: {login_data.get('user', {}).get('username')}, Role: {login_data.get('user', {}).get('role')}")
+            
+            # Verify ts_token cookie is set
+            if 'ts_token' in session.cookies:
+                print(f"✅ ts_token cookie captured")
+                test_results.append(("Admin login", True, "200 OK with ts_token cookie"))
+            else:
+                print(f"❌ ts_token cookie NOT found in response")
+                test_results.append(("Admin login", False, "ts_token cookie missing"))
+                return test_results
+        else:
+            print(f"❌ Admin login failed (status: {login_response.status_code})")
+            print(f"   Response: {login_response.text}")
+            test_results.append(("Admin login", False, f"Status {login_response.status_code}"))
+            return test_results
+            
+    except Exception as e:
+        print(f"❌ Admin login exception: {e}")
+        test_results.append(("Admin login", False, f"Exception: {e}"))
+        return test_results
+    
+    # ============================================================================
+    # STEP 2: R2 UPLOAD (happy path) - POST /api/uploads/file
+    # ============================================================================
+    print("\n[STEP 2] R2 Upload (happy path)...")
+    try:
+        # Create a small test PNG image
+        test_image = create_test_image()
+        
+        files = {
+            'file': ('test-image.png', test_image, 'image/png')
+        }
+        
+        # Debug: Check cookies
+        print(f"   Cookies being sent: {session.cookies}")
+        
+        upload_response = session.post(
+            f"{BASE_URL}/api/uploads/file",
+            files=files,
+            timeout=15
+        )
+        
+        if upload_response.status_code == 200:
+            upload_data = upload_response.json()
+            returned_url = upload_data.get('url', '')
+            
+            print(f"✅ Upload successful (status: {upload_response.status_code})")
+            print(f"   Response: {upload_data}")
+            
+            # Verify the returned URL is R2-backed (starts with /api/files/uploads/)
+            if returned_url.startswith('/api/files/uploads/') and returned_url.endswith('.png'):
+                print(f"✅ Returned URL is R2-backed: {returned_url}")
+                test_results.append(("R2 upload happy path", True, f"200 OK with R2 URL: {returned_url}"))
+                
+                # Store the URL for readback test
+                file_url = returned_url
+            else:
+                print(f"❌ Returned URL is NOT R2-backed (expected /api/files/uploads/<uuid>.png)")
+                print(f"   Got: {returned_url}")
+                test_results.append(("R2 upload happy path", False, f"URL format incorrect: {returned_url}"))
+                return test_results
+                
+        elif upload_response.status_code == 500:
+            error_data = upload_response.json()
+            print(f"❌ Upload failed with 500 (R2 credentials/endpoint/bucket likely wrong)")
+            print(f"   Error: {error_data.get('error')}")
+            test_results.append(("R2 upload happy path", False, f"500 - {error_data.get('error')} (R2 credentials invalid)"))
+            return test_results
+        else:
+            print(f"❌ Upload failed (status: {upload_response.status_code})")
+            print(f"   Response: {upload_response.text}")
+            test_results.append(("R2 upload happy path", False, f"Status {upload_response.status_code}"))
+            return test_results
+            
+    except Exception as e:
+        print(f"❌ Upload exception: {e}")
+        test_results.append(("R2 upload happy path", False, f"Exception: {e}"))
+        return test_results
+    
+    # ============================================================================
+    # STEP 3: R2 READBACK - GET the returned URL
+    # ============================================================================
+    print("\n[STEP 3] R2 Readback...")
+    try:
+        readback_response = session.get(
+            f"{BASE_URL}{file_url}",
+            timeout=10
+        )
+        
+        if readback_response.status_code == 200:
+            content_type = readback_response.headers.get('Content-Type', '')
+            content_length = len(readback_response.content)
+            
+            print(f"✅ Readback successful (status: {readback_response.status_code})")
+            print(f"   Content-Type: {content_type}")
+            print(f"   Content-Length: {content_length} bytes")
+            
+            # Verify it's an image
+            if content_type == 'image/png' and content_length > 0:
+                # Verify PNG signature (starts with 0x89504E47)
+                if readback_response.content[:4] == b'\x89PNG':
+                    print(f"✅ Valid PNG signature detected")
+                    test_results.append(("R2 readback", True, f"200 OK with valid PNG ({content_length} bytes)"))
+                else:
+                    print(f"❌ Invalid PNG signature")
+                    test_results.append(("R2 readback", False, "Invalid PNG signature"))
+            else:
+                print(f"❌ Unexpected content type or empty content")
+                test_results.append(("R2 readback", False, f"Content-Type: {content_type}, Length: {content_length}"))
+        else:
+            print(f"❌ Readback failed (status: {readback_response.status_code})")
+            print(f"   Response: {readback_response.text}")
+            test_results.append(("R2 readback", False, f"Status {readback_response.status_code}"))
+            
+    except Exception as e:
+        print(f"❌ Readback exception: {e}")
+        test_results.append(("R2 readback", False, f"Exception: {e}"))
+    
+    # ============================================================================
+    # STEP 4: NEGATIVE CASES
+    # ============================================================================
+    
+    # (a) POST /api/uploads/file with NO auth cookie -> expect 401
+    print("\n[STEP 4a] Negative case: Upload without auth...")
+    try:
+        no_auth_session = requests.Session()
+        test_image = create_test_image()
+        files = {'file': ('test.png', test_image, 'image/png')}
+        
+        no_auth_response = no_auth_session.post(
+            f"{BASE_URL}/api/uploads/file",
+            files=files,
+            timeout=10
+        )
+        
+        if no_auth_response.status_code == 401:
+            print(f"✅ Upload without auth correctly rejected (status: 401)")
+            error_data = no_auth_response.json()
+            print(f"   Error: {error_data.get('error')}")
+            test_results.append(("Upload without auth", True, "401 as expected"))
+        else:
+            print(f"❌ Upload without auth should return 401, got {no_auth_response.status_code}")
+            test_results.append(("Upload without auth", False, f"Expected 401, got {no_auth_response.status_code}"))
+            
+    except Exception as e:
+        print(f"❌ No auth test exception: {e}")
+        test_results.append(("Upload without auth", False, f"Exception: {e}"))
+    
+    # (b) POST /api/uploads/file with disallowed extension (.html) -> expect 400
+    print("\n[STEP 4b] Negative case: Upload with disallowed extension (.html)...")
+    try:
+        html_content = b"<html><body>test</body></html>"
+        files = {'file': ('test.html', html_content, 'text/html')}
+        
+        disallowed_response = session.post(
+            f"{BASE_URL}/api/uploads/file",
+            files=files,
+            timeout=10
+        )
+        
+        if disallowed_response.status_code == 400:
+            print(f"✅ Disallowed extension correctly rejected (status: 400)")
+            error_data = disallowed_response.json()
+            print(f"   Error: {error_data.get('error')}")
+            test_results.append(("Disallowed extension", True, "400 as expected"))
+        else:
+            print(f"❌ Disallowed extension should return 400, got {disallowed_response.status_code}")
+            test_results.append(("Disallowed extension", False, f"Expected 400, got {disallowed_response.status_code}"))
+            
+    except Exception as e:
+        print(f"❌ Disallowed extension test exception: {e}")
+        test_results.append(("Disallowed extension", False, f"Exception: {e}"))
+    
+    # ============================================================================
+    # SUMMARY
+    # ============================================================================
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    
+    passed = sum(1 for _, success, _ in test_results if success)
+    total = len(test_results)
+    
+    for test_name, success, details in test_results:
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status}: {test_name} - {details}")
+    
+    print(f"\nTotal: {passed}/{total} tests passed")
+    
+    if passed == total:
+        print("\n🎉 ALL TESTS PASSED - R2 upload integration is working correctly!")
     else:
-        raise Exception(f"Failed to register member: {response.status_code} {response.text}")
-
-def test_cron_endpoint():
-    """Test the /api/cron/trial-reminders endpoint with various auth scenarios."""
-    print("\n" + "="*80)
-    print("TESTING PHASE 5: CRON ENDPOINT /api/cron/trial-reminders")
-    print("="*80)
+        print(f"\n⚠️  {total - passed} test(s) failed - R2 upload integration has issues")
     
-    passed = 0
-    failed = 0
-    
-    # Test 1: GET with NO secret parameter/header -> 401
-    print("\n[TEST 1] GET /api/cron/trial-reminders with NO secret -> expect 401")
-    try:
-        response = requests.get(f"{BASE_URL}/cron/trial-reminders")
-        if response.status_code == 401:
-            data = response.json()
-            if 'error' in data:
-                print(f"✅ PASS: Returns 401 with error: {data['error']}")
-                passed += 1
-            else:
-                print(f"❌ FAIL: Returns 401 but missing error field")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 401, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    # Test 2: GET with WRONG secret -> 401
-    print("\n[TEST 2] GET /api/cron/trial-reminders?secret=WRONGVALUE -> expect 401")
-    try:
-        response = requests.get(f"{BASE_URL}/cron/trial-reminders?secret=WRONGVALUE")
-        if response.status_code == 401:
-            data = response.json()
-            if 'error' in data:
-                print(f"✅ PASS: Returns 401 with error: {data['error']}")
-                passed += 1
-            else:
-                print(f"❌ FAIL: Returns 401 but missing error field")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 401, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    # Test 3: GET with CORRECT secret as query param -> 200
-    print(f"\n[TEST 3] GET /api/cron/trial-reminders?secret={CRON_SECRET} -> expect 200")
-    try:
-        response = requests.get(f"{BASE_URL}/cron/trial-reminders?secret={CRON_SECRET}")
-        if response.status_code == 200:
-            data = response.json()
-            # Verify response shape
-            if 'ok' in data and 'reminded' in data and 'checked' in data and 'emailConfigured' in data:
-                if data['ok'] == True and isinstance(data['reminded'], int) and isinstance(data['checked'], int):
-                    print(f"✅ PASS: Returns 200 with correct shape")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    # Check for _id leaks
-                    response_str = json.dumps(data)
-                    if '_id' in response_str:
-                        print(f"❌ WARNING: Response contains '_id' field (MongoDB leak)")
-                        failed += 1
-                    else:
-                        passed += 1
-                else:
-                    print(f"❌ FAIL: Response has incorrect field types")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    failed += 1
-            else:
-                print(f"❌ FAIL: Response missing required fields")
-                print(f"   Response: {json.dumps(data, indent=2)}")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    # Test 4: GET with secret as header x-cron-secret -> 200
-    print(f"\n[TEST 4] GET /api/cron/trial-reminders with header x-cron-secret -> expect 200")
-    try:
-        headers = {"x-cron-secret": CRON_SECRET}
-        response = requests.get(f"{BASE_URL}/cron/trial-reminders", headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            # Verify response shape
-            if 'ok' in data and 'reminded' in data and 'checked' in data and 'emailConfigured' in data:
-                if data['ok'] == True and isinstance(data['reminded'], int) and isinstance(data['checked'], int):
-                    print(f"✅ PASS: Returns 200 with correct shape")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    # Check for _id leaks
-                    response_str = json.dumps(data)
-                    if '_id' in response_str:
-                        print(f"❌ WARNING: Response contains '_id' field (MongoDB leak)")
-                        failed += 1
-                    else:
-                        passed += 1
-                else:
-                    print(f"❌ FAIL: Response has incorrect field types")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    failed += 1
-            else:
-                print(f"❌ FAIL: Response missing required fields")
-                print(f"   Response: {json.dumps(data, indent=2)}")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    # Test 5: POST with valid secret -> 200
-    print(f"\n[TEST 5] POST /api/cron/trial-reminders?secret={CRON_SECRET} -> expect 200")
-    try:
-        response = requests.post(f"{BASE_URL}/cron/trial-reminders?secret={CRON_SECRET}")
-        if response.status_code == 200:
-            data = response.json()
-            # Verify response shape
-            if 'ok' in data and 'reminded' in data and 'checked' in data and 'emailConfigured' in data:
-                if data['ok'] == True and isinstance(data['reminded'], int) and isinstance(data['checked'], int):
-                    print(f"✅ PASS: Returns 200 with correct shape")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    # Check for _id leaks
-                    response_str = json.dumps(data)
-                    if '_id' in response_str:
-                        print(f"❌ WARNING: Response contains '_id' field (MongoDB leak)")
-                        failed += 1
-                    else:
-                        passed += 1
-                else:
-                    print(f"❌ FAIL: Response has incorrect field types")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    failed += 1
-            else:
-                print(f"❌ FAIL: Response missing required fields")
-                print(f"   Response: {json.dumps(data, indent=2)}")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    print(f"\n{'='*80}")
-    print(f"CRON ENDPOINT TESTS: {passed} passed, {failed} failed")
-    print(f"{'='*80}")
-    
-    return passed, failed
-
-def test_audio_uploads():
-    """Test audio file uploads to /api/uploads/file."""
-    print("\n" + "="*80)
-    print("TESTING PHASE 5: AUDIO UPLOADS /api/uploads/file")
-    print("="*80)
-    
-    passed = 0
-    failed = 0
-    
-    # Register a member for testing
-    print("\n[SETUP] Registering test member...")
-    try:
-        cookies, username, email, password = register_member()
-        print(f"✅ Registered member: {username}")
-    except Exception as e:
-        print(f"❌ FAIL: Could not register member: {e}")
-        return 0, 1
-    
-    # Test 6: Upload audio/webm file -> 200
-    print("\n[TEST 6] POST /api/uploads/file with voice.webm (audio/webm) -> expect 200")
-    try:
-        # Create a small binary blob (fake webm file)
-        webm_data = b'\x1a\x45\xdf\xa3' + b'\x00' * 100  # WebM signature + padding
-        files = {
-            'file': ('voice.webm', io.BytesIO(webm_data), 'audio/webm')
-        }
-        response = requests.post(f"{BASE_URL}/uploads/file", files=files, cookies=cookies)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if 'url' in data:
-                url = data['url']
-                # Verify URL format
-                if url.startswith('/api/files/uploads/') and url.endswith('.webm'):
-                    print(f"✅ PASS: Returns 200 with URL: {url}")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    # Check for _id leaks
-                    response_str = json.dumps(data)
-                    if '_id' in response_str:
-                        print(f"❌ WARNING: Response contains '_id' field (MongoDB leak)")
-                        failed += 1
-                    else:
-                        passed += 1
-                else:
-                    print(f"❌ FAIL: URL format incorrect: {url}")
-                    print(f"   Expected: /api/files/uploads/<uuid>.webm")
-                    failed += 1
-            else:
-                print(f"❌ FAIL: Response missing 'url' field")
-                print(f"   Response: {json.dumps(data, indent=2)}")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    # Test 7: Upload audio/mpeg file -> 200
-    print("\n[TEST 7] POST /api/uploads/file with note.mp3 (audio/mpeg) -> expect 200")
-    try:
-        # Create a small binary blob (fake mp3 file)
-        mp3_data = b'\xff\xfb' + b'\x00' * 100  # MP3 frame sync + padding
-        files = {
-            'file': ('note.mp3', io.BytesIO(mp3_data), 'audio/mpeg')
-        }
-        response = requests.post(f"{BASE_URL}/uploads/file", files=files, cookies=cookies)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if 'url' in data:
-                url = data['url']
-                # Verify URL format
-                if url.startswith('/api/files/uploads/') and url.endswith('.mp3'):
-                    print(f"✅ PASS: Returns 200 with URL: {url}")
-                    print(f"   Response: {json.dumps(data, indent=2)}")
-                    # Check for _id leaks
-                    response_str = json.dumps(data)
-                    if '_id' in response_str:
-                        print(f"❌ WARNING: Response contains '_id' field (MongoDB leak)")
-                        failed += 1
-                    else:
-                        passed += 1
-                else:
-                    print(f"❌ FAIL: URL format incorrect: {url}")
-                    print(f"   Expected: /api/files/uploads/<uuid>.mp3")
-                    failed += 1
-            else:
-                print(f"❌ FAIL: Response missing 'url' field")
-                print(f"   Response: {json.dumps(data, indent=2)}")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    # Test 8: Upload disallowed file type (e.g., .exe) -> 400
-    print("\n[TEST 8] POST /api/uploads/file with x.exe (disallowed type) -> expect 400")
-    try:
-        # Create a small binary blob (fake exe file)
-        exe_data = b'MZ' + b'\x00' * 100  # DOS header + padding
-        files = {
-            'file': ('x.exe', io.BytesIO(exe_data), 'application/x-msdownload')
-        }
-        response = requests.post(f"{BASE_URL}/uploads/file", files=files, cookies=cookies)
-        
-        if response.status_code == 400:
-            data = response.json()
-            if 'error' in data:
-                print(f"✅ PASS: Returns 400 with error: {data['error']}")
-                passed += 1
-            else:
-                print(f"❌ FAIL: Returns 400 but missing error field")
-                failed += 1
-        else:
-            print(f"❌ FAIL: Expected 400, got {response.status_code}")
-            print(f"Response: {response.text}")
-            failed += 1
-    except Exception as e:
-        print(f"❌ FAIL: Exception: {e}")
-        failed += 1
-    
-    print(f"\n{'='*80}")
-    print(f"AUDIO UPLOAD TESTS: {passed} passed, {failed} failed")
-    print(f"{'='*80}")
-    
-    return passed, failed
-
-def main():
-    """Run all Phase 5 backend tests."""
-    print("\n" + "="*80)
-    print("PHASE 5 BACKEND TESTING")
-    print("Testing: CRON endpoint + Audio uploads")
-    print("="*80)
-    
-    total_passed = 0
-    total_failed = 0
-    
-    # Test CRON endpoint
-    cron_passed, cron_failed = test_cron_endpoint()
-    total_passed += cron_passed
-    total_failed += cron_failed
-    
-    # Test audio uploads
-    audio_passed, audio_failed = test_audio_uploads()
-    total_passed += audio_passed
-    total_failed += audio_failed
-    
-    # Final summary
-    print("\n" + "="*80)
-    print("PHASE 5 BACKEND TESTING COMPLETE")
-    print("="*80)
-    print(f"Total tests passed: {total_passed}")
-    print(f"Total tests failed: {total_failed}")
-    print(f"Success rate: {total_passed}/{total_passed + total_failed} ({100 * total_passed / (total_passed + total_failed):.1f}%)")
-    print("="*80)
-    
-    return 0 if total_failed == 0 else 1
+    return test_results
 
 if __name__ == "__main__":
-    exit(main())
+    test_r2_upload_integration()

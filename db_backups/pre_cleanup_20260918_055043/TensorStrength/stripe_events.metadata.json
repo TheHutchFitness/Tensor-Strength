@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"38b0615ef2b44034abb0cdd06f608c1b","collectionName":"stripe_events","type":"collection"}

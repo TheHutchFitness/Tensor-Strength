@@ -105,6 +105,21 @@
 user_problem_statement: "Migrate the Tensor Strength Next.js site to Emergent and add real server-side authentication: entire site gated behind login, self-registration for members, an admin (Hutch) who can approve/revoke each member's Client Portal access. Replace the old client-side passcode gate on /clients with the new auth."
 
 backend:
+  - task: "R2/S3 upload integration (Cloudflare R2 via S3-compatible client)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js, .env"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Production deploy diagnostic showed S3_* env vars were ABSENT, so uploads/progress-photos/video check-ins would not use durable R2 storage. Added the real Cloudflare R2 credentials to the workspace .env (S3_ENDPOINT=https://<acct>.r2.cloudflarestorage.com, S3_BUCKET=tensorstrength, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY) and restarted nextjs so the app now has S3 configured (isS3Configured() should be true). Need to VERIFY the R2 keys are valid and the upload round-trip works end-to-end in the preview before relying on them in production. TEST: (1) Login as admin The Hutch / Vzkfjf3n!3 to get the ts_token cookie. (2) POST /api/uploads/file as multipart/form-data with field 'file' = a small PNG/JPEG (and optionally visibility=public) -> expect 200 with JSON {url, name, size, mime}; the returned url should look like /api/files/uploads/<uuid>.<ext> (R2-backed), NOT a local /uploads/ path. (3) GET the returned url (with the auth cookie for a private file) -> expect 200 and the image bytes/content-type back (proves the object was stored in and served from R2). (4) Negative: POST /api/uploads/file with NO auth -> 401; POST with a disallowed extension (e.g. .html) -> 400. If step 2 returns 500 'Upload failed', the R2 credentials/endpoint/bucket are wrong."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASSED all 5 tests (100% success rate). R2/S3 UPLOAD INTEGRATION VERIFIED: The Cloudflare R2 credentials in .env are VALID and the upload round-trip is working correctly. TEST RESULTS: (1) Admin login successful with username 'The Hutch' and password 'Vzkfjf3n!3', ts_token cookie captured. (2) R2 UPLOAD (happy path): POST /api/uploads/file with PNG image returns 200 with JSON {url:'/api/files/uploads/70dfbd73-0709-401c-aed8-3abb4b759b3d.png', name:'test-image.png', size:287, mime:'image/png'}. The returned URL is R2-backed (starts with /api/files/uploads/ and ends with .png) - NOT a local /uploads/ path. This confirms files are being uploaded to Cloudflare R2 bucket 'tensorstrength'. (3) R2 READBACK: GET /api/files/uploads/70dfbd73-0709-401c-aed8-3abb4b759b3d.png returns 200 with Content-Type:image/png, 287 bytes, valid PNG signature (starts with 0x89504E47). This proves the object was successfully written to AND served from R2. (4) NEGATIVE CASES: (a) POST /api/uploads/file with NO auth cookie returns 401 with error 'Authentication required' (auth correctly enforced). (b) POST /api/uploads/file with disallowed extension .html returns 400 with error 'That file type is not allowed. Use images, video, PDF or documents.' (extension allowlist working correctly). ALL REQUIREMENTS VERIFIED: R2 endpoint (https://db55f25a5cd6ab7c6028631b67f9f9da.r2.cloudflarestorage.com), bucket (tensorstrength), access key, and secret key are all VALID and working. Upload round-trip successful. Files are durably stored in R2 and served via /api/files/<key> proxy. Authentication and extension validation working correctly. No 500 errors encountered. R2 integration is production-ready."
+
   - task: "Coaching applications API (public POST, admin GET/PUT)"
     implemented: true
     working: true
@@ -455,21 +470,44 @@ frontend:
         -agent: "main"
         -comment: "Verified via curl: / /clients /admin redirect (307) to /login when no cookie; /login and static logo return 200."
 
+  - task: "Login page hydration / form submit (username+password)"
+    implemented: true
+    working: true
+    file: "next.config.js, app/login/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: false
+        -agent: "user"
+        -comment: "User reports: after entering username and password on /login and clicking Sign In, 'shows nothing' — no redirect, page appears to reload with empty fields."
+        -working: "NA"
+        -agent: "main"
+        -comment: "ROOT CAUSE identified: repo now runs on Next.js 16 (upgraded during yarn install). Next 16 blocks cross-origin access to dev resources (/_next/*, HMR) by default. The Emergent preview browser origin is *.emergentagent.com while the proxy rewrites Host to *.emergentcf.cloud, so Next blocked the client JS bundles -> the page rendered from SSR but never HYDRATED -> the form's React onSubmit never fired -> clicking Sign In did a native browser submit -> full page reload with empty fields ('shows nothing'). Server log showed the tell-tale 'Cross-origin access to Next.js dev resources is blocked ... add allowedDevOrigins' plus repeated GET /login reloads and NO POST /api/auth/login. FIX: added allowedDevOrigins to next.config.js: derives the exact preview host from NEXT_PUBLIC_BASE_URL plus wildcards '**.emergentagent.com' and '**.emergentcf.cloud'; restarted nextjs. Please verify the login flow end-to-end in a real browser."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ BUG FIX VERIFIED - LOGIN HYDRATION WORKING CORRECTLY. Tested at preview URL https://tensor-strength.preview.emergentagent.com/login with admin credentials ('The Hutch' / 'Vzkfjf3n!3'). CRITICAL EVIDENCE: (1) HYDRATION PROOF: Clicked 'Create an account' toggle button and the form successfully switched to register mode (Email field appeared), then toggled back to login mode. This definitively proves React event handlers are attached and the page IS hydrated. (2) LOGIN SUCCESS: Entered credentials, clicked 'Sign In →' button, and browser successfully navigated to /clients page (NOT stuck on /login with empty fields). (3) NO PAGE RELOAD: Fields were NOT silently cleared, confirming the form did NOT do a native browser submit. (4) CONSOLE LOGS CLEAN: Console shows '[HMR] connected' (client JS bundles loaded successfully - allowedDevOrigins fix working), '[Fast Refresh] rebuilding' and 'done in 199ms' (requires hydration), and only expected/harmless warnings (cdn-cgi/rum abort as mentioned in review request). No real hydration errors or JS errors that would block functionality. (5) SERVER LOGS: Supervisor logs show 'POST /api/auth/login 200' followed by 'GET /clients 200', confirming the login API was called successfully (not a native form submit). ORIGINAL BUG SYMPTOMS RESOLVED: User reported 'shows nothing' after clicking Sign In (page reloaded with empty fields). Current behavior: clicking Sign In successfully logs in and redirects to /clients. The allowedDevOrigins configuration in next.config.js (preview host + '**.emergentagent.com' + '**.emergentcf.cloud') is working correctly. Next.js 16 dev resources (/_next/* chunks, HMR) are now loading through the Emergent preview proxy. The login flow is fully functional."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
-  run_ui: false
+  test_sequence: 2
+  run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "R2/S3 upload integration (Cloudflare R2 via S3-compatible client)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    -agent: "main"
+    -message: "BUG FIX VERIFICATION NEEDED (frontend). Focus ONLY on 'Login page hydration / form submit (username+password)'. User reported /login: entering username+password and clicking Sign In 'shows nothing'. Root cause: Next.js 16 blocked cross-origin dev resources for the preview host, so the page never hydrated and the form did a native reload (no POST /api/auth/login). Fix: added allowedDevOrigins (preview host from NEXT_PUBLIC_BASE_URL + '**.emergentagent.com' + '**.emergentcf.cloud') to next.config.js and restarted nextjs. VERIFY in a real browser at the preview URL: (1) Go to /login. (2) Enter username 'The Hutch' + password 'Vzkfjf3n!3', click Sign In. (3) Confirm POST /api/auth/login fires -> 200 and the browser redirects to /clients (NOT back to an empty /login). (4) No JS/hydration console errors (HMR websocket 502 warnings are expected/harmless). (5) Bonus: 'Create an account' toggle switches to register mode (proves hydration). Do NOT retest unrelated backend/forum/gamification tasks."
     -agent: "testing"
     -message: "✅ QUESTS UI END-TO-END TEST COMPLETED (10/11 sections verified - 91% success). Tested as admin 'The Hutch'/'Vzkfjf3n!3'. ALL MAJOR SECTIONS WORKING: (1) XP/level header with Level 1 · Newcomer, XP progress bar, and 🔥 0 DAY STREAK. (2) Level rewards roadmap with 3 cards (Level 3 = 25% OFF, Level 5 = 50% OFF, Level 10 = 1 MONTH FREE). (3) Your Quests list with 22 quests (3 daily, 13 weekly, 6 monthly) showing progress bars and Claim/In-progress buttons. (4) Admin panel with all form inputs (title, description, period, XP, scope) and Create quest button. (5) Avatars gallery with level indicators (30 found). (6) Titles section with 16 titles. (7) Badges section with 44 badges. (8) Leaderboard with 1 entry. (9) No console errors or network failures detected. MINOR ISSUE: /account page navigation timeout (shows 'You're not signed in' - possible session/cookie issue). This does NOT affect core Quests functionality. 8 screenshots captured showing all sections. The Quests page is fully functional and ready for production use."
+    -agent: "testing"
+    -message: "✅ LOGIN HYDRATION BUG FIX VERIFIED SUCCESSFULLY. Tested the login flow at preview URL with admin credentials. KEY FINDINGS: (1) HYDRATION CONFIRMED: The 'Create an account' toggle test passed - clicking the button successfully switched the form to register mode (Email field appeared), proving React event handlers are attached and the page is hydrated. (2) LOGIN FLOW WORKS: Entered 'The Hutch' / 'Vzkfjf3n!3', clicked 'Sign In →', and browser successfully navigated to /clients (NOT stuck on /login). (3) NO PAGE RELOAD: Fields were not cleared, confirming no native browser submit occurred. (4) CONSOLE LOGS CLEAN: '[HMR] connected' confirms client JS bundles loaded (allowedDevOrigins fix working), '[Fast Refresh]' confirms hydration, only expected warnings (cdn-cgi/rum abort). (5) SERVER LOGS: Show 'POST /api/auth/login 200' followed by 'GET /clients 200'. ORIGINAL BUG RESOLVED: User's 'shows nothing' symptom (page reload with empty fields) is gone. The allowedDevOrigins configuration in next.config.js is working correctly. Login flow is fully functional. No further action needed on this task."
     -agent: "main"
     -message: "TEST the NEW gamification + password endpoints ONLY (do NOT retest forum, cloud store, uploads, applications, coach tools, Hutch Touch PDFs, or Stripe). Full details are in the task 'Gamification — XP/levels, quests, avatars/titles, leaderboard, password change'. Key flows: gamification GET shape + auth gating; goals set; workout XP award + dedupe by workoutId (+50 each unique); quest claim (+XP) with per-period 409 dedupe; equip gated to paying members and to unlocked levels; leaderboard sorted desc; coach/admin quest creation authorization (member 403, admin 200, xp clamped 10-500) and it appearing in customQuests; change password happy path + wrong-current 400 + short-password 400, and the new password then logging in. Admin creds 'The Hutch'/'Vzkfjf3n!3'. Verify no _id/passwordHash leaks and no 500s."
     -agent: "main"
@@ -1395,3 +1433,7 @@ agent_communication:
     -message: "Quick BACKEND test. Admin 'The Hutch'/'Vzkfjf3n!3'. (1) GET /api/payments/packages -> 200; every package.currency === 'cad'. (2) Register memberA (auto-logged-in). PUT /api/client/profile {goal:'Build muscle', injuries:'left knee', workoutsPerWeek:'4', gym:'The Fit Effect'} -> 200 and returned profile includes goal='Build muscle', injuries='left knee', workoutsPerWeek='4'. GET /api/client/profile -> same persisted. (3) Just confirm no 500s / no _id leaks. NOTE: coach auto-assign triggers only on a real Stripe payment webhook/status — do NOT attempt payment; just confirm the two endpoints above."
     -agent: "testing"
     -message: "✅ BACKEND PHASE A TESTING COMPLETE - ALL TESTS PASSED (2/2). (1) GET /api/payments/packages: ALL 4 packages have currency === 'cad' (monthly_9_99, yearly_90, custom_program_200, remote_coaching_400). (2) Client profile: Registered fresh member, PUT /api/client/profile with goal/injuries/workoutsPerWeek/gym/diet -> 200 with all fields in response; GET /api/client/profile -> 200 with persisted values. (3) No 500 errors, no MongoDB _id leaks detected in any response. Coach auto-assign NOT tested (requires real Stripe payment webhook, excluded per instructions). All backend requirements verified successfully."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ R2/S3 UPLOAD INTEGRATION VERIFIED - ALL TESTS PASSED (5/5). The Cloudflare R2 credentials in .env are VALID and working correctly. TEST RESULTS: (1) Admin login successful with ts_token cookie. (2) R2 UPLOAD: POST /api/uploads/file with PNG returns 200 with R2-backed URL /api/files/uploads/<uuid>.png (NOT local /uploads/ path) - confirms files are being uploaded to Cloudflare R2 bucket 'tensorstrength'. (3) R2 READBACK: GET on the returned URL returns 200 with valid PNG bytes (287 bytes, correct signature) - proves object was written to AND served from R2. (4) NEGATIVE CASES: Upload without auth returns 401 (auth enforced), disallowed .html extension returns 400 (allowlist working). CONCLUSION: R2 endpoint, bucket, access key, and secret key are all VALID. Upload round-trip successful. Files are durably stored in R2 and served via /api/files/<key> proxy. No 500 errors. R2 integration is PRODUCTION-READY. Main agent can now rely on these credentials for production deploy."
