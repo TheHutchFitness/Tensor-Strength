@@ -1110,7 +1110,8 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
           </div>
         )}
 
-        {/* Main-lift variation order — a list to follow on which variation, and in what order */}
+        {/* Main-lift variation order — only shown while a Hutch Touch session is actively loaded */}
+        {loadedHutchId && (
         <div className="mt-3 border border-bone/15 bg-ink/20">
           <button
             onClick={() => setVariationsOpen((v) => !v)}
@@ -1141,6 +1142,7 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* HUTCH TOUCH PICKER MODAL */}
