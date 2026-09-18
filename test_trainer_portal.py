@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend API test suite for Tensor Strength Trainer Portal
 Tests trainer assignment, client management, and check-in viewing
@@ -43,7 +44,7 @@ def test_trainer_portal():
     try:
         r = admin_session.post(f"{BASE_URL}/auth/login", json={
             "username": "The Hutch",
-            "password": "Vzkfjf3n!3"
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         })
         if r.status_code == 200:
             admin_user = r.json().get('user', {})

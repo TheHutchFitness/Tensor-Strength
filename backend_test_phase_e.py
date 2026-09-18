@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for PHASE E: Security & Correctness Hardening
 Tests all Phase E requirements including password validation, health checks, 
@@ -161,7 +162,7 @@ def test_phase_e_security_hardening():
         # Login as admin
         login_resp = requests.post(f"{BASE_URL}/auth/login", json={
             "username": "The Hutch",
-            "password": "Vzkfjf3n!3"
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         })
         assert login_resp.status_code == 200, f"Admin login failed: {login_resp.status_code} {login_resp.text}"
         admin_cookies = login_resp.cookies

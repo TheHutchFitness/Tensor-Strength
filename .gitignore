@@ -70,6 +70,8 @@ agenthub/agents/youtube/db
 db_backups/
 public/uploads/
 private-assets/
+private/
+test_result.md
 
 # Archive files and large assets
 **/*.zip

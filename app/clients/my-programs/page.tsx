@@ -36,7 +36,7 @@ export default function MyProgramsPage() {
   const [raw, setRaw] = useState("Day A\nBack Squat | 3 | 5 | 8 | add weight\nBench Press | 3 | 5 | 8 |\n\nDay B\nDeadlift | 1 | 5 | 8 |");
 
   async function loadCoach() {
-    const r = await fetch("/api/trainer/programs").then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    const r = await fetch("/api/trainer/program-blocks").then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (r?.programs) setMine(r.programs);
   }
 
@@ -116,7 +116,7 @@ export default function MyProgramsPage() {
   async function createProgram() {
     const sessions = parseSessions(raw);
     if (!name.trim() || !sessions.length) { setMsg("Add a name and at least one session with exercises."); return; }
-    const r = await fetch("/api/trainer/programs", {
+    const r = await fetch("/api/trainer/program-blocks", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, blurb, length, sessions }),
     });
@@ -127,7 +127,7 @@ export default function MyProgramsPage() {
   }
 
   async function del(id: string) {
-    await fetch(`/api/trainer/programs?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    await fetch(`/api/trainer/program-blocks?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     loadCoach();
   }
 

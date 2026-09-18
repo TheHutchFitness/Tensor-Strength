@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend API test for COACH SAVED TEMPLATES endpoints.
 
@@ -62,7 +63,7 @@ def main():
 
     # Admin credentials
     admin_username = "the hutch"
-    admin_password = "Vzkfjf3n!3"
+    admin_password = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
     try:
         # ============================================================

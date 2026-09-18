@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Verify no MongoDB _id or passwordHash leaks in API responses
 """
@@ -61,7 +62,7 @@ def test_no_id_leaks():
     print("TEST 2: Checking /api/auth/login response...")
     login_resp = requests.post(f"{BASE_URL}/auth/login", json={
         "username": "The Hutch",
-        "password": "Vzkfjf3n!3"
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
     })
     if login_resp.status_code == 200:
         leaks = check_for_leaks(login_resp.json())

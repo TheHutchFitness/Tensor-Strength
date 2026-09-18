@@ -575,8 +575,11 @@ async function ensureIndexes(db) {
         collection: 'users',
         indexes: [
           { key: { id: 1 }, name: 'id_1' },
+          { key: { id: 1 }, name: 'id_unique', unique: true },
           { key: { username: 1 }, name: 'username_1' },
+          { key: { username: 1 }, name: 'username_unique', unique: true, partialFilterExpression: { username: { $type: 'string' } } },
           { key: { email: 1 }, name: 'email_1' },
+          { key: { email: 1 }, name: 'email_unique', unique: true, partialFilterExpression: { email: { $type: 'string' } } },
           { key: { role: 1 }, name: 'role_1' },
           { key: { assignedTrainerId: 1 }, name: 'assignedTrainerId_1' },
           { key: { slug: 1 }, name: 'slug_1' },
@@ -590,6 +593,46 @@ async function ensureIndexes(db) {
         collection: 'tracker',
         indexes: [
           { key: { userId: 1 }, name: 'userId_1' },
+          { key: { userId: 1 }, name: 'userId_unique', unique: true, partialFilterExpression: { userId: { $type: 'string' } } },
+        ],
+      },
+      {
+        collection: 'programs',
+        indexes: [
+          { key: { id: 1 }, name: 'id_unique', unique: true },
+          { key: { trainerId: 1, createdAt: -1 }, name: 'trainerId_createdAt_desc' },
+          { key: { trainerId: 1, clientId: 1, createdAt: -1 }, name: 'trainerId_clientId_createdAt_desc' },
+        ],
+      },
+      {
+        collection: 'trainer_programs',
+        indexes: [
+          { key: { id: 1 }, name: 'id_unique', unique: true },
+          { key: { trainerId: 1, createdAt: -1 }, name: 'trainerId_createdAt_desc' },
+          { key: { clientIds: 1, active: 1, createdAt: -1 }, name: 'clientIds_active_createdAt_desc' },
+        ],
+      },
+      {
+        collection: 'workout_schedule',
+        indexes: [
+          { key: { id: 1 }, name: 'id_unique', unique: true },
+          { key: { trainerId: 1, clientId: 1, date: 1 }, name: 'trainerId_clientId_date_1' },
+          { key: { clientId: 1, source: 1, date: 1 }, name: 'clientId_source_date_1' },
+        ],
+      },
+      {
+        collection: 'messages',
+        indexes: [
+          { key: { id: 1 }, name: 'id_unique', unique: true },
+          { key: { trainerId: 1, clientId: 1, createdAt: -1 }, name: 'trainerId_clientId_createdAt_desc' },
+          { key: { read: 1, senderId: 1, trainerId: 1, clientId: 1 }, name: 'unread_participants_1' },
+        ],
+      },
+      {
+        collection: 'stripe_events',
+        indexes: [
+          { key: { id: 1 }, name: 'id_unique', unique: true },
+          { key: { receivedAt: -1 }, name: 'receivedAt_desc' },
         ],
       },
       {
@@ -637,6 +680,7 @@ async function ensureIndexes(db) {
         collection: 'uploads',
         indexes: [
           { key: { key: 1 }, name: 'key_1' },
+          { key: { key: 1 }, name: 'key_unique', unique: true },
           { key: { ownerId: 1 }, name: 'ownerId_1' },
         ],
       },
@@ -661,10 +705,15 @@ async function ensureIndexes(db) {
     ]
 
     for (const { collection, indexes } of defs) {
-      try {
-        await db.collection(collection).createIndexes(indexes)
-      } catch (e) {
-        console.error(`Index bootstrap failed for ${collection}:`, e?.message || e)
+      for (const index of indexes) {
+        try {
+          const { key, ...options } = index
+          await db.collection(collection).createIndex(key, options)
+        } catch (e) {
+          // Keep bootstrapping independent indexes if one legacy collection has
+          // data that needs cleanup before a uniqueness constraint can be added.
+          console.error(`Index bootstrap failed for ${collection}.${index.name}:`, e?.message || e)
+        }
       }
     }
   })()
@@ -3994,18 +4043,87 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, quest: clean }))
     }
 
-    // NOTE: Duplicate session-based `/trainer/programs` handlers (writing the
-    // `trainer_programs` collection) used to live here but were unreachable —
-    // shadowed by the live handlers above (the `programs` collection). Removed
-    // to eliminate route shadowing. The live coach-program system is: POST/GET/
-    // DELETE `/trainer/programs` (above) + `/client/programs` + `/trainer/schedule`.
+    // Multi-session program library. This is intentionally separate from the
+    // single-workout `/trainer/programs` API used by scheduling and workout logs.
+    if (route === '/trainer/program-blocks' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      }
+      const body = await request.json().catch(() => ({}))
+      const name = String(body.name || '').trim().slice(0, 120)
+      const blurb = String(body.blurb || '').trim().slice(0, 500)
+      const length = String(body.length || '').trim().slice(0, 80)
+      const sessions = Array.isArray(body.sessions)
+        ? body.sessions.slice(0, 30).map((session, sessionIndex) => ({
+            id: String(session.id || `s${sessionIndex}`).slice(0, 80),
+            title: String(session.title || `Session ${sessionIndex + 1}`).trim().slice(0, 120),
+            exercises: Array.isArray(session.exercises)
+              ? session.exercises.slice(0, 100).map((exercise) => ({
+                  exercise: String(exercise.exercise || '').trim().slice(0, 160),
+                  sets: String(exercise.sets || '').trim().slice(0, 40),
+                  reps: String(exercise.reps || '').trim().slice(0, 40),
+                  rpe: String(exercise.rpe || '').trim().slice(0, 40),
+                  notes: String(exercise.notes || '').trim().slice(0, 500),
+                })).filter((exercise) => exercise.exercise)
+              : [],
+          })).filter((session) => session.exercises.length)
+        : []
+      if (!name || !sessions.length) {
+        return handleCORS(NextResponse.json({ error: 'A name and at least one session are required.' }, { status: 400 }))
+      }
+
+      const assigned = await db.collection('users')
+        .find({ assignedTrainerId: user.id }, { projection: { _id: 0, id: 1 } })
+        .limit(1000)
+        .toArray()
+      const assignedIds = new Set(assigned.map((client) => client.id))
+      const clientIds = Array.isArray(body.clientIds)
+        ? [...new Set(body.clientIds.map(String))].filter((id) => assignedIds.has(id))
+        : [...assignedIds]
+      if (Array.isArray(body.clientIds) && clientIds.length !== new Set(body.clientIds.map(String)).size) {
+        return handleCORS(NextResponse.json({ error: 'One or more clients are not assigned to you.' }, { status: 400 }))
+      }
+
+      const program = {
+        id: uuidv4(), trainerId: user.id, trainerName: user.username,
+        clientIds, name, blurb, length, sessions, active: true, createdAt: new Date(),
+      }
+      await db.collection('trainer_programs').insertOne(program)
+      const { _id, ...clean } = program
+      return handleCORS(NextResponse.json({ ok: true, program: clean }))
+    }
+
+    if (route === '/trainer/program-blocks' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      }
+      const list = await db.collection('trainer_programs')
+        .find({ trainerId: user.id }, { projection: { _id: 0 } })
+        .sort({ createdAt: -1 }).limit(200).toArray()
+      return handleCORS(NextResponse.json({ programs: list }))
+    }
+
+    if (route === '/trainer/program-blocks' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) {
+        return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      }
+      const id = request.nextUrl.searchParams.get('id')
+      if (!id) return handleCORS(NextResponse.json({ error: 'id is required' }, { status: 400 }))
+      const result = await db.collection('trainer_programs').deleteOne({ id, trainerId: user.id })
+      if (!result.deletedCount) return handleCORS(NextResponse.json({ error: 'Program not found' }, { status: 404 }))
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+
     // Member: programs assigned to me by my coach.
     if (route === '/member/programs' && method === 'GET') {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
       const list = await db.collection('trainer_programs').find({
         active: true,
-        $or: [{ clientIds: user.id }, ...(user.assignedTrainerId ? [{ trainerId: user.assignedTrainerId }] : [])],
+        clientIds: user.id,
       }, { projection: { _id: 0, clientIds: 0, trainerId: 0 } }).sort({ createdAt: -1 }).limit(30).toArray()
       return handleCORS(NextResponse.json({ programs: list }))
     }
@@ -4701,23 +4819,11 @@ async function handleRoute(request, { params }) {
       }
       try {
         const KEY = 'private-assets/hutch-touch-athlete-edition.pdf'
-        let bytes = null
-        // Prefer authenticated object storage (R2). The file no longer lives in
-        // the repo; it's served only to the admin through this gated route.
-        if (r2Enabled()) {
-          try {
-            const obj = await getS3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: KEY }))
-            bytes = Buffer.from(await obj.Body.transformToByteArray())
-          } catch { bytes = null }
+        if (!r2Enabled()) {
+          return handleCORS(NextResponse.json({ error: 'Private file storage is not configured' }, { status: 503 }))
         }
-        if (!bytes) {
-          // Fallback to a local copy if present, and seed R2 for next time.
-          const filePath = nodePath.join(process.cwd(), 'private-assets', 'hutch-touch-athlete-edition.pdf')
-          bytes = Buffer.from(await readFile(filePath))
-          if (r2Enabled()) {
-            try { await getS3().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET, Key: KEY, Body: bytes, ContentType: 'application/pdf' })) } catch {}
-          }
-        }
+        const obj = await getS3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: KEY }))
+        const bytes = Buffer.from(await obj.Body.transformToByteArray())
         const headers = new Headers()
         headers.set('Content-Type', 'application/pdf')
         headers.set('Content-Disposition', 'inline; filename="Tensor-Strength-Hutch-Touch-Athlete-Edition.pdf"')

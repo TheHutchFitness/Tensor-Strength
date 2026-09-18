@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend API test for Client "About Me" Profile endpoints
 Tests GET/PUT /api/client/profile and integration with trainer check-ins view.
@@ -14,7 +15,7 @@ BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 # Test results
 test_results = []
