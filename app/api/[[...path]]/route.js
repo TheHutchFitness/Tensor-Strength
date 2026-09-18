@@ -54,6 +54,21 @@ async function memberHasActiveCoachSchedule(db, user) {
   return docs.some((d) => d.repeatWeekly === true || (typeof d.date === 'string' && d.date >= todayStr))
 }
 
+// Can this coach view/edit/delete a given workout_schedule item? Admin can
+// manage anything; a coach can manage their own scheduled docs, coach-wide
+// docs, and any doc (incl. a member's self-loaded day) for a client assigned
+// to them.
+async function coachCanManageScheduleItem(db, coach, item) {
+  if (!coach || !item) return false
+  if (coach.role === 'admin') return true
+  if (item.trainerId === coach.id) return true
+  if (item.clientId) {
+    const c = await db.collection('users').findOne({ id: item.clientId }, { projection: { assignedTrainerId: 1 } })
+    if (c && c.assignedTrainerId === coach.id) return true
+  }
+  return false
+}
+
 // ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
 // When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
 // served back through the /api/files/<key> proxy on our own domain. If not
@@ -3961,17 +3976,66 @@ async function handleRoute(request, { params }) {
       const user = await getCurrentUser(request, db)
       if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
       const clientId = request.nextUrl.searchParams.get('clientId')
-      const q = user.role === 'admin' ? {} : { trainerId: user.id }
-      if (clientId) q.clientId = clientId
-      const list = await db.collection('workout_schedule').find(q, { projection: { _id: 0 } }).sort({ date: 1 }).limit(200).toArray()
+      let list
+      if (clientId) {
+        // Per-client view: include coach-loaded days, coach-wide days, AND the
+        // member's own self-loaded block so the coach can override any day.
+        if (user.role !== 'admin') {
+          const c = await db.collection('users').findOne({ id: clientId }, { projection: { assignedTrainerId: 1 } })
+          if (!c || c.assignedTrainerId !== user.id) return handleCORS(NextResponse.json({ error: 'That client is not assigned to you.' }, { status: 403 }))
+        }
+        const q = user.role === 'admin'
+          ? { $or: [{ clientId }, { clientId: null }] }
+          : { $or: [{ clientId }, { clientId: null, trainerId: user.id }] }
+        list = await db.collection('workout_schedule').find(q, { projection: { _id: 0 } }).sort({ date: 1 }).limit(400).toArray()
+      } else {
+        const q = user.role === 'admin' ? {} : { trainerId: user.id }
+        list = await db.collection('workout_schedule').find(q, { projection: { _id: 0 } }).sort({ date: 1 }).limit(200).toArray()
+      }
       return handleCORS(NextResponse.json({ schedule: list }))
+    }
+    // Coach override: tweak/swap a single scheduled day (title, date, exercises,
+    // autoload). Works on coach-loaded days and a member's self-loaded days for
+    // clients assigned to this coach.
+    if (route === '/trainer/schedule/item' && method === 'PUT') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const b = await request.json().catch(() => ({}))
+      const id = String(b.id || '')
+      if (!id) return handleCORS(NextResponse.json({ error: 'An item id is required.' }, { status: 400 }))
+      const item = await db.collection('workout_schedule').findOne({ id })
+      if (!item) return handleCORS(NextResponse.json({ error: 'Scheduled day not found.' }, { status: 404 }))
+      if (!(await coachCanManageScheduleItem(db, user, item))) return handleCORS(NextResponse.json({ error: 'You can only edit days for your own clients.' }, { status: 403 }))
+      const set = { lastEditedByTrainerId: user.id, lastEditedByTrainerName: user.username, updatedAt: new Date() }
+      if (typeof b.title === 'string' && b.title.trim()) set.title = b.title.trim().slice(0, 140)
+      if (typeof b.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.date)) set.date = b.date
+      if ('autoload' in b) set.autoload = b.autoload !== false
+      if ('repeatWeekly' in b) set.repeatWeekly = !!b.repeatWeekly
+      if (Array.isArray(b.exercises)) {
+        set.exercises = b.exercises.slice(0, 40).map((e) => ({
+          name: String(e?.name || '').slice(0, 80),
+          sets: String(e?.sets || '').slice(0, 20),
+          reps: String(e?.reps || '').slice(0, 40),
+          load: String(e?.load || '').slice(0, 40),
+          notes: String(e?.notes || '').slice(0, 240),
+        })).filter((e) => e.name)
+      }
+      await db.collection('workout_schedule').updateOne({ id }, { $set: set })
+      const updated = await db.collection('workout_schedule').findOne({ id }, { projection: { _id: 0 } })
+      // Best-effort: let the member know their coach changed a day.
+      if (item.clientId) {
+        try { await sendWebPushToUser(db, item.clientId, { title: 'Your coach updated your plan', body: `${set.title || item.title} · ${set.date || item.date}`, url: '/clients/workout-log', tag: 'plan-override' }) } catch {}
+      }
+      return handleCORS(NextResponse.json({ ok: true, item: updated }))
     }
     if (route === '/trainer/schedule' && method === 'DELETE') {
       const user = await getCurrentUser(request, db)
       if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
       const id = request.nextUrl.searchParams.get('id')
-      const filter = user.role === 'admin' ? { id } : { id, trainerId: user.id }
-      await db.collection('workout_schedule').deleteOne(filter)
+      const item = await db.collection('workout_schedule').findOne({ id: String(id || '') })
+      if (!item) return handleCORS(NextResponse.json({ ok: true }))
+      if (!(await coachCanManageScheduleItem(db, user, item))) return handleCORS(NextResponse.json({ error: 'You can only remove days for your own clients.' }, { status: 403 }))
+      await db.collection('workout_schedule').deleteOne({ id: item.id })
       return handleCORS(NextResponse.json({ ok: true }))
     }
     // Member: my upcoming scheduled workouts (expands weekly repeats over 28 days).

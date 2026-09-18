@@ -32,6 +32,23 @@ export default function TrainerPrograms() {
   const [schedAutoload, setSchedAutoload] = useState(true);
   const [schedRepeat, setSchedRepeat] = useState(false);
   const [schedMsg, setSchedMsg] = useState("");
+  // ---- Per-day override editor ----
+  const [editId, setEditId] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editAutoload, setEditAutoload] = useState(true);
+  const [editRows, setEditRows] = useState<ExRow[]>([]);
+  const [editMsg, setEditMsg] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  async function refreshSchedule(clientId?: string) {
+    const cid = clientId !== undefined ? clientId : schedClient;
+    const url = cid ? `/api/trainer/schedule?clientId=${encodeURIComponent(cid)}` : "/api/trainer/schedule";
+    try {
+      const d = await fetch(url).then((r) => (r.ok ? r.json() : { schedule: [] }));
+      setSchedule(d.schedule || []);
+    } catch { /* ignore */ }
+  }
 
   async function load() {
     const [c, p] = await Promise.all([
@@ -40,7 +57,7 @@ export default function TrainerPrograms() {
     ]);
     setClients(c.clients || []);
     setPrograms(p.programs || []);
-    fetch("/api/trainer/schedule").then((r) => (r.ok ? r.json() : { schedule: [] })).then((d) => setSchedule(d.schedule || [])).catch(() => {});
+    refreshSchedule();
   }
 
   async function scheduleWorkout(e: React.FormEvent) {
@@ -55,18 +72,74 @@ export default function TrainerPrograms() {
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { setSchedMsg(d.error || "Could not schedule."); return; }
     setSchedDate("");
-    await load();
+    await refreshSchedule();
     setSchedMsg("Scheduled ✓");
   }
 
   async function delSchedule(id: string) {
+    if (!confirm("Remove this day from the calendar?")) return;
     await fetch(`/api/trainer/schedule?id=${id}`, { method: "DELETE" });
-    await load();
+    if (editId === id) cancelEdit();
+    await refreshSchedule();
+  }
+
+  // ---- Override editor helpers ----
+  function startEdit(item: any) {
+    setEditId(item.id);
+    setEditTitle(item.title || "");
+    setEditDate(item.date || "");
+    setEditAutoload(item.autoload !== false);
+    const ex = Array.isArray(item.exercises) ? item.exercises : [];
+    setEditRows(ex.length ? ex.map((e: any) => ({ name: e.name || "", sets: String(e.sets ?? ""), reps: String(e.reps ?? ""), load: String(e.load ?? ""), notes: String(e.notes ?? "") })) : [emptyRow()]);
+    setEditMsg("");
+  }
+  function cancelEdit() { setEditId(""); setEditRows([]); setEditMsg(""); }
+  function updateEditRow(i: number, field: keyof ExRow, value: string) {
+    setEditRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+  function addEditRow() { setEditRows((r) => [...r, emptyRow()]); }
+  function removeEditRow(i: number) { setEditRows((r) => (r.length > 1 ? r.filter((_, idx) => idx !== i) : r)); }
+  // "Swap" a day to a coach program: overwrite title + exercises from it.
+  function swapToProgram(progId: string) {
+    if (!progId) return;
+    const p = programs.find((x) => x.id === progId);
+    if (!p) return;
+    setEditTitle(p.title || editTitle);
+    const ex = Array.isArray(p.exercises) ? p.exercises : [];
+    setEditRows(ex.length ? ex.map((e: any) => ({ name: e.name || "", sets: String(e.sets ?? ""), reps: String(e.reps ?? ""), load: String(e.load ?? ""), notes: String(e.notes ?? "") })) : [emptyRow()]);
+  }
+  async function saveEdit() {
+    setEditSaving(true);
+    setEditMsg("");
+    const exercises = editRows.map((r) => ({ ...r })).filter((r) => r.name.trim());
+    try {
+      const res = await fetch("/api/trainer/schedule/item", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editId, title: editTitle, date: editDate, autoload: editAutoload, exercises }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setEditMsg(d.error || "Could not save changes."); return; }
+      cancelEdit();
+      await refreshSchedule();
+    } catch {
+      setEditMsg("Could not save changes. Please try again.");
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  // When the coach picks a specific client, load that client's full block
+  // (coach-loaded days + the member's own self-loaded 4-week plan).
+  useEffect(() => {
+    refreshSchedule(schedClient);
+    cancelEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedClient]);
 
   function updateRow(i: number, field: keyof ExRow, value: string) {
     setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
@@ -200,22 +273,79 @@ export default function TrainerPrograms() {
         <button type="submit" className="justify-self-start bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors">
           Schedule workout
         </button>
+      </form>
 
-        {schedule.length > 0 && (
-          <div className="border-t border-electric/20 pt-4 grid gap-2">
-            <span className={labelCls}>Upcoming ({schedule.length})</span>
-            {schedule.map((s) => (
-              <div key={s.id} className="flex items-center justify-between gap-3 border border-bone/15 bg-ink/30 px-3 py-2">
+      {/* Loaded plan / calendar days — tweak or swap any individual day */}
+      {schedule.length > 0 && (
+        <div className="border border-bone/15 bg-ink/20 p-6 grid gap-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className={labelCls}>{schedClient ? `${clientName(schedClient)}'s plan` : "Scheduled days"} ({schedule.length})</span>
+            {schedClient && <span className="text-[11px] text-bone/45">Tap Edit to tweak or swap any day. Member-loaded days can be overridden too.</span>}
+          </div>
+          {schedule.map((s) => (
+            <div key={s.id} className="border border-bone/15 bg-ink/30">
+              <div className="flex items-center justify-between gap-3 px-3 py-2">
                 <span className="text-sm text-bone/80 min-w-0 truncate">
                   <span className="text-electric font-display">{s.date}</span> · {s.title}
-                  <span className="text-bone/40"> · {clientName(s.clientId)}{s.repeatWeekly ? " · weekly" : ""}{s.autoload ? " · auto" : ""}</span>
+                  <span className="text-bone/40"> · {clientName(s.clientId)}{s.repeatWeekly ? " · weekly" : ""}{s.autoload !== false ? " · auto" : ""}</span>
+                  {s.source === "self" && <span className="ml-2 text-[9px] uppercase tracking-wider text-bone/50 border border-bone/25 px-1.5 py-0.5">member-loaded</span>}
+                  {s.lastEditedByTrainerId && <span className="ml-2 text-[9px] uppercase tracking-wider text-electric/80 border border-electric/40 px-1.5 py-0.5">edited</span>}
                 </span>
-                <button type="button" onClick={() => delSchedule(s.id)} className="text-bone/40 hover:text-electric text-sm shrink-0">✕</button>
+                <span className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => (editId === s.id ? cancelEdit() : startEdit(s))} className="font-display uppercase tracking-wider text-[10px] text-bone/60 hover:text-electric">{editId === s.id ? "Close" : "Edit"}</button>
+                  <button type="button" onClick={() => delSchedule(s.id)} className="text-bone/40 hover:text-electric text-sm">✕</button>
+                </span>
               </div>
-            ))}
-          </div>
-        )}
-      </form>
+
+              {editId === s.id && (
+                <div className="border-t border-electric/20 bg-ink/40 p-3 grid gap-3">
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className={labelCls}>Day title</span>
+                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className={inputCls + " mt-1"} />
+                    </label>
+                    <label className="block">
+                      <span className={labelCls}>Date</span>
+                      <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={inputCls + " mt-1"} />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-bone/80">
+                      <input type="checkbox" checked={editAutoload} onChange={(e) => setEditAutoload(e.target.checked)} className="accent-electric" />
+                      Auto-load into their tracker
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-bone/60">
+                      Swap to program
+                      <select onChange={(e) => { swapToProgram(e.target.value); e.currentTarget.value = ""; }} defaultValue="" className="bg-ink/60 border border-bone/20 px-2 py-1 text-bone focus:border-electric outline-none">
+                        <option value="">Choose…</option>
+                        {programs.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid gap-2">
+                    <span className={labelCls}>Exercises</span>
+                    {editRows.map((row, i) => (
+                      <div key={i} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center">
+                        <input value={row.name} onChange={(e) => updateEditRow(i, "name", e.target.value)} placeholder="Exercise" className="bg-ink/60 border border-bone/20 px-2 py-1.5 text-sm text-bone focus:border-electric outline-none" />
+                        <input value={row.sets} onChange={(e) => updateEditRow(i, "sets", e.target.value)} placeholder="Sets" className="w-16 bg-ink/60 border border-bone/20 px-2 py-1.5 text-sm text-bone focus:border-electric outline-none" />
+                        <input value={row.reps} onChange={(e) => updateEditRow(i, "reps", e.target.value)} placeholder="Reps" className="w-20 bg-ink/60 border border-bone/20 px-2 py-1.5 text-sm text-bone focus:border-electric outline-none" />
+                        <input value={row.load} onChange={(e) => updateEditRow(i, "load", e.target.value)} placeholder="Load" className="w-20 bg-ink/60 border border-bone/20 px-2 py-1.5 text-sm text-bone focus:border-electric outline-none" />
+                        <button type="button" onClick={() => removeEditRow(i)} className="text-bone/40 hover:text-electric text-sm px-1">✕</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={addEditRow} className="justify-self-start font-display uppercase tracking-wider text-[10px] text-bone/60 hover:text-electric">+ Add exercise</button>
+                  </div>
+                  {editMsg && <p className="text-sm text-red-400">{editMsg}</p>}
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={saveEdit} disabled={editSaving} className="bg-electric text-ink px-5 py-2 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors disabled:opacity-50">{editSaving ? "Saving…" : "Save changes"}</button>
+                    <button type="button" onClick={cancelEdit} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-bone hover:text-bone transition-colors">Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div>
         <p className="font-display uppercase tracking-wider text-bone/60 text-sm mb-4">Your programs ({programs.length})</p>
