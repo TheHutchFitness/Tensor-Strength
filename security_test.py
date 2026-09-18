@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Security Audit Backend Test - SEC-001, SEC-003, SEC-004, SEC-002, Hardening
 Tests all security fixes as specified in the review request.
@@ -24,7 +25,7 @@ API_BASE = f"{BASE_URL}/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 def create_test_png():
     """Create a small valid PNG image in memory (1x1 pixel red)."""

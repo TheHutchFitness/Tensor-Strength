@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for: Admin (Hutch) linked to existing static Hutch profile
 Tests the REFINED admin behavior where admin is LINKED to the existing static 'hutch' coach,
@@ -19,7 +20,7 @@ BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 # Test results tracking
 test_results = []

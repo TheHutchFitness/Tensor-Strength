@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for PHASE B: Member self-load 4-week program onto calendar - COACH-BLOCK RULE ONLY
 This test focuses on verifying the coach-block rule by creating a program in 'programs' collection
@@ -30,7 +31,7 @@ def test_coach_block():
     
     # Admin credentials
     admin_username = "The Hutch"
-    admin_password = "Vzkfjf3n!3"
+    admin_password = os.environ.get("TEST_ADMIN_PASSWORD", "")
     
     test_count = 0
     passed = 0

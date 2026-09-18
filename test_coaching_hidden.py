@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for coaching showcase "hidden clips" feature.
 Tests GET /api/coaching-content and PUT /api/admin/coaching-content with hidden array.
@@ -23,7 +24,7 @@ API_BASE = f"{BASE_URL}/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 def main():
     print("=" * 80)

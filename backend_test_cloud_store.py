@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for NEW Client Cloud Store endpoints on Next.js app.
 Tests: PUT /api/client/store, GET /api/client/store (with and without key param)
@@ -14,7 +15,7 @@ BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 # Test results tracking
 test_results = []

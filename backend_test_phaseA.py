@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend API testing script for Tensor Strength app - Phase A.
 Tests: CAD currency, client profile intake (goal/injuries), and data persistence.
@@ -12,7 +13,7 @@ import string
 # Base URL from .env NEXT_PUBLIC_BASE_URL
 BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 def random_string(length=8):
     """Generate a random string for unique test data."""

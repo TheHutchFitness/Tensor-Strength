@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for PHASE D: Coach Plan Overrides
 Tests GET/PUT/DELETE /api/trainer/schedule endpoints with self-loaded member days
@@ -29,7 +30,7 @@ def test_phase_d_coach_plan_overrides():
         # Login as admin (The Hutch)
         login_resp = requests.post(f"{BASE_URL}/auth/login", json={
             "username": "The Hutch",
-            "password": "Vzkfjf3n!3"
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         })
         assert login_resp.status_code == 200, f"Admin login failed: {login_resp.status_code} {login_resp.text}"
         admin_cookies = login_resp.cookies

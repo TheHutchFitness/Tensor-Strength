@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend API test for client-intake endpoints:
 - GET /api/trainer/client-intake?clientId=<CID>
@@ -16,7 +17,7 @@ BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 # Demo client ID (will verify or get fresh one)
 DEMO_CLIENT_ID = "da3cf979-45da-4c47-9b5f-8680d131038e"
@@ -51,7 +52,7 @@ def main():
     
     try:
         # TEST 1: Admin login
-        print_test(1, "Admin login with 'The Hutch' / 'Vzkfjf3n!3'")
+        print_test(1, "Admin login using TEST_ADMIN_PASSWORD")
         resp = session.post(f"{BASE_URL}/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD

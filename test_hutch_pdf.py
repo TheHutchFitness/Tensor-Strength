@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Backend test for Hutch Touch PDF endpoint (GET /api/hutch-touch/pdf)
 Tests:
@@ -17,7 +18,7 @@ BASE_URL = "https://trainer-profiles-2.preview.emergentagent.com/api"
 
 # Admin credentials (portal user with portalAccess)
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 # Test results tracking
 test_results = []

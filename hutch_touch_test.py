@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Hutch Touch File Download Endpoint Tests
 Tests gated access to PDF and Excel tracker files
@@ -201,7 +202,7 @@ def test_hutch_touch_endpoints():
         # Login as admin
         admin_data = {
             "username": "The Hutch",
-            "password": "Vzkfjf3n!3"
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         }
         log(f"   Logging in as admin: {admin_data['username']}")
         r = admin_session.post(f"{BASE_URL}/auth/login", json=admin_data)

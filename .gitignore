@@ -66,6 +66,13 @@ chainlit.md
 # Data and databases
 agenthub/agents/youtube/db
 
+# SECURITY: never commit DB backups, user uploads, or private downloadable assets
+db_backups/
+public/uploads/
+private-assets/
+private/
+test_result.md
+
 # Archive files and large assets
 **/*.zip
 **/*.tar.gz

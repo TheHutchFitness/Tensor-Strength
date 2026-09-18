@@ -15,7 +15,7 @@ API_BASE = f"{BASE_URL}/api"
 
 # Admin credentials
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 # Demo client
 DEMO_CLIENT_ID = "da3cf979-45da-4c47-9b5f-8680d131038e"

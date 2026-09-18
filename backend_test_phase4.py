@@ -15,7 +15,7 @@ API_BASE = f"{BASE_URL}/api"
 
 # Admin credentials from review request
 ADMIN_USERNAME = "The Hutch"
-ADMIN_PASSWORD = "Vzkfjf3n!3"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 ADMIN_ID = "73242b1a-8348-493e-adb3-f2e42e932f68"
 
 def print_test(msg):

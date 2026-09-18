@@ -42,13 +42,12 @@ async function checkDatabase() {
 }
 
 export async function GET(request: Request) {
-  const strict = new URL(request.url).searchParams.get("strict") === "1";
+  // Always verify the database so the deploy health gate can't pass with an
+  // unreachable DB. (`?strict=1` kept as a no-op alias for backward compat.)
   const missingRequired = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
-  const db = strict
-    ? await checkDatabase()
-    : { ok: null, skipped: true, reason: "skipped-non-strict" };
+  const db = await checkDatabase();
   const ok = missingRequired.length === 0 && db.ok === true;
-  const ready = missingRequired.length === 0 && (strict ? db.ok : true);
+  const ready = ok;
 
   const body = {
     ok,
