@@ -98,6 +98,7 @@ const LOWER_PULL_WORK: Slot[] = [
   { exercise: "Hamstring curl", sets: "4", reps: "8-15", rpe: "8-9", notes: "Full shortening and controlled eccentric." },
   { exercise: "Calf raise", sets: "4", reps: "8-15", rpe: "8-9", notes: "Pause in stretch and top position." },
   { exercise: "Tibialis raise", sets: "3", reps: "15-25", rpe: "8-9", notes: "Controlled dorsiflexion." },
+  { exercise: "Turkish get-up (athletic finisher)", sets: "2", reps: "2-3 / side", rpe: "6-7", notes: "Proprioception finisher. Controlled transitions; keep the load conservative and the shoulder stacked." },
   { exercise: "Cardio of choice", sets: "1", reps: "10-20 min", rpe: "5-7", notes: "Keep it sustainable after posterior-chain work." },
 ];
 
