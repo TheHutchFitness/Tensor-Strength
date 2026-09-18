@@ -87,3 +87,7 @@ node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 public/videos/coach.mp4
 .next/cache/webpack/server-production/0.pack
 .next/cache/webpack/server-production/14.pack
+*.env
+credentials.json
+*.key
+.credentials
