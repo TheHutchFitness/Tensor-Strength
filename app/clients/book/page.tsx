@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react";
 import PortalHeader from "../../../src/components/portal/PortalHeader";
 
-// Coach's Google Calendar "Appointment schedule" booking pages (public booking links).
-// To change these later, just update the two IDs below.
-const SCHEDULES = {
-  inperson: "AcZssZ3XT5bEpAZExk-M3ksQylwSCzwDP8vA4miNw97dqfe9kwA2TIeQG2FtkWx5QXYD-urnVE7f0Wfx",
-  remote: "AcZssZ3Gf8Eth6w_u5uaQUIwwBdRh_Nb01nbQBa8jwLtfw3_d8urusi8F177CdMgH2b9VrGBs5CjRW8Q",
+// Coach's Google Calendar booking links (public "Book an appointment" share links).
+// To change these later, just update the two URLs below.
+const BOOKING = {
+  inperson: "https://calendar.app.google/uGhFiQJRDEeehvMy8",
+  remote: "https://calendar.app.google/Z6WBxXeckLBQiqdB7",
 };
-const embedUrl = (id: string) => `https://calendar.google.com/calendar/appointments/schedules/${id}?gv=true`;
-const openUrl = (id: string) => `https://calendar.google.com/calendar/appointments/schedules/${id}`;
 
 export default function BookPage() {
   const [loading, setLoading] = useState(true);
@@ -33,7 +31,6 @@ export default function BookPage() {
       const { user } = await me.json();
       if (!user.portalAccess) { window.location.href = "/clients"; return; }
       setAccessType(user.accessType || "");
-      // Default to the schedule matching the client's plan (URL param wins).
       if (t === "remote" || t === "inperson") setTab(t);
       else if (user.accessType === "remote_coaching") setTab("remote");
       else if (user.accessType === "in_person") setTab("inperson");
@@ -49,8 +46,7 @@ export default function BookPage() {
   }, []);
 
   const coachingClient = accessType === "remote_coaching" || accessType === "in_person";
-
-  const id = SCHEDULES[tab];
+  const url = BOOKING[tab];
 
   return (
     <main className="text-bone min-h-screen">
@@ -98,30 +94,50 @@ export default function BookPage() {
               ))}
             </div>
 
-            <div className="border border-bone/15 bg-white/95 overflow-hidden">
-              <iframe
-                key={tab}
-                src={embedUrl(id)}
-                title={tab === "inperson" ? "In-person booking" : "Remote booking"}
-                className="w-full"
-                style={{ border: 0, minHeight: 640 }}
-                width="100%"
-                height={720}
-              />
+            <div className="border-2 border-electric/40 bg-electric/[0.04] p-8">
+              {tab === "inperson" ? (
+                <>
+                  <p className="font-display uppercase tracking-wider text-electric text-lg">1-on-1 In-Person Floor Sessions</p>
+                  <p className="mt-2 text-xs uppercase tracking-wider text-bone/50">Location: The Fit Effect — Paris, Ontario</p>
+                  <p className="mt-3 text-bone/75 leading-relaxed max-w-xl">
+                    Direct, hands-on strength coaching designed to dial in your technique, enforce progressive
+                    overload, and push your training intensity safely.
+                  </p>
+                  <div className="mt-4 border-l-2 border-electric bg-electric/5 pl-4 py-3 max-w-xl">
+                    <p className="font-display uppercase tracking-wider text-[11px] text-electric">⚠️ Important Booking Requirements</p>
+                    <p className="mt-1.5 text-xs text-bone/70 leading-relaxed">
+                      This scheduling page is strictly for active members of The Fit Effect who have already purchased
+                      personal training packages or sessions through the facility. If you are not yet a member or have
+                      not purchased training credits, please contact me or the front desk staff at The Fit Effect
+                      before booking.
+                    </p>
+                  </div>
+                  <p className="mt-4 text-sm text-bone/70"><span className="text-bone/50 font-display uppercase tracking-wider text-xs">Available days:</span> Monday, Wednesday &amp; Friday · 4:30 PM – 7:30 PM</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-display uppercase tracking-wider text-electric text-lg">Schedule Your Weekly Check-In</p>
+                  <p className="mt-3 text-bone/75 leading-relaxed max-w-xl">
+                    Select an available slot to lock in your 1-on-1 weekly review. All sessions take place via
+                    Google Meet — you&apos;ll receive the video invite and calendar link instantly once scheduled.
+                  </p>
+                </>
+              )}
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex items-center gap-2 bg-electric text-ink px-7 py-3.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
+              >
+                {tab === "inperson" ? "Schedule Your Floor Session →" : "Book via Google Calendar →"}
+              </a>
             </div>
 
             {tab === "remote" && (
-              <p className="mt-3 text-xs text-electric/90 leading-relaxed border-l-2 border-electric pl-3">
-                📌 One remote check-in per week, please — book the slot that works and I&apos;ll see you on Google Meet.
+              <p className="mt-4 text-xs text-electric/90 leading-relaxed border-l-2 border-electric pl-3">
+                📌 One remote check-in per week — please book your slot before Sunday so we stay on schedule.
               </p>
             )}
-
-            <p className="mt-4 text-xs text-bone/50 leading-relaxed">
-              Trouble loading the calendar?{" "}
-              <a href={openUrl(id)} target="_blank" rel="noopener noreferrer" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors">
-                Open the booking page in a new tab →
-              </a>
-            </p>
           </>
         )}
       </div>

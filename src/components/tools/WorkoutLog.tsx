@@ -20,6 +20,9 @@ import {
 } from "../../data/hutchTouchProgram";
 import { bestStrengthEstimate, localWorkoutDate, isCompletedSet } from "../../lib/workoutMetrics";
 import { memberPrograms } from "../../data/memberPrograms";
+import { HUTCH_TOUCH_PERFORMANCE_PDF_URL } from "../../data/hutchTouchProgram";
+import { buildProgramPlan } from "../../lib/programSchedule";
+import PlanPreview from "../PlanPreview";
 import { exercises as exerciseGuides } from "../../data/exercises";
 
 type Set = { id: string; weight: string; reps: string; rpe: string };
@@ -203,10 +206,65 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
   // Member-only extra programs (loaded straight into the tracker).
   const [coachPrograms, setCoachPrograms] = useState<any[]>([]);
   const [helpVideos, setHelpVideos] = useState<DemoVideo[]>([]);
+  // Coach-scheduled workouts (calendar) + the member's calendar-subscription link.
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [scheduleToday, setScheduleToday] = useState("");
+  const [calUrl, setCalUrl] = useState("");
+  const [calWebcal, setCalWebcal] = useState("");
+  // Self-service 4-week plan loading onto the member's calendar.
+  const [loadStatus, setLoadStatus] = useState<{ coachLoaded: boolean; selfLoaded: boolean; selfProgramId: string; selfLabel: string }>({ coachLoaded: false, selfLoaded: false, selfProgramId: "", selfLabel: "" });
+  const [planStart, setPlanStart] = useState(() => localWorkoutDate());
+  const [planChoice, setPlanChoice] = useState("");
+  const [planMsg, setPlanMsg] = useState("");
+  const [planBusy, setPlanBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItems, setPreviewItems] = useState<any[]>([]);
+  const [previewName, setPreviewName] = useState("");
+  const [previewChoice, setPreviewChoice] = useState("");
+  const autoloadedRef = useRef(false);
+  function refreshSchedule() {
+    fetch("/api/member/schedule").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setSchedule(d.schedule || []); setScheduleToday(d.today || ""); } }).catch(() => {});
+    fetch("/api/member/load-status").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setLoadStatus({ coachLoaded: !!d.coachLoaded, selfLoaded: !!d.selfLoaded, selfProgramId: d.selfProgramId || "", selfLabel: d.selfLabel || "" }); }).catch(() => {});
+  }
   useEffect(() => {
     fetch("/api/member/programs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.programs && setCoachPrograms(d.programs)).catch(() => {});
     fetch("/api/member/videos").then((r) => (r.ok ? r.json() : null)).then((d) => setHelpVideos(d?.videos || [])).catch(() => {});
+    refreshSchedule();
+    fetch("/api/member/calendar-token").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setCalUrl(d.url || ""); setCalWebcal(d.webcal || ""); } }).catch(() => {});
   }, []);
+
+  const weekDays = useMemo(() => {
+    const base = scheduleToday ? new Date(scheduleToday + "T00:00:00Z") : new Date();
+    const dows = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const out: { ymd: string; dow: string; dom: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + i);
+      out.push({ ymd: d.toISOString().slice(0, 10), dow: dows[d.getUTCDay()], dom: d.getUTCDate() });
+    }
+    return out;
+  }, [scheduleToday]);
+
+  // Load a coach-scheduled workout (snapshot of exercises) into the tracker.
+  function loadScheduledWorkout(item: any, silent = false) {
+    if (!silent && !canReplaceSession()) return false;
+    draftWorkoutId.current = uid();
+    const list: SessionExercise[] = (item.exercises || []).map((ex: any) => {
+      const cue = [ex.sets && `${ex.sets} sets`, ex.reps && `${ex.reps} reps`, ex.load, ex.notes].filter(Boolean).join(" · ");
+      const n = Math.max(1, Math.min(10, parseInt(ex.sets, 10) || 1));
+      return { id: uid(), name: ex.name, cue, sets: Array.from({ length: n }, () => ({ id: uid(), weight: "", reps: ex.reps || "", rpe: "" })) };
+    });
+    if (!list.length) return false;
+    setSession(list);
+    setSessionTitle(item.title || "Coach workout");
+    setSessionNotes("");
+    setSessionDate(localWorkoutDate());
+    setLoadedHutchId(null);
+    setActiveSplitId(null);
+    setCurrentTemplateId(null);
+    if (!silent && typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    return true;
+  }
   const allPrograms: any[] = [...memberPrograms, ...coachPrograms];
 
   function loadMemberSession(programId: string, sessionId: string, deload = false) {
@@ -249,6 +307,77 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
     }
     const nextId = lastId ? ids[(ids.indexOf(lastId) + 1) % ids.length] : ids[0];
     return p.sessions.find((s: any) => s.id === nextId) || p.sessions[0];
+  }
+
+  // Build a plan and open the preview modal (member confirms before it's saved).
+  async function loadPlanToCalendar(choice: string) {
+    if (loadStatus.coachLoaded) { setPlanMsg("Your coach has already loaded a plan for you."); return; }
+    if (!choice) { setPlanMsg("Pick a program to load first."); return; }
+    let sessions: any[] = [];
+    let name = "";
+    let daysPerWeek = 3;
+    let weeks = 4;
+    if (choice === "hutch") {
+      sessions = hutchTouchSessions.map((s) => ({ id: s.id, title: s.title, exercises: s.exercises }));
+      name = "The Hutch Touch";
+      daysPerWeek = 4;
+      weeks = 4;
+    } else {
+      const prog = memberPrograms.find((p) => p.id === choice);
+      if (!prog) { setPlanMsg("Program not found."); return; }
+      sessions = prog.sessions;
+      name = prog.name;
+      daysPerWeek = prog.daysPerWeek || 3;
+      weeks = prog.weeks || 4;
+    }
+    const items = buildProgramPlan(sessions as any, name, daysPerWeek, weeks, planStart);
+    if (!items.length) { setPlanMsg("Choose a start date to build the plan."); return; }
+    setPreviewItems(items);
+    setPreviewName(name);
+    setPreviewChoice(choice);
+    setPreviewOpen(true);
+  }
+
+  // Confirm the previewed plan -> save onto the calendar.
+  async function confirmPlanLoad() {
+    if (!previewItems.length) return;
+    setPlanBusy(true);
+    setPlanMsg("");
+    try {
+      const r = await fetch("/api/member/load-program", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ programId: previewChoice, label: previewName, items: previewItems }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setPlanMsg(`Loaded ${d.scheduled} sessions of ${previewName} onto your calendar.`);
+        setPreviewOpen(false);
+        refreshSchedule();
+      } else {
+        setPlanMsg(d.error || "Could not load the plan.");
+        if (d.coachLoaded) { setLoadStatus((s) => ({ ...s, coachLoaded: true })); setPreviewOpen(false); }
+      }
+    } catch {
+      setPlanMsg("Could not load the plan. Please try again.");
+    } finally {
+      setPlanBusy(false);
+      setTimeout(() => setPlanMsg(""), 6000);
+    }
+  }
+
+  async function clearMyPlan() {
+    setPlanBusy(true);
+    try {
+      await fetch("/api/member/load-program", { method: "DELETE" });
+      setPlanMsg("Cleared your loaded plan.");
+      refreshSchedule();
+    } catch {
+      setPlanMsg("Could not clear the plan.");
+    } finally {
+      setPlanBusy(false);
+      setTimeout(() => setPlanMsg(""), 5000);
+    }
   }
 
   // Auto-open a program if arriving from the "My Programs" page (?program=id).
@@ -520,6 +649,18 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
   useEffect(() => {
     if (session.length) focusSession.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [session.length > 0]);
+
+  // Auto-load today's coach-scheduled workout (if flagged autoload) once, when
+  // the tracker is ready and there's nothing already in progress.
+  useEffect(() => {
+    if (!trackerReady || !draftReady || autoloadedRef.current || session.length) return;
+    const todays = schedule.find((s) => s.date === scheduleToday && s.autoload);
+    if (todays) {
+      autoloadedRef.current = true;
+      loadScheduledWorkout(todays, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackerReady, draftReady, schedule, scheduleToday]);
 
   function canReplaceSession() {
     return !savingRef.current && (!session.length || window.confirm("Replace the current workout draft? Your unsaved entries will be removed."));
@@ -1008,46 +1149,7 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
 
       {/* SPLIT SELECTOR */}
       <div>
-        {/* Load The Hutch Touch program */}
-        <div className="mt-5 border-2 border-electric/40 bg-electric/5 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="font-display uppercase tracking-wider text-electric text-sm">
-                The Hutch Touch
-              </p>
-              <p className="text-xs text-bone/60 mt-1 leading-relaxed">
-                Load any of the 4 rotation sessions from the performance program straight
-                into the tracker — the full warm-up plus every exercise, pre-filled with
-                sets, reps &amp; RPE, ready to log.
-              </p>
-            </div>
-            <button
-              onClick={() => { setHtSession(nextHutch.next.id); setHutchOpen(true); }}
-              className="border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors whitespace-nowrap"
-            >
-              Choose a Session →
-            </button>
-          </div>
-
-          {/* Next-up nudge — where you are in the rotation */}
-          <div className="mt-3 border-t border-electric/20 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <p className="text-xs text-bone/70 leading-relaxed">
-              {nextHutch.last ? (
-                <>Last logged: <span className="text-bone/90">{nextHutch.last.title}</span>. </>
-              ) : (
-                <>You haven&apos;t logged a Hutch Touch session yet. </>
-              )}
-              <span className="text-electric font-display uppercase tracking-wider">Next up:</span>{" "}
-              <span className="text-bone/90">{nextHutch.next.title}</span>
-            </p>
-            <button
-              onClick={() => promptReadiness(nextHutch.next.id)}
-              className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap"
-            >
-              Load {nextHutch.next.title} →
-            </button>
-          </div>
-        </div>
+        {/* The Hutch Touch is now rendered as an exclusive square tile inside the grid below. */}
 
         <section className="mt-5 border border-bone/20 bg-ink/10 p-4" aria-labelledby="start-workout-title">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1057,6 +1159,30 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
             <p className="text-xs text-bone/50">Choose a split and your tracker opens immediately.</p>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {/* The Hutch Touch — exclusive flagship program, sized as a square peer */}
+            <div className="relative min-h-[116px] p-4 border-2 border-electric bg-electric/10 shadow-[0_0_22px_-8px_rgba(59,130,246,0.7)]">
+              <span className="absolute top-2 right-2 text-[8px] font-display uppercase tracking-wider text-electric border border-electric/50 px-1.5 py-0.5">
+                ★ Exclusive
+              </span>
+              <button
+                type="button"
+                onClick={() => promptReadiness(nextHutch.next.id)}
+                className="absolute inset-0"
+                aria-label={`Load The Hutch Touch — ${nextHutch.next.title}`}
+              />
+              <div className="relative pointer-events-none">
+                <p className="font-display uppercase tracking-wider text-electric font-600">The Hutch Touch</p>
+                <p className="text-xs text-bone/50 mt-1">Next: {nextHutch.next.title}</p>
+                <p className="text-[10px] uppercase tracking-wider text-electric mt-2">Load session →</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setHtSession(nextHutch.next.id); setHutchOpen(true); }}
+                className="relative z-10 mt-2 text-[10px] font-display uppercase tracking-wider text-bone/50 hover:text-electric"
+              >
+                Choose session
+              </button>
+            </div>
             {SPLITS.map((s) => (
               <button
                 key={s.id}
@@ -1105,6 +1231,98 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
           )}
         </section>
 
+        {/* AUTO-LOAD A 4-WEEK PLAN ONTO THE CALENDAR (member self-service) */}
+        <section className="mt-5 border border-bone/15 bg-ink/20 p-4" aria-labelledby="plan-loader-title">
+          <p id="plan-loader-title" className="font-display uppercase tracking-[0.18em] text-sm text-bone/80">Load a 4-week plan onto your calendar</p>
+          <p className="mt-1 text-xs text-bone/50">Pick a program and a start date — every session is placed on its training days across the whole block and syncs to your linked calendar.</p>
+          {loadStatus.coachLoaded ? (
+            <div className="mt-3 border border-electric/30 bg-electric/[0.06] p-3 text-xs text-bone/70">
+              Your coach has loaded a program onto your calendar, so self-loading is turned off. Follow the <span className="text-electric">Coach schedule</span> below, or ask your coach to adjust it.
+            </div>
+          ) : (
+            <>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wider text-bone/40">Program</span>
+                  <select value={planChoice} onChange={(e) => setPlanChoice(e.target.value)} className="bg-ink border border-bone/20 px-3 py-2 text-sm min-w-[210px]">
+                    <option value="">Choose a program…</option>
+                    <option value="hutch">The Hutch Touch (4 sessions/wk)</option>
+                    {memberPrograms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wider text-bone/40">Start date</span>
+                  <input type="date" value={planStart} onChange={(e) => setPlanStart(e.target.value)} className="bg-ink border border-bone/20 px-3 py-2 text-sm" />
+                </label>
+                <button disabled={planBusy || !planChoice} onClick={() => loadPlanToCalendar(planChoice)} className="bg-electric text-ink px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Preview &amp; load →</button>
+                {loadStatus.selfLoaded && <button disabled={planBusy} onClick={clearMyPlan} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-electric hover:text-electric transition-colors">Clear my plan</button>}
+                {(() => { const pf = planChoice === "hutch" ? HUTCH_TOUCH_PERFORMANCE_PDF_URL : (memberPrograms.find((p) => p.id === planChoice)?.pdf || ""); return pf ? <a href={pf} target="_blank" rel="noreferrer" className="self-center font-display uppercase tracking-wider text-[10px] text-bone/60 hover:text-electric">Download PDF ↓</a> : null; })()}
+              </div>
+              {loadStatus.selfLoaded && <p className="mt-2 text-[11px] text-bone/45">A self-loaded plan is active{loadStatus.selfLabel ? ` (${loadStatus.selfLabel})` : ""}. Loading a new one replaces it.</p>}
+            </>
+          )}
+          {planMsg && <div className="mt-3 border border-electric/40 bg-electric/10 p-2.5 text-center font-display uppercase tracking-wider text-[11px] text-electric">{planMsg}</div>}
+        </section>
+        <PlanPreview open={previewOpen} programName={previewName} items={previewItems} busy={planBusy} onConfirm={confirmPlanLoad} onClose={() => setPreviewOpen(false)} />
+
+        {(schedule.length > 0 || calUrl) && (
+          <section className="mt-5 border border-electric/25 bg-electric/[0.04] p-4" aria-labelledby="coach-schedule-title">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p id="coach-schedule-title" className="glow font-display uppercase tracking-[0.22em] text-electric text-sm">
+                {loadStatus.selfLoaded && !loadStatus.coachLoaded ? "My 4-week plan — this week" : "Coach schedule — this week"}
+              </p>
+              {calUrl && (
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`https://calendar.google.com/calendar/u/0/r/settings/addbyurl?cid=${encodeURIComponent(calUrl)}`}
+                    target="_blank" rel="noreferrer"
+                    className="font-display uppercase tracking-wider text-[10px] text-bone/70 hover:text-electric"
+                  >
+                    + Google Calendar
+                  </a>
+                  <a href={calWebcal} className="font-display uppercase tracking-wider text-[10px] text-bone/70 hover:text-electric">
+                    + Apple Calendar
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 grid grid-cols-7 gap-1.5">
+              {weekDays.map((d) => {
+                const it = schedule.find((s) => s.date === d.ymd);
+                const isToday = d.ymd === scheduleToday;
+                return (
+                  <button
+                    key={d.ymd}
+                    type="button"
+                    disabled={!it}
+                    onClick={() => it && loadScheduledWorkout(it)}
+                    className={
+                      "min-h-[92px] p-2 text-left border transition-colors " +
+                      (isToday ? "border-electric " : "border-bone/15 ") +
+                      (it ? "bg-ink/40 hover:border-electric" : "bg-transparent opacity-50 cursor-default")
+                    }
+                  >
+                    <p className="text-[9px] uppercase tracking-wider text-bone/40">{d.dow}</p>
+                    <p className="font-display text-bone/80 text-sm leading-none">{d.dom}</p>
+                    {it ? (
+                      <>
+                        <p className="mt-1 text-[10px] text-electric leading-tight line-clamp-3">{it.title}</p>
+                        {it.autoload && <p className="mt-0.5 text-[8px] uppercase tracking-wider text-bone/40">auto</p>}
+                      </>
+                    ) : (
+                      <p className="mt-2 text-[10px] text-bone/25">Rest</p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-bone/45 leading-relaxed">
+              Tap a scheduled day to load that workout now. Days marked <span className="text-bone/70">auto</span> open
+              automatically in your tracker. Link your calendar above for reminders on your phone.
+            </p>
+          </section>
+        )}
+
         {/* Repeat last session — one tap to reload your most recent workout */}
         {workouts.length > 0 && (
           <div className="mt-5 border border-bone/20 bg-ink/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1125,7 +1343,8 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
           </div>
         )}
 
-        {/* Main-lift variation order — a list to follow on which variation, and in what order */}
+        {/* Main-lift variation order — only shown while a Hutch Touch session is actively loaded */}
+        {loadedHutchId && (
         <div className="mt-3 border border-bone/15 bg-ink/20">
           <button
             onClick={() => setVariationsOpen((v) => !v)}
@@ -1156,6 +1375,7 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* HUTCH TOUCH PICKER MODAL */}
