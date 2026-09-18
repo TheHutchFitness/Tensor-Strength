@@ -10,6 +10,7 @@ import CheckoutButton from "../../src/components/CheckoutButton";
 
 const PortalHero = dynamic(() => import("../../src/components/portal/PortalHero"));
 const OnboardingChecklist = dynamic(() => import("../../src/components/portal/OnboardingChecklist"));
+const PushToggle = dynamic(() => import("../../src/components/portal/PushToggle"), { ssr: false });
 const PRSubmit = dynamic(() => import("../../src/components/PRSubmit"));
 const ClientCoaching = dynamic(() => import("../../src/components/portal/ClientCoaching"), {
   loading: () => <p className="mt-6 font-display uppercase tracking-wider text-bone/50 text-sm">Loading your coaching…</p>,
@@ -206,6 +207,7 @@ export default function ClientPortalPage() {
             <div>
               {me?.id && <div className="mb-10"><PortalHero username={me.username} userId={me.id} accessType={me.accessType} hasCoach={!!me.assignedTrainerId} /></div>}
               {me?.id && <OnboardingChecklist intakeDone={!!me?.clientProfile?.goal} userId={me.id} accessType={me.accessType} />}
+              {me?.id && <div className="mb-8"><PushToggle /></div>}
               <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
                 Client Portal
               </p>

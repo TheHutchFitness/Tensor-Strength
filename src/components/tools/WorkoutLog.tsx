@@ -20,6 +20,9 @@ import {
 } from "../../data/hutchTouchProgram";
 import { bestStrengthEstimate, localWorkoutDate, isCompletedSet } from "../../lib/workoutMetrics";
 import { memberPrograms } from "../../data/memberPrograms";
+import { HUTCH_TOUCH_PERFORMANCE_PDF_URL } from "../../data/hutchTouchProgram";
+import { buildProgramPlan } from "../../lib/programSchedule";
+import PlanPreview from "../PlanPreview";
 import { exercises as exerciseGuides } from "../../data/exercises";
 
 type Set = { id: string; weight: string; reps: string; rpe: string };
@@ -208,11 +211,25 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
   const [scheduleToday, setScheduleToday] = useState("");
   const [calUrl, setCalUrl] = useState("");
   const [calWebcal, setCalWebcal] = useState("");
+  // Self-service 4-week plan loading onto the member's calendar.
+  const [loadStatus, setLoadStatus] = useState<{ coachLoaded: boolean; selfLoaded: boolean; selfProgramId: string; selfLabel: string }>({ coachLoaded: false, selfLoaded: false, selfProgramId: "", selfLabel: "" });
+  const [planStart, setPlanStart] = useState(() => localWorkoutDate());
+  const [planChoice, setPlanChoice] = useState("");
+  const [planMsg, setPlanMsg] = useState("");
+  const [planBusy, setPlanBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItems, setPreviewItems] = useState<any[]>([]);
+  const [previewName, setPreviewName] = useState("");
+  const [previewChoice, setPreviewChoice] = useState("");
   const autoloadedRef = useRef(false);
+  function refreshSchedule() {
+    fetch("/api/member/schedule").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setSchedule(d.schedule || []); setScheduleToday(d.today || ""); } }).catch(() => {});
+    fetch("/api/member/load-status").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setLoadStatus({ coachLoaded: !!d.coachLoaded, selfLoaded: !!d.selfLoaded, selfProgramId: d.selfProgramId || "", selfLabel: d.selfLabel || "" }); }).catch(() => {});
+  }
   useEffect(() => {
     fetch("/api/member/programs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.programs && setCoachPrograms(d.programs)).catch(() => {});
     fetch("/api/member/videos").then((r) => (r.ok ? r.json() : null)).then((d) => setHelpVideos(d?.videos || [])).catch(() => {});
-    fetch("/api/member/schedule").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setSchedule(d.schedule || []); setScheduleToday(d.today || ""); } }).catch(() => {});
+    refreshSchedule();
     fetch("/api/member/calendar-token").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setCalUrl(d.url || ""); setCalWebcal(d.webcal || ""); } }).catch(() => {});
   }, []);
 
@@ -290,6 +307,77 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
     }
     const nextId = lastId ? ids[(ids.indexOf(lastId) + 1) % ids.length] : ids[0];
     return p.sessions.find((s: any) => s.id === nextId) || p.sessions[0];
+  }
+
+  // Build a plan and open the preview modal (member confirms before it's saved).
+  async function loadPlanToCalendar(choice: string) {
+    if (loadStatus.coachLoaded) { setPlanMsg("Your coach has already loaded a plan for you."); return; }
+    if (!choice) { setPlanMsg("Pick a program to load first."); return; }
+    let sessions: any[] = [];
+    let name = "";
+    let daysPerWeek = 3;
+    let weeks = 4;
+    if (choice === "hutch") {
+      sessions = hutchTouchSessions.map((s) => ({ id: s.id, title: s.title, exercises: s.exercises }));
+      name = "The Hutch Touch";
+      daysPerWeek = 4;
+      weeks = 4;
+    } else {
+      const prog = memberPrograms.find((p) => p.id === choice);
+      if (!prog) { setPlanMsg("Program not found."); return; }
+      sessions = prog.sessions;
+      name = prog.name;
+      daysPerWeek = prog.daysPerWeek || 3;
+      weeks = prog.weeks || 4;
+    }
+    const items = buildProgramPlan(sessions as any, name, daysPerWeek, weeks, planStart);
+    if (!items.length) { setPlanMsg("Choose a start date to build the plan."); return; }
+    setPreviewItems(items);
+    setPreviewName(name);
+    setPreviewChoice(choice);
+    setPreviewOpen(true);
+  }
+
+  // Confirm the previewed plan -> save onto the calendar.
+  async function confirmPlanLoad() {
+    if (!previewItems.length) return;
+    setPlanBusy(true);
+    setPlanMsg("");
+    try {
+      const r = await fetch("/api/member/load-program", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ programId: previewChoice, label: previewName, items: previewItems }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setPlanMsg(`Loaded ${d.scheduled} sessions of ${previewName} onto your calendar.`);
+        setPreviewOpen(false);
+        refreshSchedule();
+      } else {
+        setPlanMsg(d.error || "Could not load the plan.");
+        if (d.coachLoaded) { setLoadStatus((s) => ({ ...s, coachLoaded: true })); setPreviewOpen(false); }
+      }
+    } catch {
+      setPlanMsg("Could not load the plan. Please try again.");
+    } finally {
+      setPlanBusy(false);
+      setTimeout(() => setPlanMsg(""), 6000);
+    }
+  }
+
+  async function clearMyPlan() {
+    setPlanBusy(true);
+    try {
+      await fetch("/api/member/load-program", { method: "DELETE" });
+      setPlanMsg("Cleared your loaded plan.");
+      refreshSchedule();
+    } catch {
+      setPlanMsg("Could not clear the plan.");
+    } finally {
+      setPlanBusy(false);
+      setTimeout(() => setPlanMsg(""), 5000);
+    }
   }
 
   // Auto-open a program if arriving from the "My Programs" page (?program=id).
@@ -1143,12 +1231,45 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
           )}
         </section>
 
-        {/* COACH SCHEDULE — assigned workouts on a calendar + subscribe links */}
+        {/* AUTO-LOAD A 4-WEEK PLAN ONTO THE CALENDAR (member self-service) */}
+        <section className="mt-5 border border-bone/15 bg-ink/20 p-4" aria-labelledby="plan-loader-title">
+          <p id="plan-loader-title" className="font-display uppercase tracking-[0.18em] text-sm text-bone/80">Load a 4-week plan onto your calendar</p>
+          <p className="mt-1 text-xs text-bone/50">Pick a program and a start date — every session is placed on its training days across the whole block and syncs to your linked calendar.</p>
+          {loadStatus.coachLoaded ? (
+            <div className="mt-3 border border-electric/30 bg-electric/[0.06] p-3 text-xs text-bone/70">
+              Your coach has loaded a program onto your calendar, so self-loading is turned off. Follow the <span className="text-electric">Coach schedule</span> below, or ask your coach to adjust it.
+            </div>
+          ) : (
+            <>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wider text-bone/40">Program</span>
+                  <select value={planChoice} onChange={(e) => setPlanChoice(e.target.value)} className="bg-ink border border-bone/20 px-3 py-2 text-sm min-w-[210px]">
+                    <option value="">Choose a program…</option>
+                    <option value="hutch">The Hutch Touch (4 sessions/wk)</option>
+                    {memberPrograms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wider text-bone/40">Start date</span>
+                  <input type="date" value={planStart} onChange={(e) => setPlanStart(e.target.value)} className="bg-ink border border-bone/20 px-3 py-2 text-sm" />
+                </label>
+                <button disabled={planBusy || !planChoice} onClick={() => loadPlanToCalendar(planChoice)} className="bg-electric text-ink px-4 py-2 font-display uppercase tracking-wider text-xs hover:bg-bone transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Preview &amp; load →</button>
+                {loadStatus.selfLoaded && <button disabled={planBusy} onClick={clearMyPlan} className="border border-bone/25 text-bone/70 px-4 py-2 font-display uppercase tracking-wider text-xs hover:border-electric hover:text-electric transition-colors">Clear my plan</button>}
+                {(() => { const pf = planChoice === "hutch" ? HUTCH_TOUCH_PERFORMANCE_PDF_URL : (memberPrograms.find((p) => p.id === planChoice)?.pdf || ""); return pf ? <a href={pf} target="_blank" rel="noreferrer" className="self-center font-display uppercase tracking-wider text-[10px] text-bone/60 hover:text-electric">Download PDF ↓</a> : null; })()}
+              </div>
+              {loadStatus.selfLoaded && <p className="mt-2 text-[11px] text-bone/45">A self-loaded plan is active{loadStatus.selfLabel ? ` (${loadStatus.selfLabel})` : ""}. Loading a new one replaces it.</p>}
+            </>
+          )}
+          {planMsg && <div className="mt-3 border border-electric/40 bg-electric/10 p-2.5 text-center font-display uppercase tracking-wider text-[11px] text-electric">{planMsg}</div>}
+        </section>
+        <PlanPreview open={previewOpen} programName={previewName} items={previewItems} busy={planBusy} onConfirm={confirmPlanLoad} onClose={() => setPreviewOpen(false)} />
+
         {(schedule.length > 0 || calUrl) && (
           <section className="mt-5 border border-electric/25 bg-electric/[0.04] p-4" aria-labelledby="coach-schedule-title">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p id="coach-schedule-title" className="glow font-display uppercase tracking-[0.22em] text-electric text-sm">
-                Coach schedule — this week
+                {loadStatus.selfLoaded && !loadStatus.coachLoaded ? "My 4-week plan — this week" : "Coach schedule — this week"}
               </p>
               {calUrl && (
                 <div className="flex items-center gap-3">

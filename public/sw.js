@@ -89,3 +89,35 @@ self.addEventListener("fetch", (event) => {
   }
   // Everything else (e.g. /api) passes through to the network.
 });
+
+// ---- Web Push ----
+self.addEventListener("push", (event) => {
+  let data = { title: "Tensor Strength", body: "You have an update.", url: "/clients" };
+  try { if (event.data) data = { ...data, ...event.data.json() }; } catch (e) {}
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || "/icons/icon-192.png",
+      badge: data.badge || "/icons/icon-192.png",
+      tag: data.tag || "tensor",
+      renotify: Boolean(data.renotify),
+      data: { url: data.url || "/clients" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data && event.notification.data.url ? event.notification.data.url : "/clients", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url === target && "focus" in c) return c.focus();
+      }
+      const existing = list.find((c) => "focus" in c);
+      if (existing) { existing.navigate(target); return existing.focus(); }
+      return self.clients.openWindow(target);
+    })
+  );
+});
+

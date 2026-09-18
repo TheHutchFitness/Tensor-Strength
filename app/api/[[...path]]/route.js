@@ -8,6 +8,51 @@ import { readFile, writeFile, mkdir, readdir, rm } from 'fs/promises'
 import nodePath from 'path'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import webpush from 'web-push'
+
+// ---- Web Push (VAPID) ----
+// Keys are self-generated and live in env (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY).
+// Configured lazily so the app still boots if push isn't set up yet.
+let _vapidReady = false
+function ensureVapid() {
+  if (_vapidReady) return true
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return false
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || 'mailto:admin@tensorstrength.com',
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    )
+    _vapidReady = true
+    return true
+  } catch { return false }
+}
+// Send a push to every subscription a user has, pruning dead endpoints (404/410).
+async function sendWebPushToUser(db, userId, payload) {
+  if (!userId || !ensureVapid()) return { sent: 0, removed: 0 }
+  const subs = await db.collection('push_subscriptions').find({ userId }).toArray()
+  let sent = 0, removed = 0
+  await Promise.all(subs.map(async (row) => {
+    try {
+      await webpush.sendNotification(row.subscription, JSON.stringify(payload), { TTL: 3600, urgency: 'normal' })
+      sent++
+    } catch (e) {
+      const sc = e && e.statusCode
+      if (sc === 404 || sc === 410) { try { await db.collection('push_subscriptions').deleteOne({ _id: row._id }) } catch {} ; removed++ }
+    }
+  }))
+  return { sent, removed }
+}
+
+// Does this member currently have an ACTIVE coach-loaded schedule (a future
+// one-off or any recurring weekly)? Stale/past coach docs must NOT permanently
+// block member self-loading. Mirrors the date logic in /member/schedule.
+async function memberHasActiveCoachSchedule(db, user) {
+  const q = { source: { $ne: 'self' }, $or: [{ clientId: user.id }, ...(user.assignedTrainerId ? [{ clientId: null, trainerId: user.assignedTrainerId }] : [])] }
+  const docs = await db.collection('workout_schedule').find(q, { projection: { date: 1, repeatWeekly: 1 } }).limit(2000).toArray()
+  const todayStr = new Date().toISOString().slice(0, 10)
+  return docs.some((d) => d.repeatWeekly === true || (typeof d.date === 'string' && d.date >= todayStr))
+}
 
 // ---- Durable object storage (Cloudflare R2 / S3-compatible) ----
 // When S3_* env vars are set, uploads go to R2 (survive pod redeploys) and are
@@ -2447,6 +2492,10 @@ async function handleRoute(request, { params }) {
         body: text, mediaUrl: null, mediaType: null, read: false, broadcast: true, createdAt: now,
       }))
       await db.collection('messages').insertMany(docs)
+      // Best-effort web push to each client.
+      for (const c of clients) {
+        try { await sendWebPushToUser(db, c.id, { title: `${user.username || 'Your coach'} sent an update`, body: text.slice(0, 140), url: '/clients', tag: 'coach-broadcast' }) } catch {}
+      }
       return handleCORS(NextResponse.json({ ok: true, sent: docs.length }))
     }
 
@@ -2957,6 +3006,15 @@ async function handleRoute(request, { params }) {
       // Grant the recipient read access to any attached private media (owner =
       // sender already has access; the other party is added here).
       if (msg.mediaUrl) await grantFileAccess(db, msg.mediaUrl, other.id)
+      // Best-effort web push to the recipient (coach or client).
+      try {
+        await sendWebPushToUser(db, other.id, {
+          title: `New message from ${user.username || (senderRole === 'trainer' ? 'your coach' : 'your client')}`,
+          body: (text || 'Sent an attachment').slice(0, 140),
+          url: '/clients',
+          tag: 'dm',
+        })
+      } catch {}
       const { _id, ...clean } = msg
       return handleCORS(NextResponse.json(clean))
     }
@@ -3943,6 +4001,241 @@ async function handleRoute(request, { params }) {
       items.sort((a, b) => a.date.localeCompare(b.date))
       return handleCORS(NextResponse.json({ schedule: items, today: todayStr }))
     }
+    // Member: whether a coach has already loaded a plan (blocks self-load) and
+    // whether the member has self-loaded a 4-week plan.
+    if (route === '/member/load-status' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const coachLoaded = await memberHasActiveCoachSchedule(db, user)
+      const selfCount = await db.collection('workout_schedule').countDocuments({ clientId: user.id, source: 'self' })
+      const selfDoc = selfCount ? await db.collection('workout_schedule').find({ clientId: user.id, source: 'self' }, { projection: { _id: 0 } }).sort({ date: 1 }).limit(1).next() : null
+      return handleCORS(NextResponse.json({
+        coachLoaded,
+        selfLoaded: selfCount > 0,
+        selfCount,
+        selfProgramId: selfDoc?.selfProgramId || '',
+        selfLabel: selfDoc?.selfLabel || '',
+      }))
+    }
+    // Member: auto-load a full multi-week program onto my calendar. The client
+    // computes the day-by-day schedule (dates + exercise snapshots) and posts it
+    // here. Blocked if a coach has already loaded a program for this member.
+    if (route === '/member/load-program' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const coachLoaded = await memberHasActiveCoachSchedule(db, user)
+      if (coachLoaded) return handleCORS(NextResponse.json({ error: 'Your coach has already loaded a program onto your calendar, so you can’t auto-load one yourself. Ask your coach to adjust it.', coachLoaded: true }, { status: 409 }))
+      const b = await request.json().catch(() => ({}))
+      const programId = String(b.programId || '').slice(0, 80)
+      const label = String(b.label || '').slice(0, 120)
+      const items = Array.isArray(b.items) ? b.items : []
+      if (!programId || !items.length) return handleCORS(NextResponse.json({ error: 'A programId and at least one scheduled day are required.' }, { status: 400 }))
+      const clean = items
+        .filter((it) => /^\d{4}-\d{2}-\d{2}$/.test(it?.date || '') && Array.isArray(it?.exercises) && it.exercises.length)
+        .slice(0, 120)
+      if (!clean.length) return handleCORS(NextResponse.json({ error: 'No valid scheduled days were provided.' }, { status: 400 }))
+      // Replace any previous self-loaded plan for this member.
+      await db.collection('workout_schedule').deleteMany({ clientId: user.id, source: 'self' })
+      const now = new Date()
+      const docs = clean.map((it) => ({
+        id: uuidv4(), clientId: user.id, trainerId: null, trainerName: null,
+        source: 'self', selfProgramId: programId, selfLabel: label,
+        title: String(it.title || label || 'Workout').slice(0, 140),
+        exercises: (it.exercises || []).slice(0, 40).map((e) => ({
+          name: String(e?.name || '').slice(0, 80),
+          sets: String(e?.sets || '').slice(0, 20),
+          reps: String(e?.reps || '').slice(0, 40),
+          load: String(e?.load || '').slice(0, 40),
+          notes: String(e?.notes || '').slice(0, 240),
+        })),
+        date: String(it.date).slice(0, 10), autoload: false, repeatWeekly: false, createdAt: now,
+      }))
+      if (docs.length) await db.collection('workout_schedule').insertMany(docs)
+      return handleCORS(NextResponse.json({ ok: true, scheduled: docs.length }))
+    }
+    // Member: clear the plan I self-loaded onto my calendar.
+    if (route === '/member/load-program' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const r = await db.collection('workout_schedule').deleteMany({ clientId: user.id, source: 'self' })
+      return handleCORS(NextResponse.json({ ok: true, deleted: r.deletedCount || 0 }))
+    }
+
+    // ---- Web Push (VAPID): subscribe / unsubscribe / status / test / cron ----
+    // Public VAPID key so the browser can subscribe.
+    if (route === '/push/vapid-public-key' && method === 'GET') {
+      return handleCORS(NextResponse.json({ publicKey: process.env.VAPID_PUBLIC_KEY || '', configured: !!process.env.VAPID_PUBLIC_KEY }))
+    }
+    // Save a browser PushSubscription for the current user (upsert by endpoint).
+    if (route === '/push/subscribe' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const sub = body && body.subscription
+      // Strict type checks: every field must be a plain string so a crafted
+      // object (e.g. a Mongo operator) can never be used in the query filter.
+      if (
+        !sub || typeof sub !== 'object' ||
+        typeof sub.endpoint !== 'string' || !/^https:\/\//i.test(sub.endpoint) ||
+        !sub.keys || typeof sub.keys !== 'object' ||
+        typeof sub.keys.p256dh !== 'string' || !sub.keys.p256dh ||
+        typeof sub.keys.auth !== 'string' || !sub.keys.auth
+      ) {
+        return handleCORS(NextResponse.json({ error: 'Invalid push subscription' }, { status: 400 }))
+      }
+      // Persist a sanitized copy (never the raw body) to avoid storing extras.
+      const cleanSub = {
+        endpoint: sub.endpoint,
+        expirationTime: sub.expirationTime === null || typeof sub.expirationTime === 'number' ? sub.expirationTime : null,
+        keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      }
+      await db.collection('push_subscriptions').updateOne(
+        { endpoint: cleanSub.endpoint },
+        { $set: { userId: user.id, subscription: cleanSub, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true }
+      )
+      // First-time subscribers default to reminders ON.
+      if (user.pushReminders === undefined) {
+        await db.collection('users').updateOne({ id: user.id }, { $set: { pushReminders: true } })
+      }
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    // Remove a subscription for the current user.
+    if (route === '/push/unsubscribe' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const endpoint = typeof body.endpoint === 'string' ? body.endpoint : ''
+      if (!endpoint) return handleCORS(NextResponse.json({ error: 'endpoint required' }, { status: 400 }))
+      const r = await db.collection('push_subscriptions').deleteOne({ userId: user.id, endpoint })
+      return handleCORS(NextResponse.json({ ok: true, removed: r.deletedCount || 0 }))
+    }
+    // Status: whether push is configured, how many subscriptions I have, reminder pref.
+    if (route === '/push/status' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const count = await db.collection('push_subscriptions').countDocuments({ userId: user.id })
+      return handleCORS(NextResponse.json({
+        configured: !!process.env.VAPID_PUBLIC_KEY,
+        subscriptions: count,
+        remindersEnabled: user.pushReminders !== false,
+      }))
+    }
+    // Toggle whether this user receives scheduled reminder pushes.
+    if (route === '/push/preferences' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const body = await request.json().catch(() => ({}))
+      const enabled = body.remindersEnabled !== false
+      await db.collection('users').updateOne({ id: user.id }, { $set: { pushReminders: enabled } })
+      return handleCORS(NextResponse.json({ ok: true, remindersEnabled: enabled }))
+    }
+    // Send a test push to myself (verifies the whole pipeline end to end).
+    if (route === '/push/test' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      if (!ensureVapid()) return handleCORS(NextResponse.json({ error: 'Push is not configured on the server.' }, { status: 503 }))
+      const r = await sendWebPushToUser(db, user.id, { title: 'Tensor Strength', body: 'Push notifications are working. 💪', url: '/clients' })
+      return handleCORS(NextResponse.json({ ok: true, ...r }))
+    }
+    // Daily reminder dispatcher — call from an external scheduler once a day.
+    // Auth: ?secret=CRON_SECRET or x-cron-secret header. Idempotent per day+type.
+    if (route === '/push/reminders' && (method === 'POST' || method === 'GET')) {
+      const secret = request.nextUrl.searchParams.get('secret') || request.headers.get('x-cron-secret')
+      if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+        return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 401 }))
+      }
+      if (!ensureVapid()) return handleCORS(NextResponse.json({ ok: false, configured: false, error: 'VAPID not configured' }))
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const dow = new Date(todayStr + 'T00:00:00Z').getUTCDay() // 0 = Sunday
+      const force = request.nextUrl.searchParams.get('force') === '1'
+      const results = {}
+      async function runJob(type, fn) {
+        if (!force) {
+          const existing = await db.collection('push_jobruns').findOne({ date: todayStr, type })
+          if (existing && existing.status === 'done') { results[type] = { skipped: true }; return }
+        }
+        try {
+          const out = await fn()
+          results[type] = out
+          // Only mark the job done AFTER it succeeds, so a transient failure can
+          // be retried the same day (a later cron call re-attempts it).
+          await db.collection('push_jobruns').updateOne(
+            { date: todayStr, type },
+            { $set: { date: todayStr, type, status: 'done', ranAt: new Date() } },
+            { upsert: true }
+          )
+        } catch (e) {
+          results[type] = { error: String((e && e.message) || e) }
+        }
+      }
+      // (a) Today's workout — one-off docs dated today PLUS recurring weekly
+      // docs whose weekday matches today (mirrors /member/schedule expansion).
+      await runJob('today-workout', async () => {
+        const todayWd = new Date(todayStr + 'T00:00:00Z').getUTCDay()
+        const docs = await db.collection('workout_schedule').find({
+          $or: [{ date: todayStr }, { repeatWeekly: true }],
+        }).limit(3000).toArray()
+        const userTitles = new Map()
+        for (const d of docs) {
+          // Recurring docs only count if their base weekday is today.
+          if (d.repeatWeekly && d.date !== todayStr) {
+            const base = typeof d.date === 'string' ? new Date(d.date + 'T00:00:00Z') : null
+            if (!base || base.getUTCDay() !== todayWd) continue
+          } else if (!d.repeatWeekly && d.date !== todayStr) {
+            continue
+          }
+          let recipients = []
+          if (d.clientId) recipients = [d.clientId]
+          else if (d.trainerId) recipients = (await db.collection('users').find({ assignedTrainerId: d.trainerId }).project({ id: 1 }).toArray()).map((u) => u.id)
+          for (const rid of recipients) {
+            if (!userTitles.has(rid)) userTitles.set(rid, [])
+            userTitles.get(rid).push(d.title || 'Workout')
+          }
+        }
+        let sent = 0
+        for (const [uid, titles] of userTitles) {
+          const u = await db.collection('users').findOne({ id: uid })
+          if (u && u.pushReminders === false) continue
+          const body = titles.length === 1 ? titles[0] : `${titles.length} sessions planned for today`
+          const r = await sendWebPushToUser(db, uid, { title: "Today's workout", body, url: '/clients/workout-log', tag: 'today-workout' })
+          sent += r.sent
+        }
+        return { users: userTitles.size, sent }
+      })
+      // (b) Daily check-in nudge — members with a subscription and reminders on.
+      await runJob('daily-check-in', async () => {
+        const subUserIds = await db.collection('push_subscriptions').distinct('userId')
+        let sent = 0, users = 0
+        for (const uid of subUserIds) {
+          const u = await db.collection('users').findOne({ id: uid })
+          if (!u || u.pushReminders === false) continue
+          if (u.role && u.role !== 'member') continue
+          users++
+          const r = await sendWebPushToUser(db, uid, { title: 'Daily check-in', body: 'How did today go? Log your check-in in under a minute.', url: '/clients/check-in', tag: 'daily-check-in' })
+          sent += r.sent
+        }
+        return { users, sent }
+      })
+      // (c) Weekly check-in booking reminder — coaching clients, once a week
+      // (Thursday by default) so they book before Sunday. ?weekly=1 forces it.
+      if (dow === 4 || request.nextUrl.searchParams.get('weekly') === '1') {
+        await runJob('weekly-check-in', async () => {
+          const clients = await db.collection('users').find({ accessType: { $in: ['remote_coaching', 'in_person'] } }).limit(1000).toArray()
+          let sent = 0, users = 0
+          for (const u of clients) {
+            if (u.pushReminders === false) continue
+            users++
+            const r = await sendWebPushToUser(db, u.id, { title: 'Weekly check-in', body: 'Book your 1-on-1 review before Sunday to stay on track.', url: '/clients/book?type=remote', tag: 'weekly-check-in' })
+            sent += r.sent
+          }
+          return { users, sent }
+        })
+      }
+      return handleCORS(NextResponse.json({ ok: true, date: todayStr, dow, results }))
+    }
+
+
     // Member: get (or create) my private calendar-subscription token + feed URL.
     if (route === '/member/calendar-token' && method === 'GET') {
       const user = await getCurrentUser(request, db)
