@@ -203,10 +203,51 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
   // Member-only extra programs (loaded straight into the tracker).
   const [coachPrograms, setCoachPrograms] = useState<any[]>([]);
   const [helpVideos, setHelpVideos] = useState<DemoVideo[]>([]);
+  // Coach-scheduled workouts (calendar) + the member's calendar-subscription link.
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [scheduleToday, setScheduleToday] = useState("");
+  const [calUrl, setCalUrl] = useState("");
+  const [calWebcal, setCalWebcal] = useState("");
+  const autoloadedRef = useRef(false);
   useEffect(() => {
     fetch("/api/member/programs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.programs && setCoachPrograms(d.programs)).catch(() => {});
     fetch("/api/member/videos").then((r) => (r.ok ? r.json() : null)).then((d) => setHelpVideos(d?.videos || [])).catch(() => {});
+    fetch("/api/member/schedule").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setSchedule(d.schedule || []); setScheduleToday(d.today || ""); } }).catch(() => {});
+    fetch("/api/member/calendar-token").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setCalUrl(d.url || ""); setCalWebcal(d.webcal || ""); } }).catch(() => {});
   }, []);
+
+  const weekDays = useMemo(() => {
+    const base = scheduleToday ? new Date(scheduleToday + "T00:00:00Z") : new Date();
+    const dows = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const out: { ymd: string; dow: string; dom: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + i);
+      out.push({ ymd: d.toISOString().slice(0, 10), dow: dows[d.getUTCDay()], dom: d.getUTCDate() });
+    }
+    return out;
+  }, [scheduleToday]);
+
+  // Load a coach-scheduled workout (snapshot of exercises) into the tracker.
+  function loadScheduledWorkout(item: any, silent = false) {
+    if (!silent && !canReplaceSession()) return false;
+    draftWorkoutId.current = uid();
+    const list: SessionExercise[] = (item.exercises || []).map((ex: any) => {
+      const cue = [ex.sets && `${ex.sets} sets`, ex.reps && `${ex.reps} reps`, ex.load, ex.notes].filter(Boolean).join(" · ");
+      const n = Math.max(1, Math.min(10, parseInt(ex.sets, 10) || 1));
+      return { id: uid(), name: ex.name, cue, sets: Array.from({ length: n }, () => ({ id: uid(), weight: "", reps: ex.reps || "", rpe: "" })) };
+    });
+    if (!list.length) return false;
+    setSession(list);
+    setSessionTitle(item.title || "Coach workout");
+    setSessionNotes("");
+    setSessionDate(localWorkoutDate());
+    setLoadedHutchId(null);
+    setActiveSplitId(null);
+    setCurrentTemplateId(null);
+    if (!silent && typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    return true;
+  }
   const allPrograms: any[] = [...memberPrograms, ...coachPrograms];
 
   function loadMemberSession(programId: string, sessionId: string, deload = false) {
@@ -520,6 +561,18 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
   useEffect(() => {
     if (session.length) focusSession.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [session.length > 0]);
+
+  // Auto-load today's coach-scheduled workout (if flagged autoload) once, when
+  // the tracker is ready and there's nothing already in progress.
+  useEffect(() => {
+    if (!trackerReady || !draftReady || autoloadedRef.current || session.length) return;
+    const todays = schedule.find((s) => s.date === scheduleToday && s.autoload);
+    if (todays) {
+      autoloadedRef.current = true;
+      loadScheduledWorkout(todays, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackerReady, draftReady, schedule, scheduleToday]);
 
   function canReplaceSession() {
     return !savingRef.current && (!session.length || window.confirm("Replace the current workout draft? Your unsaved entries will be removed."));
@@ -1089,6 +1142,65 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
             </div>
           )}
         </section>
+
+        {/* COACH SCHEDULE — assigned workouts on a calendar + subscribe links */}
+        {(schedule.length > 0 || calUrl) && (
+          <section className="mt-5 border border-electric/25 bg-electric/[0.04] p-4" aria-labelledby="coach-schedule-title">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p id="coach-schedule-title" className="glow font-display uppercase tracking-[0.22em] text-electric text-sm">
+                Coach schedule — this week
+              </p>
+              {calUrl && (
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`https://calendar.google.com/calendar/u/0/r/settings/addbyurl?cid=${encodeURIComponent(calUrl)}`}
+                    target="_blank" rel="noreferrer"
+                    className="font-display uppercase tracking-wider text-[10px] text-bone/70 hover:text-electric"
+                  >
+                    + Google Calendar
+                  </a>
+                  <a href={calWebcal} className="font-display uppercase tracking-wider text-[10px] text-bone/70 hover:text-electric">
+                    + Apple Calendar
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 grid grid-cols-7 gap-1.5">
+              {weekDays.map((d) => {
+                const it = schedule.find((s) => s.date === d.ymd);
+                const isToday = d.ymd === scheduleToday;
+                return (
+                  <button
+                    key={d.ymd}
+                    type="button"
+                    disabled={!it}
+                    onClick={() => it && loadScheduledWorkout(it)}
+                    className={
+                      "min-h-[92px] p-2 text-left border transition-colors " +
+                      (isToday ? "border-electric " : "border-bone/15 ") +
+                      (it ? "bg-ink/40 hover:border-electric" : "bg-transparent opacity-50 cursor-default")
+                    }
+                  >
+                    <p className="text-[9px] uppercase tracking-wider text-bone/40">{d.dow}</p>
+                    <p className="font-display text-bone/80 text-sm leading-none">{d.dom}</p>
+                    {it ? (
+                      <>
+                        <p className="mt-1 text-[10px] text-electric leading-tight line-clamp-3">{it.title}</p>
+                        {it.autoload && <p className="mt-0.5 text-[8px] uppercase tracking-wider text-bone/40">auto</p>}
+                      </>
+                    ) : (
+                      <p className="mt-2 text-[10px] text-bone/25">Rest</p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-bone/45 leading-relaxed">
+              Tap a scheduled day to load that workout now. Days marked <span className="text-bone/70">auto</span> open
+              automatically in your tracker. Link your calendar above for reminders on your phone.
+            </p>
+          </section>
+        )}
 
         {/* Repeat last session — one tap to reload your most recent workout */}
         {workouts.length > 0 && (

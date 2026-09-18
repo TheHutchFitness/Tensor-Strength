@@ -3943,6 +3943,48 @@ async function handleRoute(request, { params }) {
       items.sort((a, b) => a.date.localeCompare(b.date))
       return handleCORS(NextResponse.json({ schedule: items, today: todayStr }))
     }
+    // Member: get (or create) my private calendar-subscription token + feed URL.
+    if (route === '/member/calendar-token' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      let token = user.calFeedToken
+      if (!token) {
+        token = (uuidv4() + uuidv4()).replace(/-/g, '')
+        await db.collection('users').updateOne({ id: user.id }, { $set: { calFeedToken: token } })
+      }
+      const base = process.env.NEXT_PUBLIC_BASE_URL || ''
+      const url = `${base}/api/calendar/feed.ics?t=${token}`
+      return handleCORS(NextResponse.json({ token, url, webcal: url.replace(/^https?:/, 'webcal:') }))
+    }
+    // Public: iCalendar feed of a member's scheduled workouts (subscribed by
+    // Google/Apple Calendar, which then fire native reminders). Auth via token.
+    if (route.startsWith('/calendar/feed') && method === 'GET') {
+      const token = request.nextUrl.searchParams.get('t') || ''
+      const owner = token ? await db.collection('users').findOne({ calFeedToken: token }) : null
+      if (!owner) return handleCORS(new NextResponse('Invalid calendar link', { status: 404 }))
+      const docs = await db.collection('workout_schedule').find({
+        $or: [{ clientId: owner.id }, ...(owner.assignedTrainerId ? [{ clientId: null, trainerId: owner.assignedTrainerId }] : [])],
+      }, { projection: { _id: 0 } }).toArray()
+      const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+      const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+      const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Tensor Strength//Workouts//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Tensor Strength Workouts', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H']
+      for (const s of docs) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s.date || '')) continue
+        const dt = s.date.replace(/-/g, '')
+        const desc = (s.exercises || []).map((e) => `${e.name}${e.sets ? ` — ${e.sets}x${e.reps || ''}` : ''}${e.load ? ` @ ${e.load}` : ''}`).join('\\n')
+        lines.push('BEGIN:VEVENT')
+        lines.push(`UID:${s.id}@tensorstrength`)
+        lines.push(`DTSTAMP:${stamp}`)
+        lines.push(`DTSTART;VALUE=DATE:${dt}`)
+        if (s.repeatWeekly) lines.push('RRULE:FREQ=WEEKLY')
+        lines.push(`SUMMARY:${esc('🏋 ' + (s.title || 'Workout'))}`)
+        if (desc) lines.push(`DESCRIPTION:${desc}`)
+        lines.push('BEGIN:VALARM', 'TRIGGER:-PT3H', 'ACTION:DISPLAY', `DESCRIPTION:${esc(s.title || 'Workout')}`, 'END:VALARM')
+        lines.push('END:VEVENT')
+      }
+      lines.push('END:VCALENDAR')
+      return handleCORS(new NextResponse(lines.join('\r\n'), { status: 200, headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'inline; filename="tensor-strength.ics"' } }))
+    }
     // Award the one-off Program Finisher badge (once per program id).
     if (route === '/gamification/program-complete' && method === 'POST') {
       const user = await getCurrentUser(request, db)

@@ -24,6 +24,14 @@ export default function TrainerPrograms() {
   const [rows, setRows] = useState<ExRow[]>([emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // ---- Workout scheduling (calendar) ----
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [schedClient, setSchedClient] = useState("");
+  const [schedProgram, setSchedProgram] = useState("");
+  const [schedDate, setSchedDate] = useState("");
+  const [schedAutoload, setSchedAutoload] = useState(true);
+  const [schedRepeat, setSchedRepeat] = useState(false);
+  const [schedMsg, setSchedMsg] = useState("");
 
   async function load() {
     const [c, p] = await Promise.all([
@@ -32,6 +40,28 @@ export default function TrainerPrograms() {
     ]);
     setClients(c.clients || []);
     setPrograms(p.programs || []);
+    fetch("/api/trainer/schedule").then((r) => (r.ok ? r.json() : { schedule: [] })).then((d) => setSchedule(d.schedule || [])).catch(() => {});
+  }
+
+  async function scheduleWorkout(e: React.FormEvent) {
+    e.preventDefault();
+    setSchedMsg("");
+    if (!schedProgram || !schedDate) { setSchedMsg("Pick a program and a date."); return; }
+    const res = await fetch("/api/trainer/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ programId: schedProgram, clientId: schedClient || null, date: schedDate, autoload: schedAutoload, repeatWeekly: schedRepeat }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { setSchedMsg(d.error || "Could not schedule."); return; }
+    setSchedDate("");
+    await load();
+    setSchedMsg("Scheduled ✓");
+  }
+
+  async function delSchedule(id: string) {
+    await fetch(`/api/trainer/schedule?id=${id}`, { method: "DELETE" });
+    await load();
   }
 
   useEffect(() => {
@@ -128,6 +158,63 @@ export default function TrainerPrograms() {
         <button type="submit" disabled={saving} className="justify-self-start bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60">
           {saving ? "Saving…" : "Send Program"}
         </button>
+      </form>
+
+      {/* SCHEDULE A WORKOUT (calendar) */}
+      <form onSubmit={scheduleWorkout} className="grid gap-4 border border-electric/30 bg-electric/5 p-6">
+        <div>
+          <p className="font-display uppercase tracking-wider text-electric text-sm">Schedule a workout</p>
+          <p className="text-xs text-bone/50 mt-1">Drop a program onto a client&apos;s day. It loads into their tracker automatically and syncs to their linked Google/Apple calendar.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="block">
+            <span className={labelCls}>Client</span>
+            <select value={schedClient} onChange={(e) => setSchedClient(e.target.value)} className="w-full bg-ink/60 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none">
+              <option value="">All my clients</option>
+              {clients.map((c) => (<option key={c.id} value={c.id}>{c.username}</option>))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelCls}>Program *</span>
+            <select value={schedProgram} onChange={(e) => setSchedProgram(e.target.value)} className="w-full bg-ink/60 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none">
+              <option value="">Choose a program…</option>
+              {programs.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelCls}>Date *</span>
+            <input type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} className={inputCls + " mt-1"} />
+          </label>
+          <div className="grid gap-2 self-end">
+            <label className="flex items-center gap-2 text-sm text-bone/80">
+              <input type="checkbox" checked={schedAutoload} onChange={(e) => setSchedAutoload(e.target.checked)} className="accent-electric" />
+              Auto-load into their tracker on the day
+            </label>
+            <label className="flex items-center gap-2 text-sm text-bone/80">
+              <input type="checkbox" checked={schedRepeat} onChange={(e) => setSchedRepeat(e.target.checked)} className="accent-electric" />
+              Repeat weekly
+            </label>
+          </div>
+        </div>
+        {schedMsg && <p className={"text-sm " + (schedMsg.includes("✓") ? "text-electric" : "text-red-400")}>{schedMsg}</p>}
+        <button type="submit" className="justify-self-start bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors">
+          Schedule workout
+        </button>
+
+        {schedule.length > 0 && (
+          <div className="border-t border-electric/20 pt-4 grid gap-2">
+            <span className={labelCls}>Upcoming ({schedule.length})</span>
+            {schedule.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-3 border border-bone/15 bg-ink/30 px-3 py-2">
+                <span className="text-sm text-bone/80 min-w-0 truncate">
+                  <span className="text-electric font-display">{s.date}</span> · {s.title}
+                  <span className="text-bone/40"> · {clientName(s.clientId)}{s.repeatWeekly ? " · weekly" : ""}{s.autoload ? " · auto" : ""}</span>
+                </span>
+                <button type="button" onClick={() => delSchedule(s.id)} className="text-bone/40 hover:text-electric text-sm shrink-0">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </form>
 
       <div>

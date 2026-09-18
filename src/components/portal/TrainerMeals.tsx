@@ -16,6 +16,11 @@ export default function TrainerMeals() {
   const [rows, setRows] = useState<Row[]>([emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Macro-goal assignment (calories + protein/carbs/fat) for a specific client.
+  const [mgClient, setMgClient] = useState("");
+  const [mg, setMg] = useState({ calories: "", protein: "", carbs: "", fat: "" });
+  const [mgSaving, setMgSaving] = useState(false);
+  const [mgMsg, setMgMsg] = useState("");
 
   async function load() {
     const [c, m] = await Promise.all([
@@ -51,6 +56,23 @@ export default function TrainerMeals() {
     if (!confirm("Delete this meal template?")) return;
     await fetch(`/api/trainer/meals?id=${id}`, { method: "DELETE" });
     await load();
+  }
+
+  async function saveMacros(e: React.FormEvent) {
+    e.preventDefault();
+    setMgMsg("");
+    if (!mgClient) { setMgMsg("Pick a client — macro goals are set per person."); return; }
+    setMgSaving(true);
+    const res = await fetch("/api/trainer/push-macros", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId: mgClient, goal: {
+        calories: Number(mg.calories) || 0, protein: Number(mg.protein) || 0,
+        carbs: Number(mg.carbs) || 0, fat: Number(mg.fat) || 0,
+      } }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setMgMsg(res.ok ? "Macro goals sent ✓ — loaded in their Nutrition Tracker." : (d.error || "Could not send macros."));
+    setMgSaving(false);
   }
 
   const inputCls = "w-full bg-ink/40 border border-bone/20 px-3 py-2 text-bone focus:border-electric outline-none";
@@ -90,6 +112,34 @@ export default function TrainerMeals() {
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <button type="submit" disabled={saving} className="justify-self-start bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60">
           {saving ? "Saving…" : "Send Meal"}
+        </button>
+      </form>
+
+      {/* ASSIGN MACRO GOALS (daily calories + protein/carbs/fat) */}
+      <form onSubmit={saveMacros} className="grid gap-4 border border-electric/30 bg-electric/5 p-6">
+        <div>
+          <p className="font-display uppercase tracking-wider text-electric text-sm">Assign macro goals</p>
+          <p className="text-xs text-bone/50 mt-1">Set a client&apos;s daily calories &amp; macros. They load straight into their Nutrition Tracker and they get a message.</p>
+        </div>
+        <label className="block sm:max-w-xs"><span className={labelCls}>Client *</span>
+          <select value={mgClient} onChange={(e) => setMgClient(e.target.value)} className="w-full bg-ink/60 border border-bone/20 px-3 py-2 text-bone mt-1 focus:border-electric outline-none">
+            <option value="">Choose a client…</option>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.username}</option>)}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <label className="block"><span className={labelCls}>Calories (kcal)</span>
+            <input value={mg.calories} onChange={(e) => setMg((g) => ({ ...g, calories: e.target.value }))} type="number" placeholder="2200" className={inputCls + " mt-1"} /></label>
+          <label className="block"><span className={labelCls}>Protein (g)</span>
+            <input value={mg.protein} onChange={(e) => setMg((g) => ({ ...g, protein: e.target.value }))} type="number" placeholder="180" className={inputCls + " mt-1"} /></label>
+          <label className="block"><span className={labelCls}>Carbs (g)</span>
+            <input value={mg.carbs} onChange={(e) => setMg((g) => ({ ...g, carbs: e.target.value }))} type="number" placeholder="220" className={inputCls + " mt-1"} /></label>
+          <label className="block"><span className={labelCls}>Fat (g)</span>
+            <input value={mg.fat} onChange={(e) => setMg((g) => ({ ...g, fat: e.target.value }))} type="number" placeholder="70" className={inputCls + " mt-1"} /></label>
+        </div>
+        {mgMsg && <p className={"text-sm " + (mgMsg.includes("✓") ? "text-electric" : "text-red-400")}>{mgMsg}</p>}
+        <button type="submit" disabled={mgSaving} className="justify-self-start bg-electric text-ink px-6 py-3 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60">
+          {mgSaving ? "Sending…" : "Send macro goals"}
         </button>
       </form>
 
