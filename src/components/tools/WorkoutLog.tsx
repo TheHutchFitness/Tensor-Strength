@@ -1008,46 +1008,7 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
 
       {/* SPLIT SELECTOR */}
       <div>
-        {/* Load The Hutch Touch program */}
-        <div className="mt-5 border-2 border-electric/40 bg-electric/5 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="font-display uppercase tracking-wider text-electric text-sm">
-                The Hutch Touch
-              </p>
-              <p className="text-xs text-bone/60 mt-1 leading-relaxed">
-                Load any of the 4 rotation sessions from the performance program straight
-                into the tracker — the full warm-up plus every exercise, pre-filled with
-                sets, reps &amp; RPE, ready to log.
-              </p>
-            </div>
-            <button
-              onClick={() => { setHtSession(nextHutch.next.id); setHutchOpen(true); }}
-              className="border-2 border-electric text-electric px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors whitespace-nowrap"
-            >
-              Choose a Session →
-            </button>
-          </div>
-
-          {/* Next-up nudge — where you are in the rotation */}
-          <div className="mt-3 border-t border-electric/20 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <p className="text-xs text-bone/70 leading-relaxed">
-              {nextHutch.last ? (
-                <>Last logged: <span className="text-bone/90">{nextHutch.last.title}</span>. </>
-              ) : (
-                <>You haven&apos;t logged a Hutch Touch session yet. </>
-              )}
-              <span className="text-electric font-display uppercase tracking-wider">Next up:</span>{" "}
-              <span className="text-bone/90">{nextHutch.next.title}</span>
-            </p>
-            <button
-              onClick={() => promptReadiness(nextHutch.next.id)}
-              className="bg-electric text-ink px-5 py-2.5 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors whitespace-nowrap"
-            >
-              Load {nextHutch.next.title} →
-            </button>
-          </div>
-        </div>
+        {/* The Hutch Touch is now rendered as an exclusive square tile inside the grid below. */}
 
         <section className="mt-5 border border-bone/20 bg-ink/10 p-4" aria-labelledby="start-workout-title">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1057,6 +1018,30 @@ export default function WorkoutLog({ userId, accessType = "" }: { userId: string
             <p className="text-xs text-bone/50">Choose a split and your tracker opens immediately.</p>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {/* The Hutch Touch — exclusive flagship program, sized as a square peer */}
+            <div className="relative min-h-[116px] p-4 border-2 border-electric bg-electric/10 shadow-[0_0_22px_-8px_rgba(59,130,246,0.7)]">
+              <span className="absolute top-2 right-2 text-[8px] font-display uppercase tracking-wider text-electric border border-electric/50 px-1.5 py-0.5">
+                ★ Exclusive
+              </span>
+              <button
+                type="button"
+                onClick={() => promptReadiness(nextHutch.next.id)}
+                className="absolute inset-0"
+                aria-label={`Load The Hutch Touch — ${nextHutch.next.title}`}
+              />
+              <div className="relative pointer-events-none">
+                <p className="font-display uppercase tracking-wider text-electric font-600">The Hutch Touch</p>
+                <p className="text-xs text-bone/50 mt-1">Next: {nextHutch.next.title}</p>
+                <p className="text-[10px] uppercase tracking-wider text-electric mt-2">Load session →</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setHtSession(nextHutch.next.id); setHutchOpen(true); }}
+                className="relative z-10 mt-2 text-[10px] font-display uppercase tracking-wider text-bone/50 hover:text-electric"
+              >
+                Choose session
+              </button>
+            </div>
             {SPLITS.map((s) => (
               <button
                 key={s.id}
