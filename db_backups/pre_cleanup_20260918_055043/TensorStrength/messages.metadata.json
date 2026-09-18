@@ -1,1 +1,0 @@
-{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"threadId":{"$numberInt":"1"},"createdAt":{"$numberInt":"1"}},"name":"threadId_1_createdAt_1"}],"uuid":"28311d987f3e4e359afb915a69a640e9","collectionName":"messages","type":"collection"}

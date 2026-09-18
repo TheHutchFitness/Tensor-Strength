@@ -4,8 +4,8 @@ services:
     env: node
     plan: starter
     autoDeploy: true
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    buildCommand: yarn install --frozen-lockfile && yarn build
+    startCommand: yarn start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION

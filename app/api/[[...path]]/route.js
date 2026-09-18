@@ -5,8 +5,11 @@ import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import Stripe from 'stripe'
 import { readFile, writeFile, mkdir, readdir, rm } from 'fs/promises'
+import { createReadStream } from 'fs'
+import { Readable } from 'stream'
 import nodePath from 'path'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import webpush from 'web-push'
 
@@ -110,7 +113,7 @@ async function saveUploadBuffer(db, buffer, ext, mime, ownerId, visibility) {
     try {
       await db.collection('uploads').updateOne(
         { key },
-        { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', allowedUserIds: [], mime: mime || '', createdAt: new Date() } },
+        { $set: { key, ownerId: ownerId || null, visibility: visibility === 'public' ? 'public' : 'private', allowedUserIds: [], mime: mime || '', bytes: buffer.length, createdAt: new Date() } },
         { upsert: true }
       )
     } catch (e) {
@@ -131,6 +134,45 @@ async function saveUploadBuffer(db, buffer, ext, mime, ownerId, visibility) {
   return '/uploads/' + filename
 }
 
+// Stream large uploads straight to R2 without buffering the whole file in memory.
+// `parts` is an ordered list of file paths (chunks written during a chunked
+// upload); they are streamed sequentially via a multipart upload. Requires R2.
+async function saveUploadStream(db, parts, totalBytes, ext, mime, ownerId) {
+  if (!r2Enabled()) throw new Error('Durable storage is not configured; cannot store a private file securely.')
+  const filename = uuidv4() + '.' + ext
+  const key = 'uploads/' + filename
+  // A Readable that emits each part file in order — peak memory is ~one chunk.
+  const source = Readable.from((async function* () {
+    for (const p of parts) {
+      for await (const piece of createReadStream(p)) yield piece
+    }
+  })())
+  const uploader = new Upload({
+    client: getS3(),
+    params: {
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: source,
+      ContentType: mime || 'application/octet-stream',
+      CacheControl: 'public, max-age=31536000, immutable',
+    },
+    queueSize: 3,
+    partSize: 5 * 1024 * 1024,
+  })
+  await uploader.done()
+  try {
+    await db.collection('uploads').updateOne(
+      { key },
+      { $set: { key, ownerId: ownerId || null, visibility: 'private', allowedUserIds: [], mime: mime || '', bytes: totalBytes || 0, createdAt: new Date() } },
+      { upsert: true }
+    )
+  } catch (e) {
+    try { await getS3().send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key })) } catch {}
+    throw e
+  }
+  return '/api/files/' + key
+}
+
 // Extract the R2 object key from a stored /api/files/<key> URL.
 function keyFromFileUrl(url) {
   const m = String(url || '').match(/\/api\/files\/(uploads\/[^?#]+)/)
@@ -143,6 +185,29 @@ async function ownsUploadKey(db, url, userId) {
   if (!key || !userId) return false
   const meta = await db.collection('uploads').findOne({ key })
   return !!meta && meta.ownerId === userId
+}
+
+// Per-user storage accounting for upload quotas.
+const USER_STORAGE_LIMIT = 2 * 1024 * 1024 * 1024 // 2 GB total per user
+const USER_FILE_LIMIT = 800 // max number of stored objects per user
+async function userStorageUsage(db, userId) {
+  if (!userId) return { bytes: 0, count: 0 }
+  const agg = await db.collection('uploads').aggregate([
+    { $match: { ownerId: userId } },
+    { $group: { _id: null, total: { $sum: { $ifNull: ['$bytes', 0] } }, count: { $sum: 1 } } },
+  ]).toArray()
+  return { bytes: agg[0]?.total || 0, count: agg[0]?.count || 0 }
+}
+// Returns an error NextResponse if the user is over quota, else null.
+async function overQuotaResponse(db, userId, incomingBytes) {
+  const { bytes, count } = await userStorageUsage(db, userId)
+  if (count >= USER_FILE_LIMIT) {
+    return handleCORS(NextResponse.json({ error: 'You have reached your file limit. Delete some files and try again.' }, { status: 413 }))
+  }
+  if (bytes + (incomingBytes || 0) > USER_STORAGE_LIMIT) {
+    return handleCORS(NextResponse.json({ error: 'You have reached your storage limit. Delete some files and try again.' }, { status: 413 }))
+  }
+  return null
 }
 
 // Read an uploaded object's bytes from R2 (used to embed photos in the PDF report).
@@ -883,11 +948,27 @@ async function getStripeSession(sessionId) {
   return {
     status: data.status,
     payment_status: data.payment_status,
+    mode: data.mode,
     amount_total: data.amount_total,
     currency: data.currency,
     subscription: data.subscription,
     customer: data.customer,
     metadata: data.metadata || {},
+  }
+}
+
+// Verify a subscription is actually active/trialing before granting access.
+async function getStripeSubscriptionStatus(subId) {
+  if (!subId) return null
+  try {
+    const r = await fetch(`${STRIPE_BASE}/subscriptions/${subId}`, {
+      headers: { Authorization: `Bearer ${STRIPE_KEY}` },
+    })
+    if (!r.ok) return null
+    const data = await r.json()
+    return data?.status || null
+  } catch {
+    return null
   }
 }
 
@@ -1154,9 +1235,9 @@ async function handleRoute(request, { params }) {
       const username = (body.username || '').trim().toLowerCase()
       const email = (body.email || '').trim().toLowerCase()
       const password = body.password || ''
-      if (username.length < 3 || password.length < 6 || !email) {
+      if (username.length < 3 || password.length < 8 || !email) {
         return handleCORS(NextResponse.json(
-          { error: 'Username (3+ chars), a valid email, and password (6+ chars) are required.' },
+          { error: 'Username (3+ chars), a valid email, and password (8+ chars) are required.' },
           { status: 400 }
         ))
       }
@@ -2995,6 +3076,10 @@ async function handleRoute(request, { params }) {
       } else {
         return handleCORS(NextResponse.json({ error: 'You can only message your assigned trainer/client.' }, { status: 403 }))
       }
+      // A sender may only attach media they uploaded themselves.
+      if (body.mediaUrl && !(await ownsUploadKey(db, body.mediaUrl, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'You can only attach files you uploaded.' }, { status: 403 }))
+      }
       const msg = {
         id: uuidv4(),
         trainerId,
@@ -3110,6 +3195,8 @@ async function handleRoute(request, { params }) {
     if (route === '/uploads/file' && method === 'POST') {
       const user = await getCurrentUser(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
+      const rl = rateLimit(request, 'upload-file', 40, 60_000)
+      if (!rl.ok) return tooMany(rl.retryAfter)
       try {
         const form = await request.formData()
         const file = form.get('file')
@@ -3120,6 +3207,8 @@ async function handleRoute(request, { params }) {
         if (size > 50 * 1024 * 1024) {
           return handleCORS(NextResponse.json({ error: 'File too large (max 50MB).' }, { status: 400 }))
         }
+        const quota = await overQuotaResponse(db, user.id, size)
+        if (quota) return quota
         const mime = file.type || 'application/octet-stream'
         const origName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
         const rawExt = origName.includes('.') ? origName.split('.').pop().toLowerCase() : ''
@@ -3171,6 +3260,8 @@ async function handleRoute(request, { params }) {
       if (active >= 5) {
         return handleCORS(NextResponse.json({ error: 'Too many uploads in progress. Finish or wait, then try again.' }, { status: 429 }))
       }
+      const quota = await overQuotaResponse(db, user.id, 0)
+      if (quota) return quota
       const uploadId = uuidv4()
       await db.collection('upload_sessions').insertOne({
         uploadId, ownerId: user.id, ext, mime: String(body.mime || 'video/mp4'), received: 0, createdAt: new Date(),
@@ -3227,15 +3318,16 @@ async function handleRoute(request, { params }) {
       const dir = '/tmp/ts-chunks/' + uploadId
       try {
         const files = (await readdir(dir)).filter((f) => f.endsWith('.part')).sort()
-        const buffers = []
-        for (const f of files) buffers.push(await readFile(nodePath.join(dir, f)))
-        const buffer = Buffer.concat(buffers)
-        await rm(dir, { recursive: true, force: true }).catch(() => {})
-        await db.collection('upload_sessions').deleteOne({ uploadId })
-        if (!buffer.length) {
+        if (!files.length) {
+          await rm(dir, { recursive: true, force: true }).catch(() => {})
+          await db.collection('upload_sessions').deleteOne({ uploadId })
           return handleCORS(NextResponse.json({ error: 'No data received.' }, { status: 400 }))
         }
-        const url = await saveUploadBuffer(db, buffer, sess.ext, sess.mime, user.id, 'private')
+        // Stream the ordered parts straight to R2 (no full-file Buffer.concat).
+        const partPaths = files.map((f) => nodePath.join(dir, f))
+        const url = await saveUploadStream(db, partPaths, sess.received || 0, sess.ext, sess.mime, user.id)
+        await rm(dir, { recursive: true, force: true }).catch(() => {})
+        await db.collection('upload_sessions').deleteOne({ uploadId })
         return handleCORS(NextResponse.json({ url, mime: sess.mime }))
       } catch (e) {
         console.error('Video assemble error:', e)
@@ -3254,6 +3346,10 @@ async function handleRoute(request, { params }) {
       const body = await request.json()
       if (!body.url || !body.name) {
         return handleCORS(NextResponse.json({ error: 'A file url and name are required.' }, { status: 400 }))
+      }
+      // A trainer may only share a file they uploaded themselves.
+      if (!(await ownsUploadKey(db, body.url, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'You can only share files you uploaded.' }, { status: 403 }))
       }
       let clientId = typeof body.clientId === 'string' ? body.clientId : null
       if (clientId) {
@@ -3508,7 +3604,16 @@ async function handleRoute(request, { params }) {
       if (s.pending) {
         return handleCORS(NextResponse.json({ paid: false, status: 'pending', payment_status: 'pending' }))
       }
-      const paid = s.payment_status === 'paid' || s.status === 'complete'
+      // Only grant on genuinely settled payments. Subscriptions must be
+      // active/trialing; one-time purchases must be actually paid (or a valid
+      // zero-cost / no-payment-required case).
+      let paid
+      if (s.mode === 'subscription' && s.subscription) {
+        const subStatus = await getStripeSubscriptionStatus(s.subscription)
+        paid = subStatus === 'active' || subStatus === 'trialing'
+      } else {
+        paid = s.payment_status === 'paid' || s.payment_status === 'no_payment_required'
+      }
       await db.collection('payment_transactions').updateOne(
         { id: tx.id },
         { $set: { status: s.status, paymentStatus: s.payment_status, updatedAt: new Date() } }
@@ -3889,54 +3994,11 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ ok: true, quest: clean }))
     }
 
-    // ---- Trainer programs: coaches author programs only their clients can load ----
-    if (route === '/trainer/programs' && method === 'POST') {
-      const user = await getCurrentUser(request, db)
-      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
-      if (!user.isTrainer && user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
-      const b = await request.json().catch(() => ({}))
-      const name = String(b.name || '').trim().slice(0, 120)
-      if (!name) return handleCORS(NextResponse.json({ error: 'Program name required' }, { status: 400 }))
-      const sessions = Array.isArray(b.sessions) ? b.sessions.slice(0, 12).map((s, i) => ({
-        id: String(s.id || `s${i}`),
-        title: String(s.title || `Day ${i + 1}`).slice(0, 100),
-        exercises: (Array.isArray(s.exercises) ? s.exercises : []).slice(0, 30).map((e) => ({
-          exercise: String(e.exercise || '').slice(0, 100),
-          sets: String(e.sets || '').slice(0, 12),
-          reps: String(e.reps || '').slice(0, 20),
-          rpe: String(e.rpe || '').slice(0, 12),
-          notes: String(e.notes || '').slice(0, 200),
-        })).filter((e) => e.exercise),
-      })).filter((s) => s.exercises.length) : []
-      if (!sessions.length) return handleCORS(NextResponse.json({ error: 'Add at least one session with exercises' }, { status: 400 }))
-      // Default audience = all of this coach's assigned clients (+ specific ids if provided).
-      let clientIds = Array.isArray(b.clientIds) ? b.clientIds.map(String) : []
-      if (!clientIds.length) {
-        const mine = await db.collection('users').find({ assignedTrainerId: user.id }, { projection: { _id: 0, id: 1 } }).toArray()
-        clientIds = mine.map((m) => m.id)
-      }
-      const prog = { id: uuidv4(), trainerId: user.id, coach: user.username, name, blurb: String(b.blurb || '').slice(0, 300), length: String(b.length || 'Custom block').slice(0, 60), howTo: String(b.howTo || '').slice(0, 400), sessions, clientIds, active: true, createdAt: new Date() }
-      await db.collection('trainer_programs').insertOne(prog)
-      const { _id, ...clean } = prog
-      return handleCORS(NextResponse.json({ ok: true, program: clean }))
-    }
-    if (route === '/trainer/programs' && method === 'GET') {
-      const user = await getCurrentUser(request, db)
-      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
-      if (!user.isTrainer && user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
-      const q = user.role === 'admin' ? {} : { trainerId: user.id }
-      const list = await db.collection('trainer_programs').find(q, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(50).toArray()
-      return handleCORS(NextResponse.json({ programs: list }))
-    }
-    if (route === '/trainer/programs' && method === 'DELETE') {
-      const user = await getCurrentUser(request, db)
-      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
-      if (!user.isTrainer && user.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
-      const id = request.nextUrl.searchParams.get('id')
-      const filter = user.role === 'admin' ? { id } : { id, trainerId: user.id }
-      await db.collection('trainer_programs').deleteOne(filter)
-      return handleCORS(NextResponse.json({ ok: true }))
-    }
+    // NOTE: Duplicate session-based `/trainer/programs` handlers (writing the
+    // `trainer_programs` collection) used to live here but were unreachable —
+    // shadowed by the live handlers above (the `programs` collection). Removed
+    // to eliminate route shadowing. The live coach-program system is: POST/GET/
+    // DELETE `/trainer/programs` (above) + `/client/programs` + `/trainer/schedule`.
     // Member: programs assigned to me by my coach.
     if (route === '/member/programs' && method === 'GET') {
       const user = await getCurrentUser(request, db)
@@ -4351,6 +4413,39 @@ async function handleRoute(request, { params }) {
       if (!pid) return handleCORS(NextResponse.json({ error: 'programId required' }, { status: 400 }))
       const done = user.completedPrograms || []
       if (done.includes(pid)) return handleCORS(NextResponse.json({ ok: true, already: true, xp: xpSummary(user.xp) }))
+      // Resolve the program's display name + how many sessions it has so we can
+      // verify the user ACTUALLY logged every session before awarding XP.
+      const MEMBER_PROGRAMS = {
+        'tensor-dup': { name: 'Tensor Strength DUP', sessions: 3 },
+        'tensor-starter': { name: 'Tensor Starter Strength', sessions: 2 },
+        'tensor-high-volume': { name: 'Tensor High-Volume Hypertrophy', sessions: 6 },
+        'tensor-high-intensity': { name: 'Tensor High-Intensity (HIT)', sessions: 3 },
+        'hutch-touch': { name: 'The Hutch Touch', sessions: 4 },
+        'hutch-touch-performance': { name: 'The Hutch Touch', sessions: 4 },
+      }
+      let progName = ''
+      let required = 0
+      if (MEMBER_PROGRAMS[pid]) {
+        progName = MEMBER_PROGRAMS[pid].name
+        required = MEMBER_PROGRAMS[pid].sessions
+      } else {
+        const tp = await db.collection('trainer_programs').findOne({ id: pid })
+        if (tp) { progName = tp.name; required = Array.isArray(tp.sessions) ? tp.sessions.length : 1 }
+        else {
+          const op = await db.collection('programs').findOne({ id: pid })
+          if (op) { progName = op.title; required = 1 }
+        }
+      }
+      if (!progName) return handleCORS(NextResponse.json({ error: 'That program does not exist.' }, { status: 404 }))
+      required = Math.max(1, required)
+      // Confirm completion from the user's own logged workouts.
+      const trackerDoc = await db.collection('tracker').findOne({ userId: user.id }, { projection: { workouts: 1 } })
+      const titles = (Array.isArray(trackerDoc?.workouts) ? trackerDoc.workouts : []).map((w) => String(w?.title || ''))
+      const prefix = `${progName} — `
+      const matchedSessions = new Set(titles.filter((t) => t === progName || t.startsWith(prefix)).map((t) => (t.startsWith(prefix) ? t.slice(prefix.length) : t)))
+      if (matchedSessions.size < required) {
+        return handleCORS(NextResponse.json({ error: `Log all ${required} sessions of this program before claiming the reward.`, completed: matchedSessions.size, required }, { status: 400 }))
+      }
       const earned = user.badges || []
       const bonus = 300
       const addBadge = earned.includes('program_finisher') ? [] : ['program_finisher']
@@ -4605,13 +4700,29 @@ async function handleRoute(request, { params }) {
         ))
       }
       try {
-        const filePath = nodePath.join(process.cwd(), 'private-assets', 'hutch-touch-athlete-edition.pdf')
-        const bytes = await readFile(filePath)
+        const KEY = 'private-assets/hutch-touch-athlete-edition.pdf'
+        let bytes = null
+        // Prefer authenticated object storage (R2). The file no longer lives in
+        // the repo; it's served only to the admin through this gated route.
+        if (r2Enabled()) {
+          try {
+            const obj = await getS3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: KEY }))
+            bytes = Buffer.from(await obj.Body.transformToByteArray())
+          } catch { bytes = null }
+        }
+        if (!bytes) {
+          // Fallback to a local copy if present, and seed R2 for next time.
+          const filePath = nodePath.join(process.cwd(), 'private-assets', 'hutch-touch-athlete-edition.pdf')
+          bytes = Buffer.from(await readFile(filePath))
+          if (r2Enabled()) {
+            try { await getS3().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET, Key: KEY, Body: bytes, ContentType: 'application/pdf' })) } catch {}
+          }
+        }
         const headers = new Headers()
         headers.set('Content-Type', 'application/pdf')
         headers.set('Content-Disposition', 'inline; filename="Tensor-Strength-Hutch-Touch-Athlete-Edition.pdf"')
         headers.set('Cache-Control', 'private, no-store')
-        return new NextResponse(Buffer.from(bytes), { status: 200, headers })
+        return new NextResponse(bytes, { status: 200, headers })
       } catch (e) {
         console.error('Athlete Edition file error:', e)
         return handleCORS(NextResponse.json({ error: 'File temporarily unavailable' }, { status: 502 }))
@@ -4797,8 +4908,10 @@ async function handleRoute(request, { params }) {
     // ---------------- STRIPE WEBHOOK (auto revoke on cancel / failed renewal) ----------------
     if (route === '/webhooks/stripe' && method === 'POST') {
       if (!stripeSdk || WEBHOOK_SECRETS.length === 0) {
-        // Not configured yet — acknowledge so Stripe doesn't hammer retries.
-        return NextResponse.json({ received: true, configured: false })
+        // Misconfigured — return a failure so Stripe RETRIES later rather than
+        // treating the event as delivered and dropping it permanently.
+        console.error('Stripe webhook received but not configured (missing SDK or secret)')
+        return NextResponse.json({ received: false, configured: false }, { status: 503 })
       }
       const sig = request.headers.get('stripe-signature')
       const rawBody = await request.text()
@@ -4852,7 +4965,12 @@ async function handleRoute(request, { params }) {
           // Robustly grant access on any completed checkout (one-time OR subscription),
           // even if the buyer never lands on the success page.
           const u = await findUser(obj)
-          const paid = obj.payment_status === 'paid' || obj.status === 'complete'
+          // Only grant on a genuinely settled checkout. For subscriptions a
+          // trial ('no_payment_required') is valid; the subscription.* events
+          // handle ongoing active/trialing state. One-time must be 'paid'.
+          const paid = obj.mode === 'subscription'
+            ? (obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required')
+            : obj.payment_status === 'paid'
           if (u && paid) {
             const tx = await db.collection('payment_transactions').findOne({ sessionId: obj.id })
             const accessType =
@@ -4970,6 +5088,11 @@ async function handleRoute(request, { params }) {
       if (!user) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }))
       const body = await request.json()
       if (!body.title?.trim()) return handleCORS(NextResponse.json({ error: 'A title is required' }, { status: 400 }))
+      // A poster may only attach media they uploaded (prevents attaching — and
+      // later deleting — another user's object by guessing its key).
+      if (body.mediaUrl && !(await ownsUploadKey(db, body.mediaUrl, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'You can only attach files you uploaded.' }, { status: 403 }))
+      }
       const FORUM_CATEGORIES = ['general', 'faq', 'prs', 'nutrition', 'form-checks']
       const category = FORUM_CATEGORIES.includes(body.category) ? body.category : 'general'
       const post = {
@@ -5105,6 +5228,9 @@ async function handleRoute(request, { params }) {
       }
       const post = await db.collection('forum_posts').findOne({ id: body.postId })
       if (!post) return handleCORS(NextResponse.json({ error: 'Post not found' }, { status: 404 }))
+      if (body.mediaUrl && !(await ownsUploadKey(db, body.mediaUrl, user.id))) {
+        return handleCORS(NextResponse.json({ error: 'You can only attach files you uploaded.' }, { status: 403 }))
+      }
       const reply = {
         id: uuidv4(),
         postId: body.postId,
