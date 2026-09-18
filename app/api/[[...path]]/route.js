@@ -3874,6 +3874,75 @@ async function handleRoute(request, { params }) {
       }, { projection: { _id: 0, clientIds: 0, trainerId: 0 } }).sort({ createdAt: -1 }).limit(30).toArray()
       return handleCORS(NextResponse.json({ programs: list }))
     }
+
+    // ---- Coach workout scheduling (calendar) ----
+    // Schedule an existing program onto a client's day. Snapshots the program's
+    // title + exercises so the client can autoload it without extra lookups.
+    if (route === '/trainer/schedule' && method === 'POST') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const b = await request.json().catch(() => ({}))
+      const date = String(b.date || '').slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return handleCORS(NextResponse.json({ error: 'A valid date (YYYY-MM-DD) is required.' }, { status: 400 }))
+      const programId = String(b.programId || '')
+      const prog = await db.collection('programs').findOne({ id: programId })
+      if (!prog) return handleCORS(NextResponse.json({ error: 'Program not found.' }, { status: 404 }))
+      if (user.role !== 'admin' && prog.trainerId !== user.id) return handleCORS(NextResponse.json({ error: 'That program is not yours.' }, { status: 403 }))
+      let clientId = typeof b.clientId === 'string' && b.clientId ? b.clientId : null
+      const doc = {
+        id: uuidv4(), trainerId: user.id, trainerName: user.username, clientId,
+        programId: prog.id, title: prog.title, exercises: prog.exercises || [],
+        date, autoload: b.autoload !== false, repeatWeekly: !!b.repeatWeekly,
+        createdAt: new Date(),
+      }
+      await db.collection('workout_schedule').insertOne(doc)
+      const { _id, ...clean } = doc
+      return handleCORS(NextResponse.json({ ok: true, scheduled: clean }))
+    }
+    if (route === '/trainer/schedule' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const clientId = request.nextUrl.searchParams.get('clientId')
+      const q = user.role === 'admin' ? {} : { trainerId: user.id }
+      if (clientId) q.clientId = clientId
+      const list = await db.collection('workout_schedule').find(q, { projection: { _id: 0 } }).sort({ date: 1 }).limit(200).toArray()
+      return handleCORS(NextResponse.json({ schedule: list }))
+    }
+    if (route === '/trainer/schedule' && method === 'DELETE') {
+      const user = await getCurrentUser(request, db)
+      if (!user || (!user.isTrainer && user.role !== 'admin')) return handleCORS(NextResponse.json({ error: 'Coaches only' }, { status: 403 }))
+      const id = request.nextUrl.searchParams.get('id')
+      const filter = user.role === 'admin' ? { id } : { id, trainerId: user.id }
+      await db.collection('workout_schedule').deleteOne(filter)
+      return handleCORS(NextResponse.json({ ok: true }))
+    }
+    // Member: my upcoming scheduled workouts (expands weekly repeats over 28 days).
+    if (route === '/member/schedule' && method === 'GET') {
+      const user = await getCurrentUser(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Not signed in' }, { status: 401 }))
+      const docs = await db.collection('workout_schedule').find({
+        $or: [{ clientId: user.id }, ...(user.assignedTrainerId ? [{ clientId: null, trainerId: user.assignedTrainerId }] : [])],
+      }, { projection: { _id: 0 } }).toArray()
+      const ymd = (d) => d.toISOString().slice(0, 10)
+      const today = new Date(); today.setUTCHours(0, 0, 0, 0)
+      const todayStr = ymd(today)
+      const items = []
+      for (const s of docs) {
+        const ex = s.exercises || []
+        if (s.repeatWeekly) {
+          const base = new Date(s.date + 'T00:00:00Z')
+          const wd = base.getUTCDay()
+          for (let i = 0; i < 28; i++) {
+            const d = new Date(today); d.setUTCDate(d.getUTCDate() + i)
+            if (d.getUTCDay() === wd) items.push({ id: s.id, date: ymd(d), title: s.title, exercises: ex, autoload: !!s.autoload, repeats: true })
+          }
+        } else if (s.date >= todayStr) {
+          items.push({ id: s.id, date: s.date, title: s.title, exercises: ex, autoload: s.autoload !== false, repeats: false })
+        }
+      }
+      items.sort((a, b) => a.date.localeCompare(b.date))
+      return handleCORS(NextResponse.json({ schedule: items, today: todayStr }))
+    }
     // Award the one-off Program Finisher badge (once per program id).
     if (route === '/gamification/program-complete' && method === 'POST') {
       const user = await getCurrentUser(request, db)
