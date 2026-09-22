@@ -103,6 +103,14 @@ export default function Navbar() {
               Member Portal
             </a>
           </li>
+          <li>
+            <a
+              href="/ai"
+              className="font-display uppercase text-[12px] tracking-[0.14em] text-bone/70 hover:text-electric transition-colors"
+            >
+              Tensor AI
+            </a>
+          </li>
           {(me?.isTrainer || me?.role === "admin") && (
             <li>
               <a
@@ -219,6 +227,13 @@ export default function Navbar() {
             className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-line"
           >
             Member Portal →
+          </a>
+          <a
+            href="/ai"
+            onClick={() => setOpen(false)}
+            className="block py-3 font-display uppercase tracking-wider text-sm text-electric hover:text-bone transition-colors border-b border-line"
+          >
+            Tensor AI →
           </a>
           {(me?.isTrainer || me?.role === "admin") && (
             <a
