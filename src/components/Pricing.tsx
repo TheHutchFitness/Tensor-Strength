@@ -11,6 +11,15 @@ type Tier = {
   cta: { label: string; href?: string };
 };
 
+type CoachOffer = {
+  name: string;
+  price: string;
+  cadence: string;
+  packageId?: string;
+  href?: string;
+  cta: string;
+};
+
 const tiers: Tier[] = [
   {
     name: "Free",
@@ -29,13 +38,13 @@ const tiers: Tier[] = [
     name: "Membership",
     price: "$9.99 CAD",
     cadence: "/ month",
-    tagline: "The training system.",
+    tagline: "The training system. This is the default.",
     featured: true,
     features: [
       "Full Client Portal — log, calculators, libraries",
       "The Hutch Touch + weekly programs",
       "Exercise & warmup libraries, PR tracker",
-      "Community forum",
+      "Community forum — real usage, real data",
     ],
     packageId: "monthly_9_99",
     cta: { label: "Join — $9.99 CAD/mo" },
@@ -55,6 +64,30 @@ const tiers: Tier[] = [
   },
 ];
 
+const coaching: CoachOffer[] = [
+  {
+    name: "Custom program",
+    price: "$200 CAD",
+    cadence: "one-time",
+    packageId: "custom_program_200",
+    cta: "Checkout",
+  },
+  {
+    name: "Remote coaching",
+    price: "$400 CAD",
+    cadence: "/ month",
+    packageId: "remote_coaching_400",
+    cta: "Checkout",
+  },
+  {
+    name: "In-person",
+    price: "1:1",
+    cadence: "The Fit Effect",
+    href: "/apply",
+    cta: "Apply",
+  },
+];
+
 export default function Pricing() {
   return (
     <section id="pricing" className="py-24 md:py-32 relative overflow-hidden">
@@ -65,14 +98,14 @@ export default function Pricing() {
             Membership
           </p>
           <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            Simple
+            Start with
             <br />
-            <span className="text-electric">pricing.</span>
+            <span className="text-electric">$9.99/mo.</span>
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
-            Start free. Upgrade to the member system when you want the full portal.
-            Tensor AI is a founding beta — $12.99/month when it opens. Coaching is
-            separate: apply, don&apos;t pick a card.
+            The monthly membership is the product we want people in. Free is real.
+            Tensor AI is a founding beta. Coaching stays available at checkout —
+            it is just not the headline.
           </p>
         </div>
 
@@ -96,7 +129,7 @@ export default function Pricing() {
                 <p className="font-display uppercase tracking-wider text-bone">{t.name}</p>
                 {t.featured && (
                   <p className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5 mt-2">
-                    Core
+                    Start here
                   </p>
                 )}
                 <p className="mt-4 font-display text-3xl text-electric font-700 leading-none">
@@ -128,25 +161,43 @@ export default function Pricing() {
           })}
         </div>
 
-        <div className="mt-8 border border-bone/15 bg-ink/30 p-6 md:flex md:items-center md:justify-between gap-6">
-          <div>
-            <p className="font-display uppercase tracking-wider text-sm text-bone">Want a coach?</p>
-            <p className="mt-2 text-sm text-bone/65 leading-relaxed max-w-xl">
-              Custom programs, remote coaching, and in-person work at The Fit Effect
-              are by application — not another price tile.
-            </p>
+        <div id="coaching" className="mt-10 scroll-mt-24">
+          <p className="font-display uppercase tracking-[0.2em] text-[11px] text-bone/40 mb-3">
+            Coaching — checkout, not the campaign
+          </p>
+          <div className="grid md:grid-cols-3 gap-2">
+            {coaching.map((c) => {
+              const btn =
+                "px-3 py-2 font-display uppercase tracking-wider text-[11px] border border-bone/30 hover:border-electric hover:text-electric transition-colors";
+              return (
+                <div
+                  key={c.name}
+                  className="flex items-center justify-between gap-3 border border-bone/10 bg-ink/20 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-display uppercase tracking-wider text-xs text-bone/80">{c.name}</p>
+                    <p className="text-[11px] text-bone/45 mt-0.5">
+                      {c.price} <span className="text-bone/30">{c.cadence}</span>
+                    </p>
+                  </div>
+                  {c.packageId ? (
+                    <CheckoutButton packageId={c.packageId} className={btn}>
+                      {c.cta}
+                    </CheckoutButton>
+                  ) : (
+                    <a href={c.href} className={btn}>
+                      {c.cta}
+                    </a>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <a
-            href="/apply"
-            className="mt-4 md:mt-0 inline-block border-2 border-bone px-5 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors shrink-0"
-          >
-            Apply / contact
-          </a>
         </div>
 
         <p className="mt-6 text-xs text-bone/40 leading-relaxed max-w-xl">
-          First-responder, military, and student rates exist. Ask at checkout or when
-          you apply — they are not a marketing pitch.
+          First-responder, military, and student rates exist. Ask at checkout — they
+          are not a marketing pitch.
         </p>
       </div>
     </section>

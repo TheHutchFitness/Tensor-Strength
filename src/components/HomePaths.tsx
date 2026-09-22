@@ -11,18 +11,18 @@ const paths = [
     index: "02",
     title: "Member system",
     description:
-      "The full portal for $9.99/month — logging, libraries, The Hutch Touch, community.",
-    action: "See membership",
+      "The full portal for $9.99/month — logging, libraries, The Hutch Touch, community. This is the default.",
+    action: "Join $9.99/mo",
     href: "#pricing",
     featured: true,
   },
   {
     index: "03",
-    title: "Work with a coach",
+    title: "Optional coaching",
     description:
-      "Custom programming, remote coaching, or in-person at The Fit Effect. Apply — it is not a checkout card.",
-    action: "Apply for coaching",
-    href: "/apply",
+      "Custom program, remote coaching, or in-person. Available at checkout if you want it — not what we are pushing first.",
+    action: "Coaching checkout",
+    href: "#coaching",
   },
 ];
 
@@ -33,10 +33,11 @@ export default function HomePaths() {
         <div className="max-w-2xl">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-5">Start with clarity</p>
           <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            One standard.<br /><span className="text-electric">Your right level.</span>
+            Get in.
+            <br /><span className="text-electric">Build the data.</span>
           </h2>
           <p className="mt-5 text-bone/70 leading-relaxed">
-            Free, member, Tensor AI beta, or coaching. Each route has a clear next step.
+            Free accounts and $9.99 memberships first. Coaching stays on the page as a quiet checkout.
           </p>
         </div>
 
