@@ -14,7 +14,7 @@ type Me = {
 } | null;
 
 const TILES = [
-  { href: "/ai", label: "Tensor AI", desc: "Context-aware training help", Icon: Sparkles },
+  { href: "/ai", label: "Tensor AI", desc: "Gym, sport & athletics coach", Icon: Sparkles },
   { href: "/free-tools", label: "Free Tools", desc: "Calculators & trackers", Icon: Calculator },
   { href: "/programs", label: "Free Programs", desc: "Starter training blocks", Icon: FileText },
   { href: "/forum", label: "Community", desc: "Ask, share, get feedback", Icon: MessageSquare },

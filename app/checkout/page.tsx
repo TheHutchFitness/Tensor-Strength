@@ -115,7 +115,7 @@ export default function CheckoutPage() {
           {plan.id === "tensor_ai_beta_12_99" ? (
             <ul className="mt-6 grid gap-2 text-sm text-bone/65">
               <li>→ Includes Core Membership.</li>
-              <li>→ Tensor AI access is a separate entitlement.</li>
+              <li>→ Tensor AI is a gym, sport, and athletics specialist — not a generic chatbot.</li>
               <li>→ Founding beta pricing may change as usage costs become clear.</li>
             </ul>
           ) : (
