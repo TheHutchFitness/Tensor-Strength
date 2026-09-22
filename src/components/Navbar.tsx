@@ -9,7 +9,8 @@ const menus = [
     label: "Training",
     href: "/#membership-path",
     items: [
-      { href: "/checkout?plan=monthly_9_99", label: "Membership $9.99" },
+      { href: "/checkout?plan=monthly_9_99", label: "Core Membership $9.99" },
+      { href: "/checkout?plan=tensor_ai_beta_12_99", label: "Tensor AI Beta $12.99" },
       { href: "/programs", label: "Programs" },
       { href: "/free-tools", label: "Free Tools" },
     ],
@@ -132,6 +133,14 @@ export default function Navbar() {
                   Join $9.99
                 </a>
               )}
+              {me.portalAccess && me.accessType === "membership" && me.role !== "admin" && (
+                <a
+                  href="/checkout?plan=tensor_ai_beta_12_99"
+                  className="border border-electric text-electric px-4 py-2 font-display uppercase text-xs tracking-[0.12em] hover:bg-electric hover:text-ink transition-colors"
+                >
+                  Add AI $12.99
+                </a>
+              )}
               <a
                 href="/account"
                 className="font-display uppercase text-[11px] tracking-[0.14em] text-steel hover:text-bone transition-colors"
@@ -238,6 +247,15 @@ export default function Navbar() {
                   className="mt-3 block text-center bg-electric text-ink py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
                 >
                   Join $9.99
+                </a>
+              )}
+              {me.portalAccess && me.accessType === "membership" && me.role !== "admin" && (
+                <a
+                  href="/checkout?plan=tensor_ai_beta_12_99"
+                  onClick={() => setOpen(false)}
+                  className="mt-3 block text-center border border-electric text-electric py-3 font-display uppercase tracking-wider text-sm hover:bg-electric hover:text-ink transition-colors"
+                >
+                  Add Tensor AI $12.99
                 </a>
               )}
               <a
