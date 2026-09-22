@@ -61,11 +61,9 @@ export default function PortalHero({
   const level = game ? (game.xp?.level ?? levelFromXp(game.xp?.total || 0)) : null;
   const emoji = avatarEmoji(game?.equippedAvatar);
 
-  // Today's daily quest + claim status
   const dailyQuest = game?.quests?.find((q: any) => q.id === "daily_log");
   const claimedToday = game?.claims?.daily_log === todayPeriod();
 
-  // Next up in the Hutch Touch rotation (from most-recent logged session)
   let nextTitle = "Upper Body Push";
   let lastTitle: string | null = null;
   for (const w of workouts) {
@@ -127,8 +125,10 @@ export default function PortalHero({
           [coachingClient ? "/clients?message=I%20need%20help%20with%20my%20training#coaching" : "/clients/workout-log?tab=exercises", coachingClient ? "Ask your coach" : "Exercise help"], ["/clients/progress", "My progress"],
         ].map(([href, label]) => <a key={href} href={href} className="border border-electric/40 px-3 py-3 text-center text-sm text-bone hover:bg-electric/10">{label}</a>)}
       </div>
+      <a href="/ai" className="mt-3 block border border-electric/40 px-3 py-3 text-center text-sm text-electric hover:bg-electric/10">
+        Tensor AI →
+      </a>
       <div className="mt-6 grid sm:grid-cols-2 gap-4">
-        {/* Today's quest */}
         <div className="border border-bone/15 bg-ink/30 p-4">
           <p className="text-[10px] uppercase tracking-wider text-bone/50">Today&apos;s quest</p>
           {dailyQuest ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calculator, FileText, MessageSquare, LayoutDashboard, Lock, X } from "lucide-react";
+import { Calculator, FileText, MessageSquare, LayoutDashboard, Lock, Sparkles, X } from "lucide-react";
 import CheckoutButton from "./CheckoutButton";
 import { fetchCurrentUser } from "../lib/currentUser";
 
@@ -14,6 +14,7 @@ type Me = {
 } | null;
 
 const TILES = [
+  { href: "/ai", label: "Tensor AI", desc: "Context-aware training help", Icon: Sparkles },
   { href: "/free-tools", label: "Free Tools", desc: "Calculators & trackers", Icon: Calculator },
   { href: "/programs", label: "Free Programs", desc: "Starter training blocks", Icon: FileText },
   { href: "/forum", label: "Community", desc: "Ask, share, get feedback", Icon: MessageSquare },
@@ -82,8 +83,7 @@ export default function MemberHub() {
           Welcome back, <span className="text-electric capitalize">{first}</span>.
         </h2>
 
-        {/* Quick-access tiles */}
-        <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-5 gap-4">
           {TILES.map(({ href, label, desc, Icon }) => {
             const locked = href === "/clients" && !hasPortal;
             return (
@@ -103,7 +103,6 @@ export default function MemberHub() {
           })}
         </div>
 
-        {/* Upgrade banner for free members */}
         {!hasPortal && !dismissed && (
           <div className="mt-6 relative border-2 border-electric bg-gradient-to-r from-electric/15 to-transparent p-5 pr-12">
             <button
@@ -142,7 +141,6 @@ export default function MemberHub() {
           </div>
         )}
 
-        {/* Onboarding checklist for new free members */}
         {!hasPortal && (
           <div className="mt-6 border border-bone/15 bg-ink/40 p-5">
             <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-4">
@@ -173,7 +171,6 @@ export default function MemberHub() {
           </div>
         )}
 
-        {/* Account / manage subscription for members */}
         {isSubscribed && (
           <div className="mt-6 border border-bone/15 bg-ink/40 p-5">
             <p className="glow font-display uppercase tracking-[0.3em] text-electric text-xs mb-2">
