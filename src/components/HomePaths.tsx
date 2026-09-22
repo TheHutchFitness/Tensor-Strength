@@ -1,28 +1,28 @@
 const paths = [
   {
     index: "01",
-    title: "Train independently",
+    title: "Start free",
     description:
-      "A quiet, complete system for self-directed training: programmes, workout logging, progression tools, and the member community.",
-    action: "Explore membership",
-    href: "#pricing",
+      "A real limited account: starter programs, Program Finder, and guides. No fake trial wall.",
+    action: "Create a free account",
+    href: "/login?signup=1",
   },
   {
     index: "02",
-    title: "Work with a coach",
+    title: "Member system",
     description:
-      "For people who want decisions made with them—not for them. Get a plan built around your goals, schedule, equipment, and feedback.",
-    action: "Apply for coaching",
-    href: "/apply",
+      "The full portal for $9.99/month — logging, libraries, The Hutch Touch, community.",
+    action: "See membership",
+    href: "#pricing",
     featured: true,
   },
   {
     index: "03",
-    title: "Meet the professionals",
+    title: "Work with a coach",
     description:
-      "See the people and disciplines behind Tensor Strength, then choose the level of support that fits your next training block.",
-    action: "Meet the team",
-    href: "/meet-the-team",
+      "Custom programming, remote coaching, or in-person at The Fit Effect. Apply — it is not a checkout card.",
+    action: "Apply for coaching",
+    href: "/apply",
   },
 ];
 
@@ -36,7 +36,7 @@ export default function HomePaths() {
             One standard.<br /><span className="text-electric">Your right level.</span>
           </h2>
           <p className="mt-5 text-bone/70 leading-relaxed">
-            Whether you&apos;re training on your own, looking for personal coaching, or exploring the team, each route has a clear next step.
+            Free, member, Tensor AI beta, or coaching. Each route has a clear next step.
           </p>
         </div>
 

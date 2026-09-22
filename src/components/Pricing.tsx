@@ -13,87 +13,45 @@ type Tier = {
 
 const tiers: Tier[] = [
   {
-    name: "Free Tools",
+    name: "Free",
     price: "$0",
     cadence: "always",
-    tagline: "Start here.",
+    tagline: "Limited, but real.",
     features: [
-      "3 free starter programs (beginner, home, conditioning)",
-      "Program Finder — get your training framework",
-      "Training guides (accessory work, consistency, overload)",
-      "Weekly programs teaser",
+      "3 starter programs (beginner, home, conditioning)",
+      "Program Finder",
+      "Training guides",
+      "A free account you can actually use",
     ],
-    cta: { label: "Try the free tools", href: "/#programs" },
+    cta: { label: "Start free", href: "/login?signup=1" },
   },
   {
     name: "Membership",
     price: "$9.99 CAD",
     cadence: "/ month",
-    tagline: "Self-guided. Full portal.",
-    features: [
-      "Full Client Portal — workout log, calculators, libraries",
-      "The Hutch Touch performance program + weekly programs",
-      "Exercise & warmup libraries, PR tracker",
-      "Self-directed — build and run your own training",
-    ],
-    packageId: "monthly_9_99",
-    cta: { label: "Subscribe — $9.99 CAD/mo" },
-  },
-  {
-    name: "Annual Membership",
-    price: "$90 CAD",
-    cadence: "/ year",
-    tagline: "Self-guided — save ~25%.",
-    features: [
-      "Everything in the monthly Membership",
-      "Full Client Portal — workout log, calculators, libraries",
-      "The Hutch Touch performance program + weekly programs",
-      "One payment a year — cheaper than monthly",
-    ],
-    packageId: "yearly_90",
-    cta: { label: "Subscribe — $90 CAD/yr" },
-  },
-  {
-    name: "Custom Program",
-    price: "$200 CAD",
-    cadence: "one-time",
-    tagline: "The most popular step up.",
+    tagline: "The training system.",
     featured: true,
     features: [
-      "A program built around your lifts, gear, and goals",
-      "Strength + accessory work programmed to your weak points",
-      "Progressive overload + deload built in",
-      "Includes full Client Portal access",
+      "Full Client Portal — log, calculators, libraries",
+      "The Hutch Touch + weekly programs",
+      "Exercise & warmup libraries, PR tracker",
+      "Community forum",
     ],
-    packageId: "custom_program_200",
-    cta: { label: "Get a Custom Program" },
+    packageId: "monthly_9_99",
+    cta: { label: "Join — $9.99 CAD/mo" },
   },
   {
-    name: "Remote Coaching",
-    price: "$400 CAD",
+    name: "Tensor AI Beta",
+    price: "$12.99 CAD",
     cadence: "/ month",
-    tagline: "Ongoing coaching, anywhere.",
+    tagline: "Founding price. Not billed yet.",
     features: [
-      "Custom programming that adapts as you progress",
-      "Weekly check-ins and program adjustments",
-      "Full Client Portal — workout log, calculators, libraries",
-      "1:1 chat access to Hutch",
+      "Same assistant in text and voice",
+      "DeepSeek for everyday work, Terra when you need it",
+      "Projects, memory, and Builder — coming on the member site",
+      "Founding rate while Tensor AI is in beta",
     ],
-    packageId: "remote_coaching_400",
-    cta: { label: "Start Remote Coaching" },
-  },
-  {
-    name: "In-Person Training",
-    price: "At The Fit Effect",
-    cadence: "Paris, ON",
-    tagline: "Hands-on, in the gym.",
-    features: [
-      "1:1 coaching at The Fit Effect in Paris, Ontario",
-      "Technique work, hands-on correction",
-      "Programming built around your in-gym sessions",
-      "Portal access included once you're set up",
-    ],
-    cta: { label: "Apply for In-Person", href: "/#contact" },
+    cta: { label: "Start free — AI opens next", href: "/login?signup=1" },
   },
 ];
 
@@ -104,31 +62,21 @@ export default function Pricing() {
       <div className="relative mx-auto max-w-6xl px-6">
         <div className="max-w-2xl mb-12">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
-            Training Options
+            Membership
           </p>
           <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            Pick your
+            Simple
             <br />
-            <span className="text-electric">level.</span>
+            <span className="text-electric">pricing.</span>
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
-            Free tools to start, a self-guided membership, a one-off custom program,
-            ongoing remote coaching, or in-person at The Fit Effect. Every paid option
-            unlocks the Client Portal — coaching is added on top when you want a coach.
+            Start free. Upgrade to the member system when you want the full portal.
+            Tensor AI is a founding beta — $12.99/month when it opens. Coaching is
+            separate: apply, don&apos;t pick a card.
           </p>
-          <div className="mt-6 inline-block border border-electric/40 bg-electric/5 px-5 py-3">
-            <p className="font-display uppercase tracking-wider text-electric text-sm">
-              Military, first responder &amp; student discounts
-            </p>
-            <p className="text-bone/70 text-sm mt-1">
-              Remote Coaching is <span className="text-electric">$350 CAD/mo</span> for military,
-              and <span className="text-electric">$300 CAD/mo</span> for first responders &amp; students.
-              Ask for your code before checkout.
-            </p>
-          </div>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-4">
           {tiers.map((t) => {
             const btnCls =
               "mt-6 px-5 py-3 font-display uppercase tracking-wider text-sm text-center transition-colors block w-full " +
@@ -148,7 +96,7 @@ export default function Pricing() {
                 <p className="font-display uppercase tracking-wider text-bone">{t.name}</p>
                 {t.featured && (
                   <p className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5 mt-2">
-                    Most popular
+                    Core
                   </p>
                 )}
                 <p className="mt-4 font-display text-3xl text-electric font-700 leading-none">
@@ -160,7 +108,7 @@ export default function Pricing() {
                 <ul className="mt-5 grid gap-2 flex-1">
                   {t.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-xs text-bone/70 leading-relaxed">
-                      <span className="text-electric shrink-0">⚡</span>
+                      <span className="text-electric shrink-0">→</span>
                       <span>{f}</span>
                     </li>
                   ))}
@@ -168,11 +116,11 @@ export default function Pricing() {
 
                 {t.packageId ? (
                   <CheckoutButton packageId={t.packageId} className={btnCls}>
-                    {t.cta.label} →
+                    {t.cta.label}
                   </CheckoutButton>
                 ) : (
                   <a href={t.cta.href} className={btnCls}>
-                    {t.cta.label} →
+                    {t.cta.label}
                   </a>
                 )}
               </div>
@@ -180,12 +128,25 @@ export default function Pricing() {
           })}
         </div>
 
-        <p className="mt-8 text-xs text-bone/40 leading-relaxed max-w-xl">
-          Not sure which fits? Run the{" "}
-          <a href="/#program-finder" className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors">
-            Program Finder
-          </a>{" "}
-          first — it&apos;ll point you at the right starting place.
+        <div className="mt-8 border border-bone/15 bg-ink/30 p-6 md:flex md:items-center md:justify-between gap-6">
+          <div>
+            <p className="font-display uppercase tracking-wider text-sm text-bone">Want a coach?</p>
+            <p className="mt-2 text-sm text-bone/65 leading-relaxed max-w-xl">
+              Custom programs, remote coaching, and in-person work at The Fit Effect
+              are by application — not another price tile.
+            </p>
+          </div>
+          <a
+            href="/apply"
+            className="mt-4 md:mt-0 inline-block border-2 border-bone px-5 py-3 font-display uppercase tracking-wider text-sm hover:bg-bone hover:text-ink transition-colors shrink-0"
+          >
+            Apply / contact
+          </a>
+        </div>
+
+        <p className="mt-6 text-xs text-bone/40 leading-relaxed max-w-xl">
+          First-responder, military, and student rates exist. Ask at checkout or when
+          you apply — they are not a marketing pitch.
         </p>
       </div>
     </section>
