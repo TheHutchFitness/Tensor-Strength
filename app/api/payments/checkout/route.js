@@ -10,7 +10,7 @@ const STRIPE_BASE = OWN_STRIPE_KEY
 
 const PACKAGES = {
   monthly_9_99: {
-    label: 'Tensor Strength Membership',
+    label: 'Tensor Strength Core Membership',
     mode: 'subscription',
     amount: 999,
     currency: 'cad',
@@ -18,7 +18,7 @@ const PACKAGES = {
     accessType: 'membership',
   },
   yearly_90: {
-    label: 'Tensor Strength Membership (Annual)',
+    label: 'Tensor Strength Membership (Annual — Legacy)',
     mode: 'subscription',
     amount: 9000,
     currency: 'cad',
@@ -111,6 +111,30 @@ export async function POST(request) {
     const pkg = PACKAGES[body.packageId]
     if (!pkg || pkg.legacyOnly) {
       return json({ error: 'Invalid package' }, 400)
+    }
+
+    // Never silently create a second recurring Stripe subscription.
+    if (pkg.mode === 'subscription' && user.stripeSubscriptionId) {
+      const alreadySame =
+        (pkg.accessType === 'membership' && user.accessType === 'membership') ||
+        (pkg.accessType === 'tensor_ai_beta' && user.accessType === 'tensor_ai_beta') ||
+        (pkg.accessType === 'remote_coaching' && user.accessType === 'remote_coaching')
+
+      if (alreadySame) {
+        return json({ error: 'You already have this subscription.' }, 409)
+      }
+
+      if (pkg.accessType === 'tensor_ai_beta' && user.accessType === 'membership') {
+        return json({
+          error: 'Use the Core → Tensor AI plan upgrade flow.',
+          code: 'PLAN_CHANGE_REQUIRED',
+        }, 409)
+      }
+
+      return json({
+        error: 'Your current subscription needs to be changed rather than duplicated.',
+        code: 'EXISTING_SUBSCRIPTION',
+      }, 409)
     }
 
     const base = getAppBaseUrl()
