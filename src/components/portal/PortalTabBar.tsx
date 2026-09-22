@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Home, Dumbbell, Apple, MessageSquare, ClipboardCheck, MoreHorizontal, Trophy, CalendarDays, UserRound, FileText } from "lucide-react";
+import { Home, Dumbbell, Apple, MessageSquare, ClipboardCheck, MoreHorizontal, Trophy, CalendarDays, UserRound, FileText, Sparkles } from "lucide-react";
 
 const TABS = [
   { href: "/clients", label: "Home", Icon: Home, key: "home", match: (p: string) => p === "/clients" },
@@ -13,6 +13,7 @@ const TABS = [
 ];
 
 const MORE_ITEMS = [
+  { href: "/ai", label: "Tensor AI", Icon: Sparkles },
   { href: "/clients/progress", label: "Progress", Icon: Trophy },
   { href: "/clients/book", label: "Book a session", Icon: CalendarDays },
   { href: "/clients/my-programs", label: "My programs", Icon: FileText },
@@ -27,14 +28,11 @@ export default function PortalTabBar() {
   const [showHint, setShowHint] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // Reserve space at the bottom on mobile so content isn't hidden behind the
-  // fixed bar. Class is removed on unmount (i.e. when leaving the portal).
   useEffect(() => {
     document.body.classList.add("has-portal-tabbar");
     return () => document.body.classList.remove("has-portal-tabbar");
   }, []);
 
-  // One-time subtle hint that you can swipe between sections (mobile only).
   useEffect(() => {
     if (typeof window === "undefined" || window.innerWidth >= 768) return;
     try {
@@ -49,7 +47,6 @@ export default function PortalTabBar() {
     };
   }, []);
 
-  // Poll forum notifications so the Forum tab shows an unread dot.
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -62,7 +59,6 @@ export default function PortalTabBar() {
     };
     load();
     const t = setInterval(load, 30000);
-    // Refresh when returning to the tab (e.g. after reading on the forum).
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
     return () => {
@@ -72,7 +68,6 @@ export default function PortalTabBar() {
     };
   }, [pathname]);
 
-  // Swipe left/right between portal sections on phones.
   useEffect(() => {
     let sx = 0, sy = 0, st = 0, tracking = false;
     const inHorizScroll = (el: Element | null) => {
@@ -124,7 +119,7 @@ export default function PortalTabBar() {
           style={{ bottom: "calc(4.25rem + env(safe-area-inset-bottom))" }}
         >
           <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink/95 backdrop-blur border border-electric/60 text-bone/90 text-xs px-4 py-2 shadow-lg animate-[fadeIn_.3s_ease-out]">
-            <span className="text-electric text-sm leading-none">⇆</span>
+            <span className="text-electric text-sm leading-none">⇄</span>
             <span>Swipe left or right to switch sections</span>
             <button onClick={() => setShowHint(false)} className="ml-1 text-bone/50 hover:text-electric" aria-label="Dismiss">✕</button>
           </div>
