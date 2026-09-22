@@ -1,11 +1,11 @@
 const paths = [
   {
     index: "01",
-    title: "Start free",
+    title: "You're on free",
     description:
-      "A real limited account: starter programs, Program Finder, and guides. No fake trial wall.",
-    action: "Create a free account",
-    href: "/login?signup=1",
+      "Starter programs, Program Finder, and guides. Use it — then upgrade when you want the full portal.",
+    action: "Open starter programs",
+    href: "/free-programs",
   },
   {
     index: "02",
@@ -13,7 +13,7 @@ const paths = [
     description:
       "The full portal for $9.99/month — logging, libraries, The Hutch Touch, community. This is the default.",
     action: "Join $9.99/mo",
-    href: "#pricing",
+    href: "/checkout?plan=monthly_9_99",
     featured: true,
   },
   {

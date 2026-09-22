@@ -1,3 +1,7 @@
+"use client";
+
+import CheckoutButton from "./CheckoutButton";
+
 export default function Hero() {
   return (
     <section id="top" className="relative text-bone overflow-hidden">
@@ -14,36 +18,23 @@ export default function Hero() {
             <span className="text-electric">built with intent.</span>
           </h1>
           <p className="mt-6 sm:mt-8 max-w-xl text-base sm:text-lg md:text-xl text-bone/85 leading-relaxed">
-            Useful training tools, coaching, and intelligent assistance — without
-            inflated cost. Start free. Upgrade when you&apos;re ready.
-          </p>
-          <p className="mt-4 max-w-xl text-sm sm:text-base text-bone/70 leading-relaxed">
-            I built Tensor Strength because I know what it feels like when the tools
-            that are supposed to help you are too expensive, too complicated, or built
-            for someone else.
+            You already have an account. Unlock the full portal — $9.99 CAD/month.
           </p>
 
           <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <a
-              href="/login?signup=1"
+            <CheckoutButton
+              packageId="monthly_9_99"
               className="bg-electric text-ink px-6 sm:px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors text-center min-h-[52px]"
             >
-              Start free
-            </a>
+              Join — $9.99 CAD/mo
+            </CheckoutButton>
             <a
-              href="/login"
+              href="#pricing"
               className="border-2 border-bone px-6 sm:px-8 py-4 font-display uppercase tracking-wider hover:bg-bone hover:text-ink transition-colors text-center min-h-[52px]"
             >
-              Log in
+              See plans
             </a>
           </div>
-
-          <a
-            href="#pricing"
-            className="mt-5 inline-flex items-center gap-2 font-display uppercase tracking-wider text-sm text-bone/65 hover:text-electric transition-colors"
-          >
-            Membership $9.99 · Tensor AI $12.99 beta <span aria-hidden>↓</span>
-          </a>
         </div>
       </div>
     </section>
