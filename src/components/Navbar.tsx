@@ -4,14 +4,12 @@ import { useEffect, useState } from "react";
 import { clearCurrentUserCache, fetchCurrentUser } from "../lib/currentUser";
 import type { CurrentUser } from "../lib/currentUser";
 
-// Desktop nav. Items with `items` render a hover dropdown of sub-sections;
-// items without render as a plain top-level link.
 const menus = [
   {
     label: "Training",
     href: "/#membership-path",
     items: [
-      { href: "/#pricing", label: "Membership" },
+      { href: "/checkout?plan=monthly_9_99", label: "Membership $9.99" },
       { href: "/programs", label: "Programs" },
       { href: "/free-tools", label: "Free Tools" },
     ],
@@ -79,7 +77,6 @@ export default function Navbar() {
                   </svg>
                 )}
               </a>
-              {/* Hover panel — pt-3 keeps a bridge so the menu doesn't close on the gap */}
               {m.items && (
                 <div className="absolute left-0 top-full pt-3 hidden group-hover:block">
                   <div className="min-w-[230px] bg-ink/95 backdrop-blur border border-line shadow-2xl">
@@ -129,10 +126,10 @@ export default function Navbar() {
             <li className="flex items-center gap-4">
               {!me.portalAccess && me.role !== "admin" && (
                 <a
-                  href="/#pricing"
+                  href="/checkout?plan=monthly_9_99"
                   className="bg-electric text-ink px-4 py-2 font-display uppercase text-xs tracking-[0.12em] hover:bg-bone transition-colors"
                 >
-                  Upgrade
+                  Join $9.99
                 </a>
               )}
               <a
@@ -157,10 +154,10 @@ export default function Navbar() {
                 Member Login
               </a>
               <a
-                href="/apply"
+                href="/checkout?plan=monthly_9_99"
                 className="bg-electric text-ink px-5 py-2 font-display uppercase text-xs tracking-[0.12em] hover:bg-bone transition-colors"
               >
-                Apply Now
+                Join $9.99
               </a>
             </li>
           )}
@@ -214,13 +211,6 @@ export default function Navbar() {
           >
             Member Portal →
           </a>
-          <a
-            href="/forum"
-            onClick={() => setOpen(false)}
-            className="block py-3 font-display uppercase tracking-wider text-sm text-bone/80 hover:text-electric transition-colors border-b border-line"
-          >
-            Forum →
-          </a>
           {(me?.isTrainer || me?.role === "admin") && (
             <a
               href="/trainers"
@@ -241,6 +231,15 @@ export default function Navbar() {
           )}
           {me ? (
             <>
+              {!me.portalAccess && me.role !== "admin" && (
+                <a
+                  href="/checkout?plan=monthly_9_99"
+                  onClick={() => setOpen(false)}
+                  className="mt-3 block text-center bg-electric text-ink py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
+                >
+                  Join $9.99
+                </a>
+              )}
               <a
                 href="/account"
                 onClick={() => setOpen(false)}
@@ -265,11 +264,11 @@ export default function Navbar() {
                 Member Login →
               </a>
               <a
-                href="/apply"
+                href="/checkout?plan=monthly_9_99"
                 onClick={() => setOpen(false)}
                 className="mt-3 block text-center bg-electric text-ink py-3 font-display uppercase tracking-wider text-sm hover:bg-bone transition-colors"
               >
-                Apply Now
+                Join $9.99
               </a>
             </>
           )}
