@@ -17,10 +17,10 @@ type Conversation = {
 };
 
 const STARTERS = [
-  "What should I focus on in today's training?",
-  "How do I log a workout in the portal?",
-  "I missed a session — how should I adjust?",
-  "What's the difference between coach-programmed work and something I loaded myself?",
+  "What should I focus on in today's gym session?",
+  "How do I get more athletic without losing strength?",
+  "I missed a session — how should I adjust this week?",
+  "How should I warm up for a heavy lower-body day?",
 ];
 
 export default function TensorAIPage() {
@@ -138,9 +138,9 @@ export default function TensorAIPage() {
             Tensor AI Beta
           </p>
           <h1 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            Training context,
+            Gym, sport,
             <br />
-            <span className="text-electric">on demand.</span>
+            <span className="text-electric">and athletics.</span>
           </h1>
 
           {!ready ? (
@@ -148,8 +148,8 @@ export default function TensorAIPage() {
           ) : !signedIn ? (
             <div className="mt-8 max-w-xl">
               <p className="text-sm leading-relaxed text-bone/65">
-                Tensor AI is a separate coaching layer for members who want context-aware
-                training help. The rest of Tensor Strength stays the same.
+                Tensor AI is a gym, sport, and athletics specialist. The rest of Tensor
+                Strength stays the same — this is the coaching layer for people who train.
               </p>
               <a
                 href="/login?from=/ai"
@@ -161,8 +161,8 @@ export default function TensorAIPage() {
           ) : !entitled ? (
             <div className="mt-8 max-w-xl border border-electric/35 bg-electric/5 p-6">
               <p className="text-sm leading-relaxed text-bone/70">
-                Tensor AI Beta is a $12.99 CAD/month founding layer on top of Core.
-                It is not included in the $9.99 membership.
+                Tensor AI Beta is a $12.99 CAD/month founding gym, sport, and athletics
+                coach on top of Core. It is not included in the $9.99 membership.
               </p>
               <a
                 href="/checkout?plan=tensor_ai_beta_12_99"
@@ -202,8 +202,9 @@ export default function TensorAIPage() {
 
               <section>
                 <p className="max-w-xl text-sm leading-relaxed text-bone/65">
-                  Ask about your program, recent training, or how to use Tensor Strength.
-                  Coach-programmed work and your logged data stay clearly separated from suggestions.
+                  Ask about lifting, conditioning, sport performance, recovery, or how to
+                  use your program. Coach-programmed work and your logged data stay clearly
+                  separated from suggestions.
                 </p>
 
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -241,7 +242,7 @@ export default function TensorAIPage() {
 
                 <div className="mt-6 min-h-[280px] border border-bone/15 bg-ink/30 p-5">
                   {messages.length === 0 && (
-                    <p className="text-sm text-bone/40">Start with a question about today&apos;s training.</p>
+                    <p className="text-sm text-bone/40">Start with a gym, sport, or athletics question.</p>
                   )}
                   {messages.map((msg, i) => (
                     <div
