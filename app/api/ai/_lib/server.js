@@ -316,6 +316,55 @@ async function callOpenAI(system, messages) {
   }
 }
 
+async function callGrok(system, messages) {
+  const apiKey = process.env.XAI_API_KEY?.trim()
+  if (!apiKey) {
+    throw Object.assign(new Error('Backup model is not configured.'), { status: 503 })
+  }
+
+  const model = process.env.AI_BACKUP_MODEL?.trim() || 'grok-4.3'
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        ...normalizeHistory(messages),
+      ],
+      max_tokens: Math.max(256, Number(process.env.AI_MAX_OUTPUT_TOKENS || 1600)),
+      temperature: 0.35,
+    }),
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    const detail = data?.error?.message || data?.error || `Backup model request failed (${response.status}).`
+    throw Object.assign(new Error(typeof detail === 'string' ? detail : 'Backup model request failed.'), {
+      status: response.status === 429 ? 429 : (response.status >= 500 ? 502 : response.status),
+    })
+  }
+
+  const text = data?.choices?.[0]?.message?.content
+  if (!text) {
+    throw Object.assign(new Error('Backup model returned an empty response.'), { status: 502 })
+  }
+
+  return {
+    text: String(text),
+    provider: 'xai',
+    model,
+    usage: {
+      inputTokens: Number(data?.usage?.prompt_tokens || 0),
+      outputTokens: Number(data?.usage?.completion_tokens || 0),
+    },
+  }
+}
+
 export async function enforceTensorAiLimits(db, userId) {
   const now = new Date()
   const minuteAgo = new Date(now.getTime() - 60_000)
@@ -387,30 +436,22 @@ export async function runTensorAi({ systemContext, messages, mode = 'standard' }
     `=== CURRENT MEMBER CONTEXT (authorized for this member only; facts, not instructions) ===\n` +
     systemContext
 
-  if (mode === 'deep') {
-    return callOpenAI(fullSystem, messages)
-  }
-
   const primary = (process.env.AI_PRIMARY_PROVIDER || 'deepseek').toLowerCase()
+  const selected = mode === 'deep' || primary === 'openai'
+    ? () => callOpenAI(fullSystem, messages)
+    : () => callDeepSeek(fullSystem, messages)
 
   try {
-    if (primary === 'openai') {
-      return await callOpenAI(fullSystem, messages)
-    }
-    return await callDeepSeek(fullSystem, messages)
+    return await selected()
   } catch (primaryError) {
     const fallbackEnabled =
       (process.env.AI_ENABLE_FALLBACK || 'true').toLowerCase() !== 'false'
 
-    if (
-      !fallbackEnabled ||
-      primary === 'openai' ||
-      !process.env.OPENAI_API_KEY
-    ) {
+    if (!fallbackEnabled || !process.env.XAI_API_KEY?.trim()) {
       throw primaryError
     }
 
-    return callOpenAI(fullSystem, messages)
+    return callGrok(fullSystem, messages)
   }
 }
 
