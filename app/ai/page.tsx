@@ -220,7 +220,7 @@ export default function TensorAIPage() {
                           : "border-bone/20 text-bone/60")
                       }
                     >
-                      {value === "standard" ? "Everyday" : "Think harder"}
+                      {value === "standard" ? "Normal" : "Think harder"}
                     </button>
                   ))}
                 </div>
