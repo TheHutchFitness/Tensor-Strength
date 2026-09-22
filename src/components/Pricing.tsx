@@ -11,40 +11,31 @@ type Tier = {
   cta: { label: string; href?: string };
 };
 
-type CoachOffer = {
-  name: string;
-  price: string;
-  cadence: string;
-  packageId?: string;
-  href?: string;
-  cta: string;
-};
-
 const tiers: Tier[] = [
   {
     name: "Free",
     price: "$0",
     cadence: "always",
-    tagline: "Limited, but real.",
+    tagline: "A real account, not a fake trial.",
     features: [
-      "3 starter programs (beginner, home, conditioning)",
-      "Program Finder",
-      "Training guides",
-      "A free account you can actually use",
+      "Starter programs and training guides",
+      "Program Finder and free tools",
+      "Community access",
+      "A place to explore Tensor Strength before paying",
     ],
-    cta: { label: "Start free", href: "/login?signup=1" },
+    cta: { label: "Create free account", href: "/login?signup=1" },
   },
   {
-    name: "Core Membership",
+    name: "Core",
     price: "$9.99 CAD",
     cadence: "/ month",
-    tagline: "The training system. This is the default.",
+    tagline: "The complete Tensor Strength training system.",
     featured: true,
     features: [
-      "Full Client Portal — log, calculators, libraries",
-      "The Hutch Touch + weekly programs",
-      "Exercise & warmup libraries, PR tracker",
-      "Community forum — real usage, real data",
+      "Full Client Portal and cloud workout logging",
+      "Programs, exercise help, progress and nutrition tools",
+      "Quests, community and member features",
+      "Cancel or pause without losing your training data",
     ],
     packageId: "monthly_9_99",
     cta: { label: "Join Core — $9.99 CAD/mo" },
@@ -53,107 +44,96 @@ const tiers: Tier[] = [
     name: "Tensor AI Beta",
     price: "$12.99 CAD",
     cadence: "/ month",
-    tagline: "Founding beta.",
+    tagline: "Founding beta pricing.",
     features: [
-      "Everything in Core Membership",
+      "Everything in Core",
       "Context-aware training and program help",
       "Conversation history and persistent member context",
-      "Projects, memory and Builder features as they roll out",
+      "Deeper reasoning plus Builder features as they roll out",
     ],
     packageId: "tensor_ai_beta_12_99",
     cta: { label: "Join AI Beta — $12.99 CAD/mo" },
   },
 ];
 
-const coaching: CoachOffer[] = [
-  {
-    name: "Custom program",
-    price: "$200 CAD",
-    cadence: "one-time",
-    packageId: "custom_program_200",
-    cta: "Checkout",
-  },
-  {
-    name: "Remote coaching",
-    price: "$400 CAD",
-    cadence: "/ month",
-    packageId: "remote_coaching_400",
-    cta: "Checkout",
-  },
-  {
-    name: "In-person",
-    price: "1:1",
-    cadence: "The Fit Effect",
-    href: "/apply",
-    cta: "Apply",
-  },
-];
-
 export default function Pricing() {
   return (
-    <section id="pricing" className="py-24 md:py-32 relative overflow-hidden">
-      <div className="absolute inset-0 stripe-bg opacity-15" aria-hidden />
+    <section id="pricing" className="relative overflow-hidden py-24 md:py-32">
+      <div className="stripe-bg absolute inset-0 opacity-15" aria-hidden />
       <div className="relative mx-auto max-w-6xl px-6">
-        <div className="max-w-2xl mb-12">
-          <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-6">
+        <div className="mb-12 max-w-2xl">
+          <p className="glow mb-6 font-display uppercase tracking-[0.3em] text-electric text-sm">
             Membership
           </p>
           <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            Start with
+            Start free.
             <br />
-            <span className="text-electric">$9.99/mo.</span>
+            <span className="text-electric">Upgrade when it earns it.</span>
           </h2>
-          <p className="mt-6 text-bone/70 leading-relaxed">
-            Core membership is the training system. Tensor AI Beta is an optional
-            $12.99 layer. Coaching stays available separately.
+          <p className="mt-6 leading-relaxed text-bone/70">
+            Core is the full training system. Tensor AI Beta adds the AI coaching
+            layer. No annual plan while the product is changing quickly.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          {tiers.map((t) => {
-            const btnCls =
-              "mt-6 px-5 py-3 font-display uppercase tracking-wider text-sm text-center transition-colors block w-full " +
-              (t.featured
+        <div className="grid gap-4 md:grid-cols-3">
+          {tiers.map((tier) => {
+            const buttonClass =
+              "mt-6 block w-full px-5 py-3 text-center font-display uppercase tracking-wider text-sm transition-colors " +
+              (tier.featured
                 ? "bg-electric text-ink hover:bg-bone"
                 : "border-2 border-bone hover:bg-bone hover:text-ink");
+
             return (
               <div
-                key={t.name}
+                key={tier.name}
                 className={
-                  "border p-6 flex flex-col transition-colors " +
-                  (t.featured
+                  "flex flex-col border p-6 transition-colors " +
+                  (tier.featured
                     ? "border-electric bg-electric/10"
                     : "border-bone/15 bg-ink/30 backdrop-blur-sm hover:border-bone/30")
                 }
               >
-                <p className="font-display uppercase tracking-wider text-bone">{t.name}</p>
-                {t.featured && (
-                  <p className="font-display uppercase tracking-wider text-[10px] text-ink bg-electric inline-block w-fit px-2 py-0.5 mt-2">
-                    Start here
+                <p className="font-display uppercase tracking-wider text-bone">
+                  {tier.name}
+                </p>
+
+                {tier.featured && (
+                  <p className="mt-2 inline-block w-fit bg-electric px-2 py-0.5 font-display uppercase tracking-wider text-[10px] text-ink">
+                    Most members start here
                   </p>
                 )}
-                <p className="mt-4 font-display text-3xl text-electric font-700 leading-none">
-                  {t.price}
-                </p>
-                <p className="text-xs text-bone/50 mt-1">{t.cadence}</p>
-                <p className="text-sm text-bone/70 mt-3 leading-relaxed">{t.tagline}</p>
 
-                <ul className="mt-5 grid gap-2 flex-1">
-                  {t.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-xs text-bone/70 leading-relaxed">
-                      <span className="text-electric shrink-0">→</span>
-                      <span>{f}</span>
+                <p className="mt-4 font-display text-3xl font-700 leading-none text-electric">
+                  {tier.price}
+                </p>
+                <p className="mt-1 text-xs text-bone/50">{tier.cadence}</p>
+                <p className="mt-3 text-sm leading-relaxed text-bone/70">
+                  {tier.tagline}
+                </p>
+
+                <ul className="mt-5 grid flex-1 gap-2">
+                  {tier.features.map((feature) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2 text-xs leading-relaxed text-bone/70"
+                    >
+                      <span className="shrink-0 text-electric">→</span>
+                      <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                {t.packageId ? (
-                  <CheckoutButton packageId={t.packageId} className={btnCls}>
-                    {t.cta.label}
+                {tier.packageId ? (
+                  <CheckoutButton
+                    packageId={tier.packageId}
+                    className={buttonClass}
+                  >
+                    {tier.cta.label}
                   </CheckoutButton>
                 ) : (
-                  <a href={t.cta.href} className={btnCls}>
-                    {t.cta.label}
+                  <a href={tier.cta.href} className={buttonClass}>
+                    {tier.cta.label}
                   </a>
                 )}
               </div>
@@ -161,43 +141,32 @@ export default function Pricing() {
           })}
         </div>
 
-        <div id="coaching" className="mt-10 scroll-mt-24">
-          <p className="font-display uppercase tracking-[0.2em] text-[11px] text-bone/40 mb-3">
-            Coaching options
-          </p>
-          <div className="grid md:grid-cols-3 gap-2">
-            {coaching.map((c) => {
-              const btn =
-                "px-3 py-2 font-display uppercase tracking-wider text-[11px] border border-bone/30 hover:border-electric hover:text-electric transition-colors";
-              return (
-                <div
-                  key={c.name}
-                  className="flex items-center justify-between gap-3 border border-bone/10 bg-ink/20 px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="font-display uppercase tracking-wider text-xs text-bone/80">{c.name}</p>
-                    <p className="text-[11px] text-bone/45 mt-0.5">
-                      {c.price} <span className="text-bone/30">{c.cadence}</span>
-                    </p>
-                  </div>
-                  {c.packageId ? (
-                    <CheckoutButton packageId={c.packageId} className={btn}>
-                      {c.cta}
-                    </CheckoutButton>
-                  ) : (
-                    <a href={c.href} className={btn}>
-                      {c.cta}
-                    </a>
-                  )}
-                </div>
-              );
-            })}
+        <div
+          id="coaching"
+          className="mt-10 scroll-mt-24 border border-bone/15 bg-ink/25 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6"
+        >
+          <div>
+            <p className="font-display uppercase tracking-[0.2em] text-[11px] text-electric">
+              Want a human coach?
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-bone/70">
+              In-person and remote coaching are available separately for people
+              who want individualized programming, form review, accountability
+              and direct decisions with Hutch.
+            </p>
           </div>
+
+          <a
+            href="/apply"
+            className="mt-4 inline-block shrink-0 border-2 border-electric px-5 py-3 font-display uppercase tracking-wider text-xs text-electric transition-colors hover:bg-electric hover:text-ink sm:mt-0"
+          >
+            Apply for coaching →
+          </a>
         </div>
 
-        <p className="mt-6 text-xs text-bone/40 leading-relaxed max-w-xl">
-          First-responder, military, and student rates exist. Ask at checkout — they
-          are not a marketing pitch.
+        <p className="mt-6 max-w-xl text-xs leading-relaxed text-bone/40">
+          First-responder, military and student rates are available. Contact
+          Tensor Strength for current eligibility and rates.
         </p>
       </div>
     </section>
