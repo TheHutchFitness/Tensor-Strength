@@ -12,7 +12,7 @@ export const CHECKOUT_PLANS = {
     name: "Tensor AI Beta",
     price: "$12.99 CAD",
     cadence: "/ month",
-    blurb: "Everything in Core plus the founding Tensor AI coaching layer.",
+    blurb: "Everything in Core plus a gym, sport, and athletics specialist AI coach.",
     cta: "Join AI Beta — $12.99 CAD/mo",
   },
   custom_program_200: {

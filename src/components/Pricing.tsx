@@ -47,9 +47,9 @@ const tiers: Tier[] = [
     tagline: "Founding beta pricing.",
     features: [
       "Everything in Core",
-      "Context-aware training and program help",
-      "Conversation history and persistent member context",
-      "Deeper reasoning plus Builder features as they roll out",
+      "Specialist help for gym, sport, and athletics",
+      "Uses your logged training, not generic fitness chat",
+      "Everyday answers plus deeper reasoning when the work is hard",
     ],
     packageId: "tensor_ai_beta_12_99",
     cta: { label: "Join AI Beta — $12.99 CAD/mo" },
@@ -71,8 +71,9 @@ export default function Pricing() {
             <span className="text-electric">Upgrade when it earns it.</span>
           </h2>
           <p className="mt-6 leading-relaxed text-bone/70">
-            Core is the full training system. Tensor AI Beta adds the AI coaching
-            layer. No annual plan while the product is changing quickly.
+            Core is the full training system. Tensor AI Beta is a gym, sport, and
+            athletics specialist — not a generic chatbot. No annual plan while
+            the product is changing quickly.
           </p>
         </div>
 

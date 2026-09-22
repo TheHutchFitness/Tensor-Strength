@@ -29,12 +29,12 @@ export default function TensorAICard() {
           Tensor AI
         </p>
         <h2 className="mt-2 font-display uppercase text-2xl text-bone">
-          Your training context, on demand
+          Gym, sport, and athletics
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-bone/70">
-          Ask about your program, recent training, exercises, and how to use
-          Tensor Strength. Tensor keeps coach-programmed work, your logged data,
-          and AI suggestions clearly separated.
+          Tensor AI stays in the weight room and on the field: lifting, conditioning,
+          sport performance, recovery, and how to use your program. Coach-programmed
+          work and your logged data stay clearly separated from suggestions.
         </p>
         <a
           href="/ai"
@@ -52,11 +52,11 @@ export default function TensorAICard() {
         Tensor AI Beta
       </p>
       <h2 className="mt-2 font-display uppercase text-xl text-bone">
-        Optional AI coaching layer
+        Gym, sport, and athletics specialist
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-bone/65">
         Core membership stays at $9.99 CAD/month. Tensor AI Beta is a separate
-        $12.99 CAD/month founding tier with context-aware training help.
+        $12.99 CAD/month founding coach for gym, fitness, sports, and athletics.
       </p>
       <a
         href="/checkout?plan=tensor_ai_beta_12_99"
