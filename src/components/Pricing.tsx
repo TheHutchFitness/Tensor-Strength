@@ -35,7 +35,7 @@ const tiers: Tier[] = [
     cta: { label: "Start free", href: "/login?signup=1" },
   },
   {
-    name: "Membership",
+    name: "Core Membership",
     price: "$9.99 CAD",
     cadence: "/ month",
     tagline: "The training system. This is the default.",
@@ -47,20 +47,21 @@ const tiers: Tier[] = [
       "Community forum — real usage, real data",
     ],
     packageId: "monthly_9_99",
-    cta: { label: "Join — $9.99 CAD/mo" },
+    cta: { label: "Join Core — $9.99 CAD/mo" },
   },
   {
     name: "Tensor AI Beta",
     price: "$12.99 CAD",
     cadence: "/ month",
-    tagline: "Founding price. Not billed yet.",
+    tagline: "Founding beta.",
     features: [
-      "Same assistant in text and voice",
-      "DeepSeek for everyday work, Terra when you need it",
-      "Projects, memory, and Builder — coming on the member site",
-      "Founding rate while Tensor AI is in beta",
+      "Everything in Core Membership",
+      "Context-aware training and program help",
+      "Conversation history and persistent member context",
+      "Projects, memory and Builder features as they roll out",
     ],
-    cta: { label: "Start free — AI opens next", href: "/login?signup=1" },
+    packageId: "tensor_ai_beta_12_99",
+    cta: { label: "Join AI Beta — $12.99 CAD/mo" },
   },
 ];
 
@@ -103,9 +104,8 @@ export default function Pricing() {
             <span className="text-electric">$9.99/mo.</span>
           </h2>
           <p className="mt-6 text-bone/70 leading-relaxed">
-            The monthly membership is the product we want people in. Free is real.
-            Tensor AI is a founding beta. Coaching stays available at checkout —
-            it is just not the headline.
+            Core membership is the training system. Tensor AI Beta is an optional
+            $12.99 layer. Coaching stays available separately.
           </p>
         </div>
 
@@ -163,7 +163,7 @@ export default function Pricing() {
 
         <div id="coaching" className="mt-10 scroll-mt-24">
           <p className="font-display uppercase tracking-[0.2em] text-[11px] text-bone/40 mb-3">
-            Coaching — checkout, not the campaign
+            Coaching options
           </p>
           <div className="grid md:grid-cols-3 gap-2">
             {coaching.map((c) => {
