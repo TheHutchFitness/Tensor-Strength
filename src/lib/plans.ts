@@ -4,7 +4,7 @@ export const CHECKOUT_PLANS = {
     name: "Core Membership",
     price: "$9.99 CAD",
     cadence: "/ month",
-    blurb: "The Tensor Strength training system and full Client Portal.",
+    blurb: "The complete Tensor Strength training system and Client Portal.",
     cta: "Join Core — $9.99 CAD/mo",
   },
   tensor_ai_beta_12_99: {
@@ -12,23 +12,23 @@ export const CHECKOUT_PLANS = {
     name: "Tensor AI Beta",
     price: "$12.99 CAD",
     cadence: "/ month",
-    blurb: "Core access plus the founding Tensor AI coaching layer.",
+    blurb: "Everything in Core plus the founding Tensor AI coaching layer.",
     cta: "Join AI Beta — $12.99 CAD/mo",
   },
   custom_program_200: {
     id: "custom_program_200",
-    name: "Custom program",
+    name: "Custom Program",
     price: "$200 CAD",
     cadence: "one-time",
-    blurb: "A plan built around your lifts and schedule.",
+    blurb: "A personalized training plan built around your goals and schedule.",
     cta: "Pay $200 CAD",
   },
   remote_coaching_400: {
     id: "remote_coaching_400",
-    name: "Remote coaching",
+    name: "Remote Coaching",
     price: "$400 CAD",
     cadence: "/ month",
-    blurb: "Programming, check-ins, and Client Portal access.",
+    blurb: "Individual programming, check-ins and direct coaching.",
     cta: "Pay $400 CAD/mo",
   },
 } as const;
@@ -56,8 +56,10 @@ export function loginToCheckout(
 ) {
   const destination = checkoutPath(planId, true);
   const query = new URLSearchParams();
+
   if (signup) query.set("signup", "1");
   query.set("from", destination);
   query.set("plan", getPlan(planId).id);
+
   return `/login?${query.toString()}`;
 }

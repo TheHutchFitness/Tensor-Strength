@@ -34,6 +34,10 @@ export default function CheckoutButton({
         window.location.assign(loginToCheckout(packageId, true));
         return;
       }
+      if (res.status === 409 && data.code === "PLAN_CHANGE_REQUIRED") {
+        window.location.assign("/checkout?plan=tensor_ai_beta_12_99");
+        return;
+      }
       if (!res.ok || !data.url) throw new Error(data.error || "Checkout failed");
       window.location.assign(data.url);
     } catch (e: any) {

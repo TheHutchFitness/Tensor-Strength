@@ -20,9 +20,9 @@ const paths = [
     index: "03",
     title: "Optional coaching",
     description:
-      "Custom program, remote coaching, or in-person. Available at checkout if you want it — not what we are pushing first.",
-    action: "Coaching checkout",
-    href: "#coaching",
+      "Human coaching stays available separately. Apply if you want individualized programming — it is not the second software tier.",
+    action: "Explore coaching",
+    href: "/apply",
   },
 ];
 
@@ -37,7 +37,7 @@ export default function HomePaths() {
             <br /><span className="text-electric">Build the data.</span>
           </h2>
           <p className="mt-5 text-bone/70 leading-relaxed">
-            Free accounts and $9.99 memberships first. Coaching stays on the page as a quiet checkout.
+            Free accounts and $9.99 Core memberships first. Tensor AI Beta is an optional $12.99 layer. Coaching is apply-only for now.
           </p>
         </div>
 
