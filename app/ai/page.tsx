@@ -19,8 +19,8 @@ type Conversation = {
 const STARTERS = [
   "What should I focus on in today's gym session?",
   "How do I get more athletic without losing strength?",
+  "How should I eat to fuel heavy lifting without crash dieting?",
   "I missed a session — how should I adjust this week?",
-  "How should I warm up for a heavy lower-body day?",
 ];
 
 export default function TensorAIPage() {
@@ -202,7 +202,7 @@ export default function TensorAIPage() {
 
               <section>
                 <p className="max-w-xl text-sm leading-relaxed text-bone/65">
-                  Ask about lifting, conditioning, sport performance, recovery, or how to
+                  Ask about lifting, diet, conditioning, sport performance, recovery, or how to
                   use your program. Coach-programmed work and your logged data stay clearly
                   separated from suggestions.
                 </p>
@@ -242,7 +242,7 @@ export default function TensorAIPage() {
 
                 <div className="mt-6 min-h-[280px] border border-bone/15 bg-ink/30 p-5">
                   {messages.length === 0 && (
-                    <p className="text-sm text-bone/40">Start with a gym, sport, or athletics question.</p>
+                    <p className="text-sm text-bone/40">Start with a gym, diet, sport, or athletics question.</p>
                   )}
                   {messages.map((msg, i) => (
                     <div
