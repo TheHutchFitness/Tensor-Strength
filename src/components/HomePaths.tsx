@@ -1,28 +1,28 @@
 const paths = [
   {
     index: "01",
-    title: "Train independently",
+    title: "You're on free",
     description:
-      "A quiet, complete system for self-directed training: programmes, workout logging, progression tools, and the member community.",
-    action: "Explore membership",
-    href: "#pricing",
+      "Starter programs, Program Finder, and guides. Use it — then upgrade when you want the full portal.",
+    action: "Open starter programs",
+    href: "/free-programs",
   },
   {
     index: "02",
-    title: "Work with a coach",
+    title: "Member system",
     description:
-      "For people who want decisions made with them—not for them. Get a plan built around your goals, schedule, equipment, and feedback.",
-    action: "Apply for coaching",
-    href: "/apply",
+      "The full portal for $9.99/month — logging, libraries, The Hutch Touch, community. This is the default.",
+    action: "Join $9.99/mo",
+    href: "/checkout?plan=monthly_9_99",
     featured: true,
   },
   {
     index: "03",
-    title: "Meet the professionals",
+    title: "Optional coaching",
     description:
-      "See the people and disciplines behind Tensor Strength, then choose the level of support that fits your next training block.",
-    action: "Meet the team",
-    href: "/meet-the-team",
+      "Human coaching stays available separately. Apply if you want individualized programming — it is not the second software tier.",
+    action: "Explore coaching",
+    href: "/apply",
   },
 ];
 
@@ -33,10 +33,11 @@ export default function HomePaths() {
         <div className="max-w-2xl">
           <p className="glow font-display uppercase tracking-[0.3em] text-electric text-sm mb-5">Start with clarity</p>
           <h2 className="glow font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            One standard.<br /><span className="text-electric">Your right level.</span>
+            Get in.
+            <br /><span className="text-electric">Build the data.</span>
           </h2>
           <p className="mt-5 text-bone/70 leading-relaxed">
-            Whether you&apos;re training on your own, looking for personal coaching, or exploring the team, each route has a clear next step.
+            Free accounts and $9.99 Core memberships first. Tensor AI Beta is an optional $12.99 layer. Coaching is apply-only for now.
           </p>
         </div>
 

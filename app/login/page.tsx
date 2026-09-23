@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { safeReturnPath } from "../../src/lib/workoutMetrics";
+import { checkoutPath, getPlan } from "../../src/lib/plans";
 import { GOAL_OPTIONS } from "../../src/data/gamification";
 
 type Mode = "login" | "register";
@@ -12,6 +13,14 @@ function slugifyUsername(name: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "")
     .slice(0, 20);
+}
+
+function checkoutDestination(params: URLSearchParams, mode: Mode) {
+  const plan = params.get("plan");
+  const from = params.get("from") || "";
+  if (plan) return checkoutPath(plan, true);
+  if (from.startsWith("/checkout")) return safeReturnPath(from, checkoutPath("monthly_9_99", true));
+  return safeReturnPath(from, mode === "register" ? "/quests" : "/clients");
 }
 
 export default function LoginPage() {
@@ -25,33 +34,31 @@ export default function LoginPage() {
   const [goals, setGoals] = useState<string[]>([]);
   const [registrationOpen, setRegistrationOpen] = useState(true);
   const [registrationMessage, setRegistrationMessage] = useState("");
+  const [planId, setPlanId] = useState<string | null>(null);
   function toggleGoal(g: string) {
     setGoals((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
   }
 
-  // Tick down the rate-limit cooldown once per second.
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => setCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
     return () => clearInterval(t);
   }, [cooldown]);
 
-  // Invite flow: /login?signup=1&email=...&name=... opens the register form
-  // prefilled with the applicant's details (used by the Admin "invite" button).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("signup") === "1" || params.get("mode") === "register") {
+    const from = params.get("from") || "";
+    const buying = Boolean(params.get("plan") || from.startsWith("/checkout"));
+    if (params.get("signup") === "1" || params.get("mode") === "register" || buying) {
       setMode("register");
     }
+    if (buying) setPlanId(getPlan(params.get("plan")).id);
     const em = params.get("email");
     if (em) setEmail(em);
     const nm = params.get("name");
     if (nm) setUsername(slugifyUsername(nm));
   }, []);
 
-  // The admin can make new sign-ups invite-only without interrupting current
-  // members. Read the public-safe setting so the gate explains that choice
-  // before anyone fills out a form.
   useEffect(() => {
     fetch("/api/signup-settings")
       .then((r) => (r.ok ? r.json() : null))
@@ -66,19 +73,7 @@ export default function LoginPage() {
 
   const inputCls =
     "w-full bg-transparent border-b border-line py-3 text-bone focus:border-electric outline-none transition-colors";
-
-  function signInWithGoogle() {
-    if (!registrationOpen && mode === "register") {
-      setError(registrationMessage || "Registration is currently by invitation only.");
-      return;
-    }
-    // Remember where the user wanted to go, then hand off to Emergent-managed auth.
-    const params = new URLSearchParams(window.location.search);
-    const from = safeReturnPath(params.get("from"));
-    if (from) sessionStorage.setItem("ts_login_from", from);
-    const callback = `${window.location.origin}/auth/emergent/callback`;
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(callback)}`;
-  }
+  const plan = planId ? getPlan(planId) : null;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -112,7 +107,6 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      // Success — save signup goals (new members), then redirect.
       if (mode === "register" && goals.length) {
         await fetch("/api/gamification/goals", {
           method: "POST",
@@ -121,8 +115,7 @@ export default function LoginPage() {
         }).catch(() => {});
       }
       const params = new URLSearchParams(window.location.search);
-      const from = safeReturnPath(params.get("from"), mode === "register" ? "/quests" : "/clients");
-      window.location.href = from;
+      window.location.href = checkoutDestination(params, mode);
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
@@ -132,7 +125,6 @@ export default function LoginPage() {
   return (
     <main className="text-bone min-h-screen flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md relative border border-line bg-ink/50 backdrop-blur px-7 py-10 sm:px-9">
-        {/* Thin electric top-rule — the single disciplined accent on the gate. */}
         <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-electric to-transparent opacity-70" />
         <div className="flex flex-col items-center text-center mb-10">
           <img
@@ -145,7 +137,13 @@ export default function LoginPage() {
             Tensor Strength
           </p>
           <h1 className="font-display uppercase text-4xl md:text-5xl font-700 leading-tight">
-            {mode === "login" ? (
+            {plan ? (
+              <>
+                Then
+                <br />
+                <span className="text-electric">pay {plan.price}.</span>
+              </>
+            ) : mode === "login" ? (
               <>
                 Members
                 <br />
@@ -160,9 +158,11 @@ export default function LoginPage() {
             )}
           </h1>
           <p className="mt-5 text-bone/70 leading-relaxed">
-            {mode === "login"
-              ? "Sign in to access the site and your training."
-              : "Create your account to get in. The Client Portal unlocks once Hutch approves you."}
+            {plan
+              ? `Create your account, then pay ${plan.price}${plan.cadence}. Portal opens as soon as Stripe confirms — no wait for approval.`
+              : mode === "login"
+                ? "Sign in to access the site and your training."
+                : "Create a free account. Upgrade to $9.99/mo whenever you want the full portal."}
           </p>
         </div>
 
@@ -249,7 +249,13 @@ export default function LoginPage() {
               disabled={loading}
               className="mt-2 w-full bg-electric text-ink px-8 py-4 font-display uppercase tracking-wider hover:bg-bone transition-colors disabled:opacity-60"
             >
-              {loading ? "Please wait…" : mode === "login" ? "Sign In →" : "Create Account →"}
+              {loading
+                ? "Please wait…"
+                : mode === "login"
+                  ? "Sign In →"
+                  : plan
+                    ? "Create account — then pay"
+                    : "Create Account →"}
             </button>
           )}
 
@@ -265,26 +271,6 @@ export default function LoginPage() {
             </p>
           )}
         </form>
-
-        <div className="mt-6 flex items-center gap-4">
-          <span className="h-px flex-1 bg-line" />
-          <span className="font-display uppercase tracking-wider text-[10px] text-bone/40">or</span>
-          <span className="h-px flex-1 bg-line" />
-        </div>
-
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          className="mt-6 w-full flex items-center justify-center gap-3 border-2 border-bone/25 bg-bone text-ink px-8 py-3.5 font-display uppercase tracking-wider hover:bg-white transition-colors"
-        >
-          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-          </svg>
-          Continue with Google
-        </button>
 
         <p className="mt-8 text-center text-sm text-bone/60">
           {mode === "login" ? "New here? " : "Already have an account? "}
@@ -314,21 +300,6 @@ export default function LoginPage() {
           </a>{" "}
           — no sign-up needed.
         </p>
-
-        <div className="mt-6 border-t border-line pt-5 text-center">
-          <p className="text-sm text-bone/60 leading-relaxed">
-            In-person training is only available at{" "}
-            <a
-              href="https://thefiteffectparis.ca"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-electric border-b border-electric hover:text-bone hover:border-bone transition-colors font-display uppercase tracking-wider"
-            >
-              The Fit Effect
-            </a>{" "}
-            in Paris, Ontario.
-          </p>
-        </div>
       </div>
     </main>
   );

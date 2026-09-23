@@ -81,7 +81,7 @@ export default function Social() {
             </div>
 
             <p className="mt-6 text-xs text-bone/50 leading-relaxed max-w-md">
-              Free to join. Create an account or sign in with Google to access the rooms,
+              Free to join. Create an account to access the rooms,
               quests, and the rest of the community.
             </p>
           </div>

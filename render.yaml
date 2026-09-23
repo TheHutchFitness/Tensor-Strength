@@ -38,8 +38,22 @@ services:
         sync: false
       - key: NEXT_PUBLIC_COMMUNITY_URL
         sync: false
-      - key: EMERGENT_AUTH_BASE
+      - key: DEEPSEEK_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AI_PRIMARY_MODEL
+        value: deepseek-flash
+      - key: AI_FALLBACK_MODEL
+        value: gpt-5.6-terra
+      - key: AI_BACKUP_MODEL
+        value: grok-4.3
+      - key: AI_ENABLE_FALLBACK
+        value: "true"
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
